@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jardim L-System · POC Three.js</title>
+<style>
+  :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b1210;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg)}
+  #app{position:fixed;inset:0}
+  #app canvas{display:block}
+  #panel{position:fixed;top:14px;left:14px;width:340px;max-height:calc(100% - 28px);overflow:auto;background:var(--bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--bd);border-radius:16px;padding:16px 16px 12px;box-shadow:0 10px 40px rgba(0,0,0,.35);transition:transform .3s}
+  #panel.hidden{transform:translateX(calc(-100% - 20px))}
+  #panel h1{font-size:18px;margin:0 0 2px;letter-spacing:.2px}
+  #panel .sub{margin:0 0 12px;color:var(--mut);font-size:12px}
+  label.l{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:10px 0 5px}
+  select,input[type=text]{width:100%;background:rgba(255,255,255,.07);border:1px solid var(--bd);color:var(--fg);border-radius:10px;padding:9px 10px;font-size:14px;outline:none}
+  select option{background:#16201c}
+  input[type=text]:focus,select:focus{border-color:var(--acc)}
+  .row{display:flex;gap:8px;margin-top:8px}
+  .row>*{flex:1}
+  button{cursor:pointer;background:rgba(255,255,255,.08);color:var(--fg);border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:13px;font-weight:600;transition:.15s}
+  button:hover{background:rgba(255,255,255,.16)}
+  button.primary{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#062312;border:none}
+  button.primary:hover{filter:brightness(1.08)}
+  button.on{outline:2px solid var(--acc)}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .toggles{display:flex;gap:14px;margin-top:10px;font-size:13px;color:var(--mut)}
+  .toggles label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  #dna{margin-top:10px;font:11px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all}
+  #dna b{color:var(--acc)}
+  details{margin-top:10px;border-top:1px solid var(--bd);padding-top:8px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--fg)}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  td{padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+  td:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace;color:var(--acc)}
+  pre{white-space:pre-wrap;word-break:break-word;font:11px/1.5 ui-monospace,Menlo,monospace;color:#cfe3d5;background:rgba(0,0,0,.25);padding:8px;border-radius:8px;margin:6px 0 0}
+  #stats{margin-top:10px;font:11px ui-monospace,Menlo,monospace;color:var(--mut)}
+  #toggle{position:fixed;top:14px;left:14px;z-index:5;display:none;width:42px;height:42px;border-radius:12px;background:var(--bg);backdrop-filter:blur(10px)}
+  #panel.hidden~#toggle{display:block}
+  #hide{position:absolute;top:12px;right:12px;padding:4px 9px;font-size:12px}
+  #caption{position:fixed;right:18px;bottom:16px;max-width:420px;text-align:right;pointer-events:none;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+  #caption h2{margin:0;font-size:26px;font-weight:700}
+  #caption p{margin:4px 0 0;font-size:13px;opacity:.85}
+  #busy{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;border:1px solid var(--bd);display:none}
+  .glabel{position:fixed;transform:translate(-50%,0);font-size:13px;font-weight:600;padding:5px 10px;border-radius:999px;background:rgba(10,16,14,.6);border:1px solid var(--bd);white-space:nowrap;cursor:pointer;backdrop-filter:blur(6px)}
+  .glabel:hover{border-color:var(--acc)}
+  #err{position:fixed;inset:auto 0 0 0;background:#5a1010;color:#fff;padding:8px;font:12px monospace;display:none}
+  @media (max-width:700px){#panel{width:calc(100% - 28px);max-height:55%;top:auto;bottom:14px}#caption{top:14px;bottom:auto;right:14px;max-width:70%}#caption h2{font-size:18px}#caption p{display:none}#toggle{top:auto;bottom:14px}}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<aside id="panel">
+  <button id="hide" title="Esconder painel">✕</button>
+  <h1>🌱 Jardim L-System</h1>
+  <p class="sub">POC · Three.js · sistemas de Lindenmayer com seed determinística</p>
+
+  <label class="l" for="species">Espécie</label>
+  <select id="species"></select>
+
+  <label class="l" for="seed">Seed (DNA da planta)</label>
+  <input id="seed" type="text" spellcheck="false" autocomplete="off">
+  <div class="row">
+    <button id="rand">🎲 Seed aleatória</button>
+    <button id="gen" class="primary">Gerar</button>
+  </div>
+  <div class="row">
+    <button id="garden">🌿 Ver todas as 5</button>
+    <button id="share">🔗 Copiar link</button>
+  </div>
+
+  <label class="l" for="growth">Crescimento <span id="gval"></span></label>
+  <input id="growth" type="range" min="0" max="1" step="0.001" value="1">
+  <div class="row"><button id="replay">▶ Animar crescimento</button></div>
+  <div class="toggles">
+    <label><input type="checkbox" id="rotate" checked> Auto-rotação</label>
+    <label><input type="checkbox" id="wind" checked> Vento</label>
+  </div>
+
+  <div id="dna"></div>
+  <details open><summary>Parâmetros derivados da seed</summary><table id="params"></table></details>
+  <details><summary>Regras do L-System</summary><pre id="rules"></pre></details>
+  <details><summary>Palavra gerada (início)</summary><pre id="word"></pre></details>
+  <div id="stats"></div>
+</aside>
+<button id="toggle" title="Mostrar painel">☰</button>
+<div id="caption"><h2 id="capT"></h2><p id="capD"></p></div>
+<div id="busy">Gerando…</div>
+<div id="labels"></div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const V3 = THREE.Vector3;
+const DEG = Math.PI / 180;
+const MAX_MODULES = 140000;  // teto de tamanho da palavra
+const MAX_SEGS = 26000;      // teto de segmentos de galho
+const MAX_INST = 45000;      // teto de instâncias por tipo
+const MIN_R = 0.004;
+
+/* =====================================================================
+   1. PRNG determinística: cyrb128 (hash da string) -> sfc32
+   ===================================================================== */
+function cyrb128(str) {
+  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+  for (let i = 0, k; i < str.length; i++) {
+    k = str.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  h1 ^= (h2 ^ h3 ^ h4); h2 ^= h1; h3 ^= h1; h4 ^= h1;
+  return [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];
+}
+function sfc32(a, b, c, d) {
+  return function () {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (a + b | 0) + d | 0;
+    d = d + 1 | 0; a = b ^ b >>> 9; b = c + (c << 3) | 0;
+    c = (c << 21 | c >>> 11); c = c + t | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
+class Rand {
+  constructor(str) { this.next = sfc32(...cyrb128(str)); for (let i = 0; i < 15; i++) this.next(); }
+  f() { return this.next(); }
+  range(a, b) { return a + (b - a) * this.next(); }
+  int(a, b) { return a + Math.floor(this.next() * (b - a + 1)); }
+  pick(arr) { return arr[Math.floor(this.next() * arr.length)]; }
+  chance(p) { return this.next() < p; }
+  jit(x) { return (this.next() * 2 - 1) * x; }
+}
+const hex = (str) => cyrb128(str).map(x => x.toString(16).padStart(8, '0')).join('');
+const n = (x) => +(+x).toFixed(3);
+
+/* =====================================================================
+   2. Motor L-System genérico (paramétrico + estocástico)
+   Módulo = { c: símbolo, p: [parâmetros] | null }
+   Regra  = string | (params, rng) => string | [{w, s}] (estocástica)
+   ===================================================================== */
+const TOKEN = /([^\s(),])(?:\(([^)]*)\))?/g;
+function parseWord(str) {
+  const out = [];
+  TOKEN.lastIndex = 0; let m;
+  while ((m = TOKEN.exec(str))) out.push({ c: m[1], p: m[2] !== undefined ? m[2].split(',').map(Number) : null });
+  return out;
+}
+function applyRule(rule, m, rng) {
+  if (typeof rule === 'function') return rule(m.p || [], rng);
+  if (Array.isArray(rule)) { // estocástica com pesos
+    const tot = rule.reduce((a, r) => a + r.w, 0); let x = rng.f() * tot;
+    for (const r of rule) { if ((x -= r.w) <= 0) return typeof r.s === 'function' ? r.s(m.p || [], rng) : r.s; }
+    return rule[rule.length - 1].s;
+  }
+  return rule;
+}
+function rewrite(word, rules, rng) {
+  const out = [];
+  for (const m of word) {
+    const rule = rules[m.c];
+    if (rule === undefined) { out.push(m); continue; }
+    const succ = applyRule(rule, m, rng);
+    if (succ == null) { out.push(m); continue; }
+    const parsed = parseWord(succ);
+    for (let i = 0; i < parsed.length; i++) out.push(parsed[i]);
+  }
+  return out;
+}
+function runLSystem(def, iterations, rng) {
+  let word = parseWord(def.axiom), done = 0;
+  for (; done < iterations; done++) {
+    const next = rewrite(word, def.rules, rng);
+    if (next.length > MAX_MODULES) break;
+    word = next;
+  }
+  if (def.finalize) word = rewrite(word, def.finalize, rng); // passo de "decomposição" final (pontas -> folhas/flores)
+  return { word, done };
+}
+const wordToString = (w, max = 600) => {
+  let s = ''; for (const m of w) { s += m.c + (m.p ? '(' + m.p.map(v => +v.toFixed(2)).join(',') + ')' : ''); if (s.length > max) return s.slice(0, max) + ' …'; }
+  return s;
+};
+
+/* =====================================================================
+   3. Tartaruga 3D (H = heading, L = left, U = up)
+   F f + - & ^ \ / | [ ] ! ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
+   ===================================================================== */
+const GRAV = new V3(0, -1, 0);
+function interpret(word, sp, P, rng) {
+  const segs = [], inst = {};
+  const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) a.push(it); };
+  let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), w: sp.baseWidth, trop: 0, dist: 0 };
+  const stack = [];
+  const ax = new V3();
+  const clone = (s) => ({ pos: s.pos.clone(), H: s.H.clone(), L: s.L.clone(), U: s.U.clone(), w: s.w, trop: s.trop, dist: s.dist });
+  const defA = (P.angle || 25) * DEG;
+  const roll = (sp.leafRoll ?? 35) * DEG;
+  for (const m of word) {
+    const p = m.p, a = p ? p[0] * DEG : defA;
+    switch (m.c) {
+      case 'F': case 'f': {
+        const len = p ? p[0] : 1;
+        const s = st.pos.clone();
+        st.pos.addScaledVector(st.H, len);
+        if (m.c === 'F' && segs.length < MAX_SEGS) {
+          const r1 = Math.max(st.w * sp.taper, MIN_R);
+          segs.push({ s, e: st.pos.clone(), r0: Math.max(st.w, MIN_R), r1, L: st.L.clone(), U: st.U.clone(), d0: st.dist, d1: st.dist + len });
+          st.w = r1;
+        }
+        st.dist += len;
+        if (st.trop !== 0) { // tropismo (gravidade / fototropismo)
+          ax.crossVectors(st.H, GRAV); const mag = ax.length();
+          if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.trop * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
+        }
+        st.H.normalize(); st.L.crossVectors(st.U, st.H).normalize(); st.U.crossVectors(st.H, st.L);
+        break;
+      }
+      case '+': st.H.applyAxisAngle(st.U, a); st.L.applyAxisAngle(st.U, a); break;
+      case '-': st.H.applyAxisAngle(st.U, -a); st.L.applyAxisAngle(st.U, -a); break;
+      case '&': st.H.applyAxisAngle(st.L, a); st.U.applyAxisAngle(st.L, a); break;
+      case '^': st.H.applyAxisAngle(st.L, -a); st.U.applyAxisAngle(st.L, -a); break;
+      case '\\': st.L.applyAxisAngle(st.H, a); st.U.applyAxisAngle(st.H, a); break;
+      case '/': st.L.applyAxisAngle(st.H, -a); st.U.applyAxisAngle(st.H, -a); break;
+      case '|': st.H.applyAxisAngle(st.U, Math.PI); st.L.applyAxisAngle(st.U, Math.PI); break;
+      case '!': st.w *= p ? p[0] : 0.7; break;
+      case '~': st.trop = p ? p[0] : 0; break;
+      case '[': stack.push(clone(st)); break;
+      case ']': if (stack.length) st = stack.pop(); break;
+      case 'L': { // folha: comprimento ao longo de H, normal ~U (com rolagem aleatória)
+        const z = st.U.clone().applyAxisAngle(st.H, rng.jit(roll));
+        add('leaf', { p: st.pos.clone(), y: st.H.clone(), z, s: p ? p[0] : 1, d: st.dist });
+        break;
+      }
+      case 'K': { // flor: pétalas em volta de H + miolo
+        const s = p ? p[0] : 1, np = P.petals || 5, open = (P.open || 60) * DEG, off = rng.f() * Math.PI * 2;
+        const layers = P.double ? 2 : 1;
+        for (let l = 0; l < layers; l++) {
+          for (let i = 0; i < np; i++) {
+            const ang = off + (i + l * 0.5) / np * Math.PI * 2 + rng.jit(0.12);
+            const r = st.L.clone().multiplyScalar(Math.cos(ang)).addScaledVector(st.U, Math.sin(ang));
+            const t = st.L.clone().multiplyScalar(-Math.sin(ang)).addScaledVector(st.U, Math.cos(ang));
+            const o = open * (l ? 0.55 : 1) + rng.jit(0.1);
+            const dir = st.H.clone().multiplyScalar(Math.cos(o)).addScaledVector(r, Math.sin(o)).normalize();
+            const nrm = new V3().crossVectors(dir, t).normalize();
+            add('petal', { p: st.pos.clone(), y: dir, z: nrm, s: s * (l ? 0.72 : 1), d: st.dist, layer: l });
+          }
+        }
+        add('center', { p: st.pos.clone().addScaledVector(st.H, s * 0.06), y: st.H.clone(), z: st.U.clone(), s: s * 0.17, d: st.dist });
+        break;
+      }
+      case 'O': add('orb', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.1, d: st.dist }); break;
+      case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, d: st.dist }); break;
+    }
+  }
+  return { segs, inst };
+}
+
+/* =====================================================================
+   4. Geometrias base (folha, pétala, agulhas, esfera)
+   ===================================================================== */
+function sheet({ width = 0.4, fold = 0.1, curve = 0.1, profile, nu = 8, nv = 2, cup = 0 }) {
+  const pos = [], idx = [];
+  for (let i = 0; i <= nu; i++) {
+    const u = i / nu, w = width * profile(u);
+    for (let j = -nv; j <= nv; j++) {
+      const v = j / nv;
+      pos.push(v * w, u, fold * Math.abs(v) * w + curve * u * u + cup * v * v * w);
+    }
+  }
+  const row = nv * 2 + 1;
+  for (let i = 0; i < nu; i++) for (let j = 0; j < row - 1; j++) {
+    const a = i * row + j, b = a + 1, c = a + row, d = c + 1;
+    idx.push(a, b, d, a, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+const PROFILES = {
+  oval: (u) => Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.98 + 0.02)), 0.75),
+  lance: (u) => Math.pow(Math.sin(Math.PI * u), 0.9) * (1 - 0.35 * u),
+  petal: (u) => { const x = (u - 0.58) / 0.58; return Math.sqrt(Math.max(0, 1 - x * x)) + 0.05; },
+};
+function needleTuft(count = 18) {
+  const pos = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count, a = i * 2.39996;
+    const base = new V3(0, t, 0), dir = new V3(Math.cos(a), 0.55, Math.sin(a)).normalize();
+    const tip = base.clone().addScaledVector(dir, 1);
+    const side = new V3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(0.035);
+    const up = new V3(0, 0.035, 0);
+    for (const sv of [side, up]) {
+      pos.push(base.x + sv.x, base.y + sv.y, base.z + sv.z, base.x - sv.x, base.y - sv.y, base.z - sv.z, tip.x, tip.y, tip.z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  return g;
+}
+const GEOMS = {
+  oak: () => sheet({ width: 0.42, fold: 0.18, curve: 0.12, profile: PROFILES.oval }),
+  bush: () => sheet({ width: 0.36, fold: 0.15, curve: 0.08, profile: PROFILES.oval }),
+  fern: () => sheet({ width: 0.3, fold: 0.06, curve: 0.08, profile: PROFILES.lance, nu: 5, nv: 1 }),
+  willow: () => sheet({ width: 0.14, fold: 0.05, curve: 0.18, profile: PROFILES.lance, nu: 5, nv: 1 }),
+  petal: () => sheet({ width: 0.34, fold: 0.0, curve: -0.12, cup: 0.25, profile: PROFILES.petal, nu: 7, nv: 3 }),
+  needles: () => needleTuft(26),
+  sphere: () => new THREE.IcosahedronGeometry(1, 1),
+};
+
+/* =====================================================================
+   5. Shaders: crescimento animado + vento (patch dos materiais padrão)
+   ===================================================================== */
+const SHARED = { uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 } };
+const SWAY = /* glsl */`
+uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH;
+vec3 lsSway(vec3 p){
+  float h = clamp(p.y / uH, 0.0, 1.2); float k = h * h * uWind * uH * 0.016;
+  return vec3(sin(uTime*1.3 + p.x*0.35 + p.z*0.2)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25, 0.0, cos(uTime*1.07 + p.z*0.33)*k*0.7);
+}
+`;
+const CHUNKS = {
+  branch: {
+    head: `attribute vec3 aBase; attribute vec3 aCenter; attribute vec2 aBirth;\n` + SWAY,
+    begin: `#include <begin_vertex>
+    { float gt = clamp((uGrowth - aBirth.x) / max(aBirth.y - aBirth.x, 1e-4), 0.0, 1.0);
+      float rs = mix(0.35, 1.0, clamp((uGrowth - aBirth.x) / max(1.0 - aBirth.x, 1e-4), 0.0, 1.0)) * step(1e-4, gt);
+      vec3 c = aBase + (aCenter - aBase) * gt;
+      transformed = c + (transformed - aCenter) * rs + lsSway(c); }`,
+    project: '#include <project_vertex>',
+  },
+  inst: {
+    head: `attribute float aBirth;\n` + SWAY,
+    begin: `#include <begin_vertex>
+    transformed *= smoothstep(aBirth, aBirth + 0.08, uGrowth);`,
+    project: `vec4 mvPosition = vec4( transformed, 1.0 );
+    #ifdef USE_INSTANCING
+      mvPosition = instanceMatrix * mvPosition;
+      mvPosition.xyz += lsSway(instanceMatrix[3].xyz);
+    #endif
+    mvPosition = modelViewMatrix * mvPosition;
+    gl_Position = projectionMatrix * mvPosition;`,
+  },
+};
+function patch(mat, kind, uH) {
+  const ch = CHUNKS[kind];
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind; sh.uniforms.uH = uH;
+    sh.vertexShader = ch.head + sh.vertexShader.replace('#include <begin_vertex>', ch.begin).replace('#include <project_vertex>', ch.project);
+  };
+  mat.customProgramCacheKey = () => 'lsys-' + kind;
+  return mat;
+}
+const depthMat = (kind, uH) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, uH);
+
+/* =====================================================================
+   6. As 5 espécies
+   ===================================================================== */
+const hsl = (h, s, l) => new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, THREE.MathUtils.clamp(s, 0, 1), THREE.MathUtils.clamp(l, 0, 1));
+const leafStr = (r, size, pitch = 50) => `[/(${n(r.f() * 360)})&(${n(pitch + r.jit(15))})L(${n(size * (0.8 + r.f() * 0.4))})]`;
+
+const SPECIES = {
+  carvalho: {
+    name: 'Carvalho Ancestral', emoji: '🌳', height: 10, theme: 'day', leafKind: 'oak',
+    desc: 'Árvore simpodial: cada ápice se divide em 2 ou 3 ramos (regra estocástica), com alongamento dos entrenós ao longo do tempo.',
+    baseWidth: 0.62, taper: 0.965, leafRoll: 50,
+    params(r) {
+      const autumn = r.chance(0.3);
+      return {
+        iterations: r.int(6, 7), angle: r.range(24, 38), div: r.range(95, 140), lenRatio: r.range(0.74, 0.86),
+        widthRatio: r.range(0.6, 0.7), trunk: r.range(2.4, 3.6), internode: r.range(1.5, 2.1), p3: r.range(0.35, 0.8),
+        gravity: r.range(0.03, 0.16), leafSize: r.range(0.38, 0.56), elong: r.range(1.03, 1.08), lean: r.jit(7),
+        autumn, leafH: autumn ? r.range(14, 44) : r.range(80, 125), leafS: autumn ? r.range(0.7, 0.9) : r.range(0.45, 0.75), leafL: autumn ? r.range(0.42, 0.52) : r.range(0.27, 0.38),
+        barkH: r.range(18, 32), barkL: r.range(0.17, 0.27),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['angle', 'Ângulo de ramificação', '°'], ['div', 'Divergência (filotaxia)', '°'], ['lenRatio', 'Razão de comprimento'], ['widthRatio', 'Razão de espessura'], ['p3', 'Prob. de tricotomia'], ['gravity', 'Gravitropismo'], ['elong', 'Alongamento/iteração'], ['leafSize', 'Tamanho da folha'], ['autumn', 'Outono']],
+    build(P) {
+      return {
+        axiom: `!(1)F(${n(P.trunk)})/(${n(P.lean * 9)})+(${n(P.lean)})A(1)`,
+        rules: {
+          A: (p, r) => {
+            const s = p[0], k = r.chance(P.p3) ? 3 : 2;
+            let o = `~(${n(P.gravity)})F(${n(s * P.internode)})`;
+            if (s < 0.5) o += leafStr(r, P.leafSize, 60) + leafStr(r, P.leafSize, 60);
+            for (let i = 0; i < k; i++) o += `[!(${n(P.widthRatio)})&(${n(P.angle + r.jit(7))})F(${n(s * P.internode * 0.4)})A(${n(s * P.lenRatio * (0.88 + r.f() * 0.24))})]/(${n(k === 2 ? 180 + r.jit(30) : P.div + r.jit(15))})`;
+            return o;
+          },
+          F: (p) => `F(${n(p[0] * P.elong)})`,
+        },
+        finalize: { A: (p, r) => { let o = ''; for (let i = 0; i < 5; i++) o += leafStr(r, P.leafSize, 30 + r.f() * 50); return o + `F(0.15)L(${n(P.leafSize)})`; } },
+        display: [
+          `ω : !(1) F(${n(P.trunk)}) A(1)`,
+          `A(s) → ~(${n(P.gravity)}) F(s·${n(P.internode)}) { [ !(${n(P.widthRatio)}) &(${n(P.angle)}°±7) F A(s·${n(P.lenRatio)}) ] /(${n(P.div)}°) } × k`,
+          `        k = 3 com p=${n(P.p3)} | k = 2 com p=${n(1 - P.p3)}   (estocástica)`,
+          `        se s < 0.5: + folhas laterais L`,
+          `F(l) → F(l·${n(P.elong)})   (paramétrica: entrenós alongam)`,
+          `final: A → 6×[ &(30–80°) L ]  (tufos de folhas nas pontas)`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.barkH, 0.35, P.barkL), hsl(P.barkH + 10, 0.3, P.barkL + 0.12)],
+    color(kind, it, P, r) { return hsl(P.leafH + r.jit(P.autumn ? 18 : 8), P.leafS + r.jit(0.1), P.leafL + r.jit(0.07)); },
+  },
+
+  pinheiro: {
+    name: 'Pinheiro Boreal', emoji: '🌲', height: 12, theme: 'day', leafKind: 'needles',
+    desc: 'Crescimento monopodial: o ápice gera um verticilo de galhos por iteração; galhos mais velhos ficam mais longos e formam o cone.',
+    baseWidth: 0.42, taper: 0.985,
+    params(r) {
+      const blue = r.chance(0.25);
+      return {
+        iterations: r.int(11, 13), whorl: r.int(4, 6), angle: r.range(62, 82), rot: r.range(128, 146), internode: r.range(0.7, 0.95),
+        branchSeg: r.range(0.42, 0.55), twig: r.range(0.42, 0.6), twigAngle: r.range(45, 65), droop: r.range(0.08, 0.24), apical: r.range(0.9, 0.93),
+        skip: r.range(0, 0.18), trunk0: r.range(1.4, 2.4), needleLen: r.range(0.5, 0.72),
+        blue, needleH: blue ? r.range(170, 195) : r.range(100, 145), needleS: blue ? r.range(0.15, 0.3) : r.range(0.35, 0.6), needleL: r.range(0.18, 0.27),
+        barkH: r.range(12, 24),
+      };
+    },
+    show: [['iterations', 'Iterações (verticilos)'], ['whorl', 'Galhos por verticilo'], ['angle', 'Ângulo dos galhos', '°'], ['rot', 'Rotação entre verticilos', '°'], ['internode', 'Entrenó do tronco'], ['twigAngle', 'Ângulo dos raminhos', '°'], ['droop', 'Caimento (gravidade)'], ['skip', 'Prob. de galho abortado'], ['needleLen', 'Comprimento da agulha'], ['blue', 'Variante azulada']],
+    build(P) {
+      return {
+        axiom: `!(1)F(${n(P.trunk0)})A(1)`,
+        rules: {
+          A: (p, r) => {
+            let o = `F(${n(P.internode * (0.9 + r.f() * 0.2))})`;
+            for (let i = 0; i < P.whorl; i++) {
+              if (!r.chance(P.skip)) o += `[&(${n(P.angle + r.jit(6))})!(0.3)~(${n(P.droop)})B(${n(P.branchSeg)})]`;
+              o += `/(${n(360 / P.whorl + r.jit(10))})`;
+            }
+            return o + `/(${n(P.rot)})!(${n(P.apical)})A(1)`;
+          },
+          B: (p, r) => { const l = p[0]; return `N(${n(l)})F(${n(l)})[+(${n(P.twigAngle + r.jit(8))})!(0.6)C(${n(l * P.twig)})][-(${n(P.twigAngle + r.jit(8))})!(0.6)C(${n(l * P.twig)})]B(${n(l * 0.98)})`; },
+          C: (p) => p[0] < 0.11 ? `N(${n(p[0])})` : `N(${n(p[0])})F(${n(p[0])})C(${n(p[0] * 0.78)})`,
+        },
+        finalize: { A: () => `N(0.5)F(0.5)N(0.4)F(0.4)`, B: (p) => `N(${n(p[0])})F(${n(p[0])})`, C: (p) => `N(${n(p[0])})F(${n(p[0])})` },
+        display: [
+          `ω : !(1) F(${n(P.trunk0)}) A(1)`,
+          `A → F(${n(P.internode)}) { [ &(${n(P.angle)}°) !(0.3) ~(${n(P.droop)}) B(${n(P.branchSeg)}) ] /(360/${P.whorl}) } ×${P.whorl}  /(${n(P.rot)}°) !(${n(P.apical)}) A`,
+          `        cada galho é abortado com p=${n(P.skip)} (estocástica)`,
+          `B(l) → N F(l) [ +(${n(P.twigAngle)}°) C(l·${n(P.twig)}) ] [ -(${n(P.twigAngle)}°) C(l·${n(P.twig)}) ] B(l·0.98)`,
+          `C(l) : l ≥ 0.11 → N F(l) C(l·0.78)   |   l < 0.11 → N`,
+          `N = tufo de agulhas instanciado`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.barkH, 0.35, 0.15), hsl(P.needleH - 40, 0.25, 0.17)],
+    color(kind, it, P, r) { return hsl(P.needleH + r.jit(7), P.needleS + r.jit(0.08), P.needleL + r.jit(0.05)); },
+  },
+
+  samambaia: {
+    name: 'Samambaia Espiral', emoji: '🌿', height: 4.5, theme: 'day', leafKind: 'fern',
+    desc: 'Roseta de frondes com atraso de brotação; cada fronde se curva (circinação) e gera pinas com folíolos. Frondes jovens ainda enroladas.',
+    baseWidth: 0.12, taper: 0.985, leafRoll: 10,
+    params(r) {
+      const fronds = r.int(8, 13);
+      const list = [];
+      for (let i = 0; i < fronds; i++) { const t = i / fronds; list.push({ yaw: i * 137.508 + r.jit(12), pitch: 62 - t * 38 + r.jit(6), delay: Math.floor(t * r.range(3, 6)) }); }
+      return {
+        iterations: r.int(16, 18), fronds, list, curl: r.range(3.5, 7.5), twist: r.jit(3), angle: r.range(58, 78), pinnaLen: r.range(0.36, 0.52),
+        seg: r.range(0.3, 0.38), decay: r.range(0.91, 0.935), leafletAngle: r.range(50, 72), leafletSize: r.range(0.13, 0.19),
+        leafH: r.range(85, 140), leafS: r.range(0.45, 0.75), leafL: r.range(0.26, 0.4),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['fronds', 'Número de frondes'], ['curl', 'Curvatura por segmento', '°'], ['twist', 'Torção', '°'], ['angle', 'Ângulo das pinas', '°'], ['pinnaLen', 'Comprimento das pinas'], ['decay', 'Decaimento da fronde'], ['leafletAngle', 'Ângulo dos folíolos', '°'], ['leafletSize', 'Tamanho do folíolo']],
+    build(P) {
+      return {
+        axiom: P.list.map(f => `[/(${n(f.yaw)})&(${n(f.pitch)})!(0.22)D(${f.delay})]`).join(''),
+        rules: {
+          D: (p) => p[0] > 0 ? `D(${p[0] - 1})` : `R(1)`,
+          R: (p) => {
+            const s = p[0];
+            if (s < 0.22) return `F(${n(s * P.seg)})L(${n(P.leafletSize)})`;
+            const pl = s * P.pinnaLen;
+            return `&(${n(P.curl)})/(${n(P.twist)})F(${n(s * P.seg)})[+(${n(P.angle)})!(0.45)Q(${n(pl)})][-(${n(P.angle)})!(0.45)Q(${n(pl)})]!(0.97)R(${n(s * P.decay)})`;
+          },
+          Q: (p) => {
+            const l = p[0];
+            if (l < 0.045) return `L(${n(P.leafletSize * 0.7)})`;
+            const ls = n(P.leafletSize * Math.min(1, l * 3 + 0.35));
+            return `F(${n(l * 0.26)})[+(${n(P.leafletAngle)})L(${ls})][-(${n(P.leafletAngle)})L(${ls})]Q(${n(l * 0.86)})`;
+          },
+        },
+        finalize: {
+          D: () => `F(0.12)&(55)F(0.07)&(60)F(0.06)&(65)F(0.05)&(70)F(0.04)&(75)F(0.03)`,
+          R: (p) => { const s = n(p[0] * P.seg * 0.5); return `&(25)F(${s})&(40)F(${s})&(55)F(${n(s * 0.8)})&(65)F(${n(s * 0.6)})&(75)F(${n(s * 0.4)})`; },
+          Q: () => `L(${n(P.leafletSize * 0.7)})`,
+        },
+        display: [
+          `ω : { [ /(137.5°·i) &(pitch_i) !(0.22) D(atraso_i) ] } × ${P.fronds}`,
+          `D(t) : t > 0 → D(t−1)   |   t = 0 → R(1)      (brotação atrasada)`,
+          `R(s) → &(${n(P.curl)}°) /(${n(P.twist)}°) F(s·${n(P.seg)}) [ +(${n(P.angle)}°) Q(s·${n(P.pinnaLen)}) ] [ −(${n(P.angle)}°) Q(s·${n(P.pinnaLen)}) ] R(s·${n(P.decay)})`,
+          `Q(l) : l ≥ 0.045 → F(l·0.26) [ +(${n(P.leafletAngle)}°) L ] [ −(${n(P.leafletAngle)}°) L ] Q(l·0.86)`,
+          `final: R → báculo enrolado (&25° … &75°),  D → broto em espiral`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.leafH - 25, 0.45, 0.18), hsl(P.leafH - 5, 0.5, 0.3)],
+    color(kind, it, P, r) { return hsl(P.leafH + r.jit(6), P.leafS + r.jit(0.06), P.leafL + r.jit(0.05)); },
+  },
+
+  arbusto: {
+    name: 'Arbusto Florido', emoji: '🌺', height: 5, theme: 'day', leafKind: 'bush',
+    desc: 'Arbusto multicaule com regras estocásticas (3 ramos, 2 ramos ou flor precoce). Paleta, nº de pétalas e abertura vêm da seed.',
+    baseWidth: 0.09, taper: 0.97, leafRoll: 40,
+    params(r) {
+      const pal = r.pick([
+        { name: 'rosa', h: 335, s: 0.75, l: 0.72 }, { name: 'magenta', h: 305, s: 0.7, l: 0.6 }, { name: 'vermelho', h: 355, s: 0.8, l: 0.52 },
+        { name: 'coral', h: 12, s: 0.85, l: 0.64 }, { name: 'amarelo', h: 46, s: 0.92, l: 0.6 }, { name: 'lilás', h: 272, s: 0.55, l: 0.72 },
+        { name: 'azul', h: 222, s: 0.7, l: 0.66 }, { name: 'branco', h: 40, s: 0.25, l: 0.93 }]);
+      return {
+        iterations: 5, stems: r.int(4, 6), angle: r.range(18, 32), div: r.range(100, 140), internode: r.range(0.55, 0.8), lenRatio: r.range(0.8, 0.9),
+        pBranch3: r.range(0.5, 0.7), pFlower: r.range(0.05, 0.15), petals: r.int(5, 8), open: r.range(48, 78), double: r.chance(0.35),
+        flowerSize: r.range(0.15, 0.22), palette: pal.name, petalH: pal.h + r.jit(10), petalS: pal.s, petalL: pal.l, hueSpread: r.range(4, 22),
+        leafSize: r.range(0.22, 0.32), leafH: r.range(95, 135), photo: r.range(0.03, 0.09),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['stems', 'Caules na base'], ['angle', 'Ângulo de ramificação', '°'], ['div', 'Divergência', '°'], ['pBranch3', 'Prob. 3 ramos'], ['pFlower', 'Prob. flor precoce'], ['petals', 'Pétalas por flor'], ['open', 'Abertura da flor', '°'], ['double', 'Flor dobrada'], ['palette', 'Paleta'], ['hueSpread', 'Variação de matiz', '°'], ['photo', 'Fototropismo']],
+    build(P) {
+      const Ar = (s, r) => `&(${n(P.angle + r.jit(6))})F(${n(s * P.internode * 0.5)})${leafStr(r, P.leafSize)}A(${n(s * P.lenRatio)})`;
+      const axiom = (() => { const r = new Rand('axiom' + P.petalH); let o = ''; for (let i = 0; i < P.stems; i++) o += `[/(${n(i * 360 / P.stems + r.jit(20))})&(${n(12 + r.f() * 26)})~(${n(-P.photo)})A(1)]`; return o; })();
+      return {
+        axiom: `!(1)F(0.25)` + axiom,
+        rules: {
+          A: [
+            { w: P.pBranch3, s: (p, r) => { const s = p[0]; return `!(0.72)F(${n(s * P.internode)})${leafStr(r, P.leafSize)}[${Ar(s, r)}]/(${n(P.div)})[${Ar(s, r)}]/(${n(P.div)})[${Ar(s, r)}]`; } },
+            { w: 1 - P.pBranch3 - P.pFlower, s: (p, r) => { const s = p[0]; return `!(0.78)F(${n(s * P.internode)})${leafStr(r, P.leafSize)}/(${n(P.div)})[${Ar(s, r)}]${leafStr(r, P.leafSize)}A(${n(s * 0.9)})`; } },
+            { w: P.pFlower, s: (p, r) => `F(${n(p[0] * P.internode * 0.6)})${leafStr(r, P.leafSize)}K(${n(P.flowerSize * 0.9)})` },
+          ],
+        },
+        finalize: { A: (p, r) => `F(0.12)${leafStr(r, P.leafSize, 70)}K(${n(P.flowerSize * (0.8 + r.f() * 0.35))})` },
+        display: [
+          `ω : !(1) F(0.25) { [ /(360/${P.stems}·i) &(12–38°) ~(${n(-P.photo)}) A(1) ] } × ${P.stems}`,
+          `A(s) →  p=${n(P.pBranch3)} : !(0.72) F(s·${n(P.internode)}) L [B] /(${n(P.div)}°) [B] /(${n(P.div)}°) [B]`,
+          `        p=${n(1 - P.pBranch3 - P.pFlower)} : !(0.78) F L /(${n(P.div)}°) [B] L A(s·0.9)`,
+          `        p=${n(P.pFlower)} : F K   (flor precoce)`,
+          `B(s) ≡ &(${n(P.angle)}°) F L A(s·${n(P.lenRatio)})`,
+          `final: A → F L K(flor ${P.petals} pétalas${P.double ? ', dobrada' : ''})`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(28, 0.3, 0.2), hsl(P.leafH - 20, 0.4, 0.32)],
+    color(kind, it, P, r) {
+      if (kind === 'petal') return hsl(P.petalH + r.jit(P.hueSpread), P.petalS + r.jit(0.05), P.petalL + (it.layer ? 0.06 : 0) + r.jit(0.04));
+      if (kind === 'center') return hsl(48, 0.9, 0.5);
+      return hsl(P.leafH + r.jit(8), 0.55 + r.jit(0.08), 0.32 + r.jit(0.05));
+    },
+  },
+
+  salgueiro: {
+    name: 'Salgueiro Lumínico', emoji: '✨', height: 10, theme: 'night', leafKind: 'willow',
+    desc: 'Espécie fantástica: ramos superiores soltam gavinhas pendentes com gravitropismo forte, folhas e orbes bioluminescentes.',
+    baseWidth: 0.55, taper: 0.97, leafRoll: 60,
+    params(r) {
+      const glow = r.pick([{ name: 'ciano', h: 182 }, { name: 'violeta', h: 280 }, { name: 'magenta', h: 318 }, { name: 'esmeralda', h: 150 }, { name: 'âmbar', h: 42 }, { name: 'azul elétrico', h: 212 }]);
+      return {
+        iterations: r.int(13, 14), trunk: r.range(2.6, 3.6), angle: r.range(26, 40), div: r.range(110, 150), internode: r.range(1.6, 2.1), lenRatio: r.range(0.68, 0.76),
+        tendrils: r.int(4, 6), tendrilSeg: r.range(0.38, 0.5), gravity: r.range(0.26, 0.42), orbChance: r.range(0.05, 0.12), orbSize: r.range(0.07, 0.11),
+        splitChance: r.range(0.03, 0.09), glow: glow.name, glowH: glow.h + r.jit(8), glow2: r.range(25, 70) * (r.chance(0.5) ? 1 : -1), barkH: r.range(250, 290),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['angle', 'Ângulo de ramificação', '°'], ['div', 'Divergência', '°'], ['lenRatio', 'Razão de comprimento'], ['tendrils', 'Gavinhas por nó'], ['gravity', 'Gravitropismo das gavinhas'], ['orbChance', 'Prob. de orbe'], ['splitChance', 'Prob. de bifurcar gavinha'], ['glow', 'Cor da luz'], ['glow2', 'Desvio de matiz secundário', '°']],
+    build(P) {
+      return {
+        axiom: `!(1)F(${n(P.trunk)})/(30)A(1)`,
+        rules: {
+          A: (p, r) => {
+            const s = p[0];
+            if (s > 0.4) {
+              const k = r.chance(0.6) ? 3 : 2; let o = `F(${n(s * P.internode)})`;
+              for (let i = 0; i < k; i++) o += `[!(0.62)&(${n(P.angle + r.jit(6))})A(${n(s * P.lenRatio * (0.9 + r.f() * 0.2))})]/(${n(P.div + r.jit(15))})`;
+              return o;
+            }
+            let o = `!(0.7)F(${n(s * P.internode)})`;
+            for (let i = 0; i < P.tendrils; i++) o += `[!(0.3)/(${n(i * 360 / P.tendrils + r.jit(25))})&(${n(25 + r.f() * 55)})~(${n(P.gravity * (0.8 + r.f() * 0.4))})T(${n(P.tendrilSeg)})]`;
+            return o;
+          },
+          T: (p, r) => {
+            const l = p[0]; let o = `F(${n(l)})`;
+            if (r.chance(0.7)) o += leafStr(r, 0.42, 40);
+            if (r.chance(P.orbChance)) o += `O(${n(P.orbSize * (0.5 + r.f() * 0.6))})`;
+            if (r.chance(P.splitChance)) o += `[+(${n(20 + r.f() * 20)})T(${n(l * 0.9)})]`;
+            return o + `T(${n(l * 0.97)})`;
+          },
+        },
+        finalize: { T: () => `O(${n(P.orbSize * 1.3)})`, A: () => `O(${n(P.orbSize)})` },
+        display: [
+          `ω : !(1) F(${n(P.trunk)}) /(30°) A(1)`,
+          `A(s) : s > 0.4 → F(s·${n(P.internode)}) { [ !(0.62) &(${n(P.angle)}°) A(s·${n(P.lenRatio)}) ] /(${n(P.div)}°) } × (2|3)`,
+          `       s ≤ 0.4 → !(0.7) F { [ &(25–80°) ~(${n(P.gravity)}) T(${n(P.tendrilSeg)}) ] } × ${P.tendrils}`,
+          `T(l) → F(l) [L]? O? [ +T ]? T(l·0.97)   (p_folha=0.7, p_orbe=${n(P.orbChance)}, p_bifurca=${n(P.splitChance)})`,
+          `final: T → O (orbe na ponta)`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.barkH, 0.22, 0.26), hsl(P.barkH, 0.35, 0.36)],
+    color(kind, it, P, r) {
+      if (kind === 'orb') { const c = hsl(P.glowH + (r.chance(0.35) ? P.glow2 : 0) + r.jit(10), 0.9, 0.62); return c.multiplyScalar(1.3 + r.f() * 1.1); }
+      return hsl(P.glowH + P.glow2 * 0.5 + r.jit(14), 0.75, 0.42 + r.jit(0.08));
+    },
+  },
+};
+const ORDER = ['carvalho', 'pinheiro', 'samambaia', 'arbusto', 'salgueiro'];
+
+/* =====================================================================
+   7. Montagem da planta (galhos mesclados + folhas instanciadas)
+   ===================================================================== */
+function buildBranchGeometry(segs, sp, P, rng, total) {
+  const R = 7, nv = segs.length * (R * 2 + 1);
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
+  const base = new Float32Array(nv * 3), cen = new Float32Array(nv * 3), birth = new Float32Array(nv * 2);
+  const idx = new Uint32Array(segs.length * R * 9);
+  const [c0, c1] = sp.bark(P); const c = new THREE.Color();
+  const rmax = segs.reduce((m, s) => Math.max(m, s.r0), 0.0001);
+  const cosT = [], sinT = [];
+  for (let j = 0; j < R; j++) { cosT.push(Math.cos(j / R * Math.PI * 2)); sinT.push(Math.sin(j / R * Math.PI * 2)); }
+  let v = 0, ii = 0;
+  for (const s of segs) {
+    const b0 = s.d0 / total * 0.9, b1 = s.d1 / total * 0.9;
+    const thin = Math.pow(1 - s.r0 / rmax, 2.5);
+    c.copy(c0).lerp(c1, thin).offsetHSL(0, 0, rng.jit(0.02));
+    const vstart = v;
+    for (let k = 0; k < 2; k++) {
+      const C = k ? s.e : s.s, r = k ? s.r1 : s.r0;
+      for (let j = 0; j < R; j++) {
+        const dx = s.L.x * cosT[j] + s.U.x * sinT[j], dy = s.L.y * cosT[j] + s.U.y * sinT[j], dz = s.L.z * cosT[j] + s.U.z * sinT[j];
+        const o = v * 3;
+        pos[o] = C.x + dx * r; pos[o + 1] = C.y + dy * r; pos[o + 2] = C.z + dz * r;
+        nor[o] = dx; nor[o + 1] = dy; nor[o + 2] = dz;
+        col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
+        base[o] = s.s.x; base[o + 1] = s.s.y; base[o + 2] = s.s.z;
+        cen[o] = C.x; cen[o + 1] = C.y; cen[o + 2] = C.z;
+        birth[v * 2] = b0; birth[v * 2 + 1] = b1;
+        v++;
+      }
+    }
+    for (let j = 0; j < R; j++) {
+      const a = vstart + j, b = vstart + (j + 1) % R, cc = a + R, d = b + R;
+      idx[ii++] = a; idx[ii++] = b; idx[ii++] = d; idx[ii++] = a; idx[ii++] = d; idx[ii++] = cc;
+    }
+    { // tampa na ponta (evita tubo oco visível nas bifurcações)
+      const o = v * 3, hx = s.e.x - s.s.x, hy = s.e.y - s.s.y, hz = s.e.z - s.s.z, hl = Math.hypot(hx, hy, hz) || 1;
+      pos[o] = s.e.x; pos[o + 1] = s.e.y; pos[o + 2] = s.e.z; nor[o] = hx / hl; nor[o + 1] = hy / hl; nor[o + 2] = hz / hl;
+      col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
+      base[o] = s.s.x; base[o + 1] = s.s.y; base[o + 2] = s.s.z; cen[o] = s.e.x; cen[o + 1] = s.e.y; cen[o + 2] = s.e.z;
+      birth[v * 2] = b0; birth[v * 2 + 1] = b1;
+      for (let j = 0; j < R; j++) { idx[ii++] = vstart + R + j; idx[ii++] = vstart + R + (j + 1) % R; idx[ii++] = v; }
+      v++;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aBase', new THREE.BufferAttribute(base, 3));
+  g.setAttribute('aCenter', new THREE.BufferAttribute(cen, 3));
+  g.setAttribute('aBirth', new THREE.BufferAttribute(birth, 2));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+
+function makeInstanced(kind, items, sp, P, rng, total, uH, night) {
+  const geomKey = kind === 'leaf' ? sp.leafKind : (kind === 'orb' || kind === 'center') ? 'sphere' : kind;
+  const geo = GEOMS[geomKey]();
+  const count = items.length;
+  const mats = new Float32Array(count * 16), cols = new Float32Array(count * 3), births = new Float32Array(count);
+  const m = new THREE.Matrix4(), x = new V3(), y = new V3(), z = new V3();
+  items.forEach((it, i) => {
+    y.copy(it.y).normalize(); x.crossVectors(y, it.z).normalize(); z.crossVectors(x, y);
+    let sx = it.s, sy = it.s, sz = it.s;
+    if (kind === 'needles') { sx = sz = P.needleLen; }
+    m.makeBasis(x.multiplyScalar(sx), y.multiplyScalar(sy), z.multiplyScalar(sz)); m.setPosition(it.p);
+    m.toArray(mats, i * 16);
+    const c = sp.color(kind, it, P, rng); cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+    births[i] = Math.min(it.d / total * 0.9 + (kind === 'petal' || kind === 'center' ? 0.04 : 0.01), 0.92);
+  });
+  geo.setAttribute('aBirth', new THREE.InstancedBufferAttribute(births, 1));
+  let mat;
+  if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  else {
+    mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: kind === 'petal' ? 0.45 : 0.7, metalness: 0 });
+    if (sp.leafKind === 'willow' && kind === 'leaf') { mat.emissive = hsl(P.glowH, 0.9, 0.5); mat.emissiveIntensity = night ? 0.35 : 0.3; }
+    if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
+  }
+  patch(mat, 'inst', uH);
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
+  mesh.frustumCulled = false;
+  mesh.castShadow = kind !== 'orb'; mesh.receiveShadow = kind !== 'orb';
+  mesh.customDepthMaterial = depthMat('inst', uH);
+  return mesh;
+}
+
+function buildPlant(id, seed) {
+  const t0 = performance.now();
+  const sp = SPECIES[id];
+  const P = sp.params(new Rand(`${seed}::${id}::params`));
+  const def = sp.build(P);
+  const { word, done } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`));
+  const tLs = performance.now();
+  const rng = new Rand(`${seed}::${id}::turtle`);
+  const { segs, inst } = interpret(word, sp, P, rng);
+  // extensão / altura
+  const box = new THREE.Box3();
+  for (const s of segs) { box.expandByPoint(s.s); box.expandByPoint(s.e); }
+  for (const k in inst) for (const it of inst[k]) box.expandByPoint(it.p);
+  box.min.y = Math.min(box.min.y, 0);
+  const size = box.getSize(new V3());
+  const rawH = Math.max(size.y, 0.001), rawW = Math.max(size.x, size.z);
+  const uH = { value: rawH };
+  let total = 0; for (const s of segs) total = Math.max(total, s.d1); for (const k in inst) for (const it of inst[k]) total = Math.max(total, it.d); total = total || 1;
+  const group = new THREE.Group();
+  const night = sp.theme === 'night';
+  const bmat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }), 'branch', uH);
+  const bmesh = new THREE.Mesh(buildBranchGeometry(segs, sp, P, rng, total), bmat);
+  bmesh.castShadow = bmesh.receiveShadow = true; bmesh.frustumCulled = false;
+  bmesh.customDepthMaterial = depthMat('branch', uH);
+  group.add(bmesh);
+  let nInst = 0;
+  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, total, uH, night)); nInst += inst[k].length; }
+  // centraliza na base e normaliza a escala para a altura-alvo da espécie
+  const scale = sp.height / Math.max(rawH, rawW * 0.75);
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, 0, -cz);
+  inner.scale.setScalar(scale);
+  inner.updateMatrixWorld(true);
+  const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
+  return {
+    id, sp, P, def, word, done, object: inner, box: wbox,
+    stats: { modules: word.length, segs: segs.length, inst: nInst, counts: Object.fromEntries(Object.entries(inst).map(([k, v]) => [k, v.length])), ms: performance.now() - t0, lsMs: tLs - t0 },
+  };
+}
+function disposePlant(pl) {
+  pl.object.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); if (o.customDepthMaterial) o.customDepthMaterial.dispose(); });
+  pl.object.removeFromParent();
+}
+
+/* =====================================================================
+   8. Cena, luz, céu, solo
+   ===================================================================== */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 600);
+camera.position.set(14, 7, 18);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.6;
+controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 2; controls.maxDistance = 200;
+
+const hemi = new THREE.HemisphereLight(0xdfefff, 0x4a3a28, 1.0); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; sun.shadow.radius = 4;
+scene.add(sun, sun.target);
+const fill = new THREE.DirectionalLight(0xbfd8ff, 0.5); fill.position.set(-10, 6, -8); scene.add(fill);
+const glowLight = new THREE.PointLight(0x66ffee, 0, 30, 1.6); scene.add(glowLight);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(120, 96), new THREE.MeshStandardMaterial({ color: 0x5f7d48, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+// grama/disco de terra sob a planta
+const soil = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1, transparent: true, opacity: 0.55 }));
+soil.rotation.x = -Math.PI / 2; soil.position.y = 0.01; soil.receiveShadow = true; scene.add(soil);
+
+function gradientTex(stops) {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 512; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512); stops.forEach(([o, col]) => gr.addColorStop(o, col));
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 512);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const THEMES = {
+  day: { bg: gradientTex([[0, '#7fb2e5'], [0.55, '#cfe4ef'], [1, '#e9e3d0']]), fog: 0xdfe3d6, ground: 0x6a8a4c, soil: 0x4a3a2a, hemi: [0xdfefff, 0x4a3a28, 1.1], sun: [0xfff1d6, 2.7], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.95] },
+  night: { bg: gradientTex([[0, '#03040d'], [0.6, '#0c1030'], [1, '#1d1838']]), fog: 0x141433, ground: 0x10182a, soil: 0x0a0d18, hemi: [0x7080d0, 0x202040, 0.8], sun: [0x9fb4ff, 1.0], fill: 0.3, exp: 1.1, bloom: [0.6, 0.45, 0.85] },
+};
+const composerRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, composerRT);
+composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.4, 0.95);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function setTheme(name) {
+  const t = THEMES[name];
+  scene.background = t.bg; scene.fog = new THREE.Fog(t.fog, 30, 160);
+  ground.material.color.set(t.ground); soil.material.color.set(t.soil);
+  hemi.color.set(t.hemi[0]); hemi.groundColor.set(t.hemi[1]); hemi.intensity = t.hemi[2];
+  sun.color.set(t.sun[0]); sun.intensity = t.sun[1]; fill.intensity = t.fill;
+  renderer.toneMappingExposure = t.exp;
+  [bloom.strength, bloom.radius, bloom.threshold] = t.bloom;
+}
+
+function panelOffset() {
+  const hidden = $('panel').classList.contains('hidden');
+  if (hidden) return { x: 0, y: 0 };
+  if (innerWidth > 700) return { x: 368, y: 0 };
+  return { x: 0, y: Math.min($('panel').offsetHeight, innerHeight * 0.55) + 14 };
+}
+function applyViewOffset() {
+  const off = panelOffset();
+  camera.aspect = innerWidth / innerHeight;
+  if (off.x || off.y) camera.setViewOffset(innerWidth, innerHeight, -off.x / 2, off.y / 2, innerWidth, innerHeight); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12 } = {}) {
+  applyViewOffset();
+  const size = box.getSize(new V3()), center = box.getCenter(new V3());
+  const off = panelOffset(), visH = (innerHeight - off.y) / innerHeight;
+  const fov = camera.fov * DEG, aspect = (innerWidth - off.x) / innerHeight;
+  const halfH = size.y / 2 / visH, halfW = Math.max(size.x, size.z) / 2;
+  const dist = Math.max(halfH / Math.tan(fov / 2), halfW / (Math.tan(fov / 2) * aspect)) * pad + size.z * 0.5;
+  const target = center.clone(); target.y = size.y * 0.46;
+  camera.position.copy(target).addScaledVector(dir.clone().normalize(), dist);
+  controls.target.copy(target); controls.update();
+  // sombra cobre a planta
+  const rad = Math.max(size.x, size.y, size.z) * 0.85 + 2;
+  sun.position.copy(center).add(new V3(rad * 0.8, rad * 1.6, rad * 0.6)); sun.target.position.copy(center);
+  const sc = sun.shadow.camera; sc.left = -rad; sc.right = rad; sc.top = rad; sc.bottom = -rad; sc.near = 0.5; sc.far = rad * 5; sc.updateProjectionMatrix();
+  scene.fog.near = dist * 1.3; scene.fog.far = dist * 5;
+}
+
+/* =====================================================================
+   9. UI / estado
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
+for (const id of ORDER) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; ui.species.appendChild(o); }
+let plants = [], mode = 'single', anim = null, labels = [];
+
+const WORDS = ['orvalho', 'musgo', 'aurora', 'raiz', 'brisa', 'semente', 'samba', 'ipê', 'jabuti', 'lua', 'cipó', 'trovão', 'sereno', 'pólen', 'arara', 'neblina', 'carvalho', 'vento', 'jardim', 'galáxia'];
+const randomSeed = () => `${WORDS[Math.floor(Math.random() * WORDS.length)]}-${WORDS[Math.floor(Math.random() * WORDS.length)]}-${Math.floor(Math.random() * 1000)}`;
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  return { esp: h.get('especie'), seed: h.get('seed') };
+}
+function writeHash() {
+  const esp = mode === 'garden' ? 'jardim' : ui.species.value;
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}`;
+  if (location.hash !== s) history.replaceState(null, '', s);
+}
+
+function fmtVal(v, unit) { if (typeof v === 'boolean') return v ? 'sim' : 'não'; if (typeof v === 'number') return (Number.isInteger(v) ? v : v.toFixed(unit === '°' ? 1 : 3)) + (unit || ''); return v; }
+function showInfo(pl) {
+  const { sp, P, def, stats } = pl;
+  $('params').innerHTML = sp.show.map(([k, label, unit]) => `<tr><td>${label}</td><td>${fmtVal(k === 'iterations' ? pl.done : P[k], unit)}</td></tr>`).join('');
+  $('rules').textContent = def.display.join('\n');
+  $('word').textContent = wordToString(pl.word, 700);
+  $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 32)}</b>`;
+}
+function showStats() {
+  const s = plants.reduce((a, p) => ({ modules: a.modules + p.stats.modules, segs: a.segs + p.stats.segs, inst: a.inst + p.stats.inst, ms: a.ms + p.stats.ms }), { modules: 0, segs: 0, inst: 0, ms: 0 });
+  const detail = plants.length === 1 ? ' · ' + Object.entries(plants[0].stats.counts).map(([k, v]) => `${k}: ${v}`).join(' · ') : '';
+  $('stats').textContent = `${s.modules.toLocaleString('pt-BR')} módulos · ${s.segs.toLocaleString('pt-BR')} segmentos · ${s.inst.toLocaleString('pt-BR')} instâncias${detail} · ${s.ms.toFixed(0)} ms`;
+}
+
+function clearPlants() { plants.forEach(disposePlant); plants = []; labels.forEach(l => l.el.remove()); labels = []; }
+
+async function generate({ animate = true } = {}) {
+  $('busy').style.display = 'block';
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  try {
+    clearPlants();
+    const seed = ui.seed.value.trim() || 'lindenmayer'; ui.seed.value = seed;
+    if (mode === 'single') {
+      const id = ui.species.value; const pl = buildPlant(id, seed);
+      plants.push(pl); scene.add(pl.object);
+      setTheme(pl.sp.theme);
+      const size = pl.box.getSize(new V3());
+      soil.scale.setScalar(Math.max(size.x, size.z) * 0.32 + 0.5);
+      glowLight.intensity = id === 'salgueiro' ? 30 : 0;
+      if (id === 'salgueiro') { glowLight.color = hsl(pl.P.glowH, 0.9, 0.6); glowLight.position.set(0, size.y * 0.35, 0); glowLight.distance = size.y * 3; }
+      frame(pl.box);
+      $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`; $('capD').textContent = pl.sp.desc;
+      showInfo(pl);
+    } else {
+      setTheme('day'); glowLight.intensity = 0;
+      const gap = 2.2; let x = 0; const built = ORDER.map(id => buildPlant(id, seed));
+      const widths = built.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * 0.72; });
+      const totalW = widths.reduce((a, b) => a + b, 0) + gap * (built.length - 1);
+      x = -totalW / 2;
+      const all = new THREE.Box3();
+      built.forEach((pl, i) => {
+        const cx = x + widths[i] / 2; x += widths[i] + gap;
+        const z = -Math.abs(cx) * 0.18;
+        pl.object.position.set(cx, 0, z); scene.add(pl.object); plants.push(pl);
+        const b = pl.box.clone().translate(new V3(cx, 0, z)); all.union(b);
+        const el = document.createElement('div'); el.className = 'glabel'; el.textContent = `${pl.sp.emoji} ${pl.sp.name}`;
+        el.onclick = () => { ui.species.value = pl.id; setMode('single'); generate(); };
+        $('labels').appendChild(el); labels.push({ el, pos: new V3(cx, -0.2, z + 0.5) });
+      });
+      soil.scale.setScalar(0.001);
+      frame(all, { dir: new V3(0.12, 0.22, 1), pad: 1.04 });
+      $('capT').textContent = '🌿 Jardim: as 5 espécies'; $('capD').textContent = `Mesma seed "${seed}", cinco gramáticas diferentes. Clique no nome para abrir a espécie.`;
+      showInfo(built[ORDER.indexOf(ui.species.value)] || built[0]);
+    }
+    showStats(); writeHash();
+    if (animate) startGrowth(); else { SHARED.uGrowth.value = 1; syncSlider(); }
+  } catch (e) { showErr(e); }
+  $('busy').style.display = 'none';
+}
+
+function startGrowth() { anim = { t0: performance.now(), dur: 3600 }; SHARED.uGrowth.value = 0; }
+function syncSlider() { ui.growth.value = SHARED.uGrowth.value; $('gval').textContent = Math.round(SHARED.uGrowth.value * 100) + '%'; }
+function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 5'; }
+function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
+
+$('gen').onclick = () => generate();
+$('rand').onclick = () => { ui.seed.value = randomSeed(); generate(); };
+ui.seed.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+ui.species.onchange = () => { if (mode === 'garden') { showInfo(plants[ORDER.indexOf(ui.species.value)]); writeHash(); } else generate(); };
+$('garden').onclick = () => { setMode(mode === 'garden' ? 'single' : 'garden'); generate(); };
+$('replay').onclick = () => startGrowth();
+ui.growth.oninput = () => { anim = null; SHARED.uGrowth.value = +ui.growth.value; syncSlider(); };
+$('rotate').onchange = (e) => controls.autoRotate = e.target.checked;
+$('wind').onchange = (e) => SHARED.uWind.value = e.target.checked ? 1 : 0;
+$('share').onclick = async () => { writeHash(); try { await navigator.clipboard.writeText(location.href); $('share').textContent = '✔ Link copiado'; } catch { prompt('Copie o link:', location.href); } setTimeout(() => $('share').textContent = '🔗 Copiar link', 1500); };
+$('hide').onclick = () => { $('panel').classList.add('hidden'); applyViewOffset(); };
+$('toggle').onclick = () => { $('panel').classList.remove('hidden'); applyViewOffset(); };
+addEventListener('hashchange', () => { const h = readHash(); if (h.seed && (h.seed !== ui.seed.value || (h.esp === 'jardim') !== (mode === 'garden') || (h.esp !== 'jardim' && h.esp !== ui.species.value))) init(); });
+addEventListener('resize', () => {
+  applyViewOffset();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+
+function init() {
+  const h = readHash();
+  ui.seed.value = h.seed || 'lindenmayer';
+  if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); if (SPECIES[h.esp]) ui.species.value = h.esp; }
+  const q = new URLSearchParams(location.search);
+  if (q.has('nogrow')) { generate({ animate: false }); } else generate();
+  if (q.has('norotate')) { controls.autoRotate = false; $('rotate').checked = false; }
+}
+
+const clock = new THREE.Clock();
+const tmpV = new V3();
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  SHARED.uTime.value += dt;
+  if (anim) {
+    const k = Math.min((performance.now() - anim.t0) / anim.dur, 1);
+    SHARED.uGrowth.value = 1 - Math.pow(1 - k, 2.2);
+    syncSlider(); if (k >= 1) anim = null;
+  }
+  controls.update();
+  composer.render();
+  for (const l of labels) {
+    tmpV.copy(l.pos).project(camera);
+    l.el.style.left = ((tmpV.x * 0.5 + 0.5) * innerWidth) + 'px'; l.el.style.top = ((-tmpV.y * 0.5 + 0.5) * innerHeight + 8) + 'px';
+    l.el.style.display = tmpV.z < 1 ? 'block' : 'none';
+  }
+}
+window.camera = camera; window.__lsys = { buildPlant, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
+addEventListener('error', (e) => showErr(e.error || e.message));
+init(); loop();
+</script>
+</body>
+</html>
