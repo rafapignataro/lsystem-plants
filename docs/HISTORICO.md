@@ -4,7 +4,7 @@ Datas no horário de Brasília (UTC−3).
 
 ## v4: 5 espécies exóticas (11/11/2026)
 
-Commit COMMIT_V4.
+Commit [`7a1a60b`](https://github.com/rafapignataro/lsystem-plants/commit/7a1a60bd90aafe07cc689ea82806514197eef2c1), 01:18.
 
 - **5 espécies novas**, num grupo "Exóticas" do seletor: 💎 Árvore de Cristal, 🪼 Medusa Flutuante, 🌵 Cacto Gravitacional, 🧠 Raiz Neural, 🍄 Coral-Fungo Bioluminescente (ver [ESPECIES](ESPECIES.md#as-5-espécies-exóticas-v4)).
 - **Motor**: ganchos opcionais por espécie (`fx`, `tube`, `material`, `instMaterial`, `geom`, `float`, `tags`, `extra`/`tick`, `glow`, `theme(P)`), símbolos novos da tartaruga (`$` tropismo para um ponto, `P` chapéu com lamelas, `X` lasca de cristal) e distância acumulada no esqueleto.
