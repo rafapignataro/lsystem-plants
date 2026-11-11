@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System · POC Three.js</title>
+<title>Jardim L-System v2 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -62,7 +62,7 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC · Three.js · sistemas de Lindenmayer com seed determinística</p>
+  <p class="sub">POC v2 · Three.js · L-Systems com seed determinística · tubos contínuos, colar, regra de Leonardo e idade</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -78,12 +78,13 @@
     <button id="share">🔗 Copiar link</button>
   </div>
 
-  <label class="l" for="growth">Crescimento <span id="gval"></span></label>
+  <label class="l" for="growth">Idade da planta <span id="gval"></span></label>
   <input id="growth" type="range" min="0" max="1" step="0.001" value="1">
-  <div class="row"><button id="replay">▶ Animar crescimento</button></div>
+  <div class="row"><button id="replay">▶ Animar crescimento (muda → árvore)</button></div>
   <div class="toggles">
     <label><input type="checkbox" id="rotate" checked> Auto-rotação</label>
     <label><input type="checkbox" id="wind" checked> Vento</label>
+    <label><input type="checkbox" id="follow" checked> Câmera segue</label>
   </div>
 
   <div id="dna"></div>
@@ -109,7 +110,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const V3 = THREE.Vector3;
 const DEG = Math.PI / 180;
 const MAX_MODULES = 140000;  // teto de tamanho da palavra
-const MAX_SEGS = 26000;      // teto de segmentos de galho
+const MAX_NODES = 30000;     // teto de nós do esqueleto
 const MAX_INST = 45000;      // teto de instâncias por tipo
 const MIN_R = 0.004;
 
@@ -154,9 +155,12 @@ const hex = (str) => cyrb128(str).map(x => x.toString(16).padStart(8, '0')).join
 const n = (x) => +(+x).toFixed(3);
 
 /* =====================================================================
-   2. Motor L-System genérico (paramétrico + estocástico)
-   Módulo = { c: símbolo, p: [parâmetros] | null }
+   2. Motor L-System genérico (paramétrico + estocástico + tempo de nascimento)
+   Módulo = { c: símbolo, p: [parâmetros] | null, t0, t1: nascimento, die: morte }
    Regra  = string | (params, rng) => string | [{w, s}] (estocástica)
+   Tempo de desenvolvimento: a iteração i ocupa a janela [i, i+1]; os F de um
+   sucessor crescem em sequência dentro dessa janela. Regras identidade (F→F')
+   herdam o tempo (o mesmo entrenó, só alongado).
    ===================================================================== */
 const TOKEN = /([^\s(),])(?:\(([^)]*)\))?/g;
 function parseWord(str) {
@@ -174,27 +178,41 @@ function applyRule(rule, m, rng) {
   }
   return rule;
 }
-function rewrite(word, rules, rng) {
+function stamp(mods, i) {
+  let nF = 0; for (const m of mods) if (m.c === 'F') nF++;
+  const d = Math.max(nF, 1); let k = 0;
+  for (const m of mods) { if (m.c === 'F') { m.t0 = i + k / d; k++; m.t1 = i + k / d; } else { m.t0 = m.t1 = i + k / d; } }
+}
+function rewrite(word, rules, rng, i, juvenile, jrng, def_jlife) {
   const out = [];
   for (const m of word) {
     const rule = rules[m.c];
     if (rule === undefined) { out.push(m); continue; }
     const succ = applyRule(rule, m, rng);
     if (succ == null) { out.push(m); continue; }
-    const parsed = parseWord(succ);
-    for (let i = 0; i < parsed.length; i++) out.push(parsed[i]);
+    const S = parseWord(succ);
+    if (S.length === 1 && S[0].c === m.c) { S[0].t0 = m.t0; S[0].t1 = m.t1; S[0].die = m.die; out.push(S[0]); continue; }
+    if (juvenile && juvenile[m.c]) { // folhas juvenis do ápice: vivem até o novo crescimento assumir
+      const J = parseWord(applyRule(juvenile[m.c], m, jrng) || '');
+      out.push({ c: '[', p: null, t0: m.t1, t1: m.t1 });
+      for (const x of J) { if (x.c === 'F' || x.c === 'f') continue; x.t0 = x.t1 = m.t1; x.die = i + (def_jlife ?? 1.15); out.push(x); }
+      out.push({ c: ']', p: null, t0: m.t1, t1: m.t1 });
+    }
+    stamp(S, i);
+    for (let k = 0; k < S.length; k++) out.push(S[k]);
   }
   return out;
 }
-function runLSystem(def, iterations, rng) {
+function runLSystem(def, iterations, rng, jrng) {
   let word = parseWord(def.axiom), done = 0;
+  stamp(word, 0);
   for (; done < iterations; done++) {
-    const next = rewrite(word, def.rules, rng);
+    const next = rewrite(word, def.rules, rng, done + 1, def.juvenile, jrng, def.juvenileLife);
     if (next.length > MAX_MODULES) break;
     word = next;
   }
-  if (def.finalize) word = rewrite(word, def.finalize, rng); // passo de "decomposição" final (pontas -> folhas/flores)
-  return { word, done };
+  if (def.finalize) word = rewrite(word, def.finalize, rng, done + 1, null, null); // pontas -> folhas/flores
+  return { word, done, tEnd: done + 3.0 };
 }
 const wordToString = (w, max = 600) => {
   let s = ''; for (const m of w) { s += m.c + (m.p ? '(' + m.p.map(v => +v.toFixed(2)).join(',') + ')' : ''); if (s.length > max) return s.slice(0, max) + ' …'; }
@@ -202,32 +220,34 @@ const wordToString = (w, max = 600) => {
 };
 
 /* =====================================================================
-   3. Tartaruga 3D (H = heading, L = left, U = up)
-   F f + - & ^ \ / | [ ] ! ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
+   3. Tartaruga 3D (H = heading, L = left, U = up) -> esqueleto de nós
+   F f + - & ^ \ / | [ ] ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
+   Cada F cria um nó {posição, pai, t0, t1}. Os raios saem depois do esqueleto.
    ===================================================================== */
 const GRAV = new V3(0, -1, 0);
 function interpret(word, sp, P, rng) {
-  const segs = [], inst = {};
+  const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0];
+  const inst = {};
   const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) a.push(it); };
-  let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), w: sp.baseWidth, trop: 0, dist: 0 };
+  let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), trop: 0, node: 0 };
   const stack = [];
   const ax = new V3();
-  const clone = (s) => ({ pos: s.pos.clone(), H: s.H.clone(), L: s.L.clone(), U: s.U.clone(), w: s.w, trop: s.trop, dist: s.dist });
+  const clone = (s) => ({ pos: s.pos.clone(), H: s.H.clone(), L: s.L.clone(), U: s.U.clone(), trop: s.trop, node: s.node });
   const defA = (P.angle || 25) * DEG;
   const roll = (sp.leafRoll ?? 35) * DEG;
+  const life = (m) => [Math.max(m.t1 ?? 0, T1[st.node]), m.die ?? 1e9];
   for (const m of word) {
     const p = m.p, a = p ? p[0] * DEG : defA;
     switch (m.c) {
       case 'F': case 'f': {
         const len = p ? p[0] : 1;
-        const s = st.pos.clone();
         st.pos.addScaledVector(st.H, len);
-        if (m.c === 'F' && segs.length < MAX_SEGS) {
-          const r1 = Math.max(st.w * sp.taper, MIN_R);
-          segs.push({ s, e: st.pos.clone(), r0: Math.max(st.w, MIN_R), r1, L: st.L.clone(), U: st.U.clone(), d0: st.dist, d1: st.dist + len });
-          st.w = r1;
+        if (m.c === 'F' && len > 1e-5 && X.length < MAX_NODES) {
+          const par = st.node; let t0 = m.t0 ?? 0, t1 = m.t1 ?? t0;
+          if (t0 < T1[par]) { const dd = Math.max(t1 - t0, 0.02); t0 = T1[par]; t1 = t0 + dd; }
+          X.push(st.pos.x); Y.push(st.pos.y); Z.push(st.pos.z); PAR.push(par); T0.push(t0); T1.push(t1);
+          st.node = X.length - 1;
         }
-        st.dist += len;
         if (st.trop !== 0) { // tropismo (gravidade / fototropismo)
           ax.crossVectors(st.H, GRAV); const mag = ax.length();
           if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.trop * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
@@ -242,18 +262,17 @@ function interpret(word, sp, P, rng) {
       case '\\': st.L.applyAxisAngle(st.H, a); st.U.applyAxisAngle(st.H, a); break;
       case '/': st.L.applyAxisAngle(st.H, -a); st.U.applyAxisAngle(st.H, -a); break;
       case '|': st.H.applyAxisAngle(st.U, Math.PI); st.L.applyAxisAngle(st.U, Math.PI); break;
-      case '!': st.w *= p ? p[0] : 0.7; break;
       case '~': st.trop = p ? p[0] : 0; break;
       case '[': stack.push(clone(st)); break;
       case ']': if (stack.length) st = stack.pop(); break;
-      case 'L': { // folha: comprimento ao longo de H, normal ~U (com rolagem aleatória)
+      case 'L': {
         const z = st.U.clone().applyAxisAngle(st.H, rng.jit(roll));
-        add('leaf', { p: st.pos.clone(), y: st.H.clone(), z, s: p ? p[0] : 1, d: st.dist });
+        add('leaf', { p: st.pos.clone(), y: st.H.clone(), z, s: p ? p[0] : 1, life: life(m) });
         break;
       }
-      case 'K': { // flor: pétalas em volta de H + miolo
+      case 'K': {
         const s = p ? p[0] : 1, np = P.petals || 5, open = (P.open || 60) * DEG, off = rng.f() * Math.PI * 2;
-        const layers = P.double ? 2 : 1;
+        const layers = P.double ? 2 : 1, lf = life(m);
         for (let l = 0; l < layers; l++) {
           for (let i = 0; i < np; i++) {
             const ang = off + (i + l * 0.5) / np * Math.PI * 2 + rng.jit(0.12);
@@ -262,19 +281,19 @@ function interpret(word, sp, P, rng) {
             const o = open * (l ? 0.55 : 1) + rng.jit(0.1);
             const dir = st.H.clone().multiplyScalar(Math.cos(o)).addScaledVector(r, Math.sin(o)).normalize();
             const nrm = new V3().crossVectors(dir, t).normalize();
-            add('petal', { p: st.pos.clone(), y: dir, z: nrm, s: s * (l ? 0.72 : 1), d: st.dist, layer: l });
+            add('petal', { p: st.pos.clone(), y: dir, z: nrm, s: s * (l ? 0.72 : 1), life: lf, layer: l });
           }
         }
-        add('center', { p: st.pos.clone().addScaledVector(st.H, s * 0.06), y: st.H.clone(), z: st.U.clone(), s: s * 0.17, d: st.dist });
+        add('center', { p: st.pos.clone().addScaledVector(st.H, s * 0.06), y: st.H.clone(), z: st.U.clone(), s: s * 0.17, life: lf });
         break;
       }
-      case 'O': add('orb', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.1, d: st.dist }); break;
-      case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, d: st.dist }); break;
+      case 'O': add('orb', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.1, life: life(m) }); break;
+      case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
     }
   }
-  return { segs, inst };
+  const N = X.length;
+  return { sk: { N, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), PAR: Int32Array.from(PAR), T0: Float32Array.from(T0), T1: Float32Array.from(T1) }, inst };
 }
-
 /* =====================================================================
    4. Geometrias base (folha, pétala, agulhas, esfera)
    ===================================================================== */
@@ -329,11 +348,13 @@ const GEOMS = {
 };
 
 /* =====================================================================
-   5. Shaders: crescimento animado + vento (patch dos materiais padrão)
+   5. Shaders: idade (crescimento + engrossamento) + vento
+   Galhos: cada anel de vértices lê o raio atual dos nós numa textura float
+   (recalculada na CPU pela regra de Leonardo para a idade corrente).
    ===================================================================== */
 const SHARED = { uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 } };
 const SWAY = /* glsl */`
-uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH;
+uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH; uniform float uTend;
 vec3 lsSway(vec3 p){
   float h = clamp(p.y / uH, 0.0, 1.2); float k = h * h * uWind * uH * 0.016;
   return vec3(sin(uTime*1.3 + p.x*0.35 + p.z*0.2)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25, 0.0, cos(uTime*1.07 + p.z*0.33)*k*0.7);
@@ -341,18 +362,38 @@ vec3 lsSway(vec3 p){
 `;
 const CHUNKS = {
   branch: {
-    head: `attribute vec3 aBase; attribute vec3 aCenter; attribute vec2 aBirth;\n` + SWAY,
+    head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
+attribute vec3 aCp; attribute vec2 aB; attribute vec3 aN; attribute vec2 aCol; attribute float aBump;
+float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 1024, ii / 1024), 0).r; }
+` + SWAY,
     begin: `#include <begin_vertex>
-    { float gt = clamp((uGrowth - aBirth.x) / max(aBirth.y - aBirth.x, 1e-4), 0.0, 1.0);
-      float rs = mix(0.35, 1.0, clamp((uGrowth - aBirth.x) / max(1.0 - aBirth.x, 1e-4), 0.0, 1.0)) * step(1e-4, gt);
-      vec3 c = aBase + (aCenter - aBase) * gt;
-      transformed = c + (transformed - aCenter) * rs + lsSway(c); }`,
+    {
+      float T = pow(uGrowth, 0.8) * uTend;
+      vec3 c = position; float r = 0.0;
+      if (T >= aB.x) {
+        r = mix(lsRad(aN.x), lsRad(aN.y), aN.z);
+        if (aCol.x > -1.5) { // colar: alarga a base do galho em direção ao raio do pai
+          float rp = aCol.x < -0.5 ? r * 1.8 : lsRad(aCol.x);
+          float w = exp(-aCol.y / max(1.5 * rp, 1e-5));
+          float rc = clamp(rp * 0.88, r, r * 2.8);
+          r = mix(r, rc, w);
+        }
+      } else { // ponta ainda crescendo: anel colapsa na frente de crescimento
+        float t = clamp((T - aB.y) / max(aB.x - aB.y, 1e-5), 0.0, 1.0);
+        c = mix(aCp, position, t);
+      }
+      transformed = c + normal * (r * aBump) + lsSway(c);
+      #ifdef USE_COLOR
+        vColor = mix(uYoung, color.rgb, smoothstep(0.012, 0.2, r / uRmax));
+      #endif
+    }`,
     project: '#include <project_vertex>',
   },
   inst: {
-    head: `attribute float aBirth;\n` + SWAY,
+    head: `attribute vec2 aLife;\n` + SWAY,
     begin: `#include <begin_vertex>
-    transformed *= smoothstep(aBirth, aBirth + 0.08, uGrowth);`,
+    { float T = pow(uGrowth, 0.8) * uTend;
+      transformed *= smoothstep(aLife.x, aLife.x + 0.6, T) * (1.0 - smoothstep(aLife.y, aLife.y + 0.6, T)); }`,
     project: `vec4 mvPosition = vec4( transformed, 1.0 );
     #ifdef USE_INSTANCING
       mvPosition = instanceMatrix * mvPosition;
@@ -362,17 +403,17 @@ const CHUNKS = {
     gl_Position = projectionMatrix * mvPosition;`,
   },
 };
-function patch(mat, kind, uH) {
+function patch(mat, kind, U) {
   const ch = CHUNKS[kind];
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind; sh.uniforms.uH = uH;
+    sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind;
+    Object.assign(sh.uniforms, U);
     sh.vertexShader = ch.head + sh.vertexShader.replace('#include <begin_vertex>', ch.begin).replace('#include <project_vertex>', ch.project);
   };
-  mat.customProgramCacheKey = () => 'lsys-' + kind;
+  mat.customProgramCacheKey = () => 'lsys2-' + kind;
   return mat;
 }
-const depthMat = (kind, uH) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, uH);
-
+const depthMat = (kind, U) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, U);
 /* =====================================================================
    6. As 5 espécies
    ===================================================================== */
@@ -383,7 +424,7 @@ const SPECIES = {
   carvalho: {
     name: 'Carvalho Ancestral', emoji: '🌳', height: 10, theme: 'day', leafKind: 'oak',
     desc: 'Árvore simpodial: cada ápice se divide em 2 ou 3 ramos (regra estocástica), com alongamento dos entrenós ao longo do tempo.',
-    baseWidth: 0.62, taper: 0.965, leafRoll: 50,
+    baseWidth: 0.7, leafRoll: 50, bump: 0.06, wood: { leo: [2.2, 2.6], G: 0.8, tip: 0.012, ring: 0.55 },
     params(r) {
       const autumn = r.chance(0.3);
       return {
@@ -394,7 +435,7 @@ const SPECIES = {
         barkH: r.range(18, 32), barkL: r.range(0.17, 0.27),
       };
     },
-    show: [['iterations', 'Iterações'], ['angle', 'Ângulo de ramificação', '°'], ['div', 'Divergência (filotaxia)', '°'], ['lenRatio', 'Razão de comprimento'], ['widthRatio', 'Razão de espessura'], ['p3', 'Prob. de tricotomia'], ['gravity', 'Gravitropismo'], ['elong', 'Alongamento/iteração'], ['leafSize', 'Tamanho da folha'], ['autumn', 'Outono']],
+    show: [['iterations', 'Iterações'], ['angle', 'Ângulo de ramificação', '°'], ['div', 'Divergência (filotaxia)', '°'], ['lenRatio', 'Razão de comprimento'], ['p3', 'Prob. de tricotomia'], ['gravity', 'Gravitropismo'], ['elong', 'Alongamento/iteração'], ['leafSize', 'Tamanho da folha'], ['autumn', 'Outono']],
     build(P) {
       return {
         axiom: `!(1)F(${n(P.trunk)})/(${n(P.lean * 9)})+(${n(P.lean)})A(1)`,
@@ -409,6 +450,7 @@ const SPECIES = {
           F: (p) => `F(${n(p[0] * P.elong)})`,
         },
         finalize: { A: (p, r) => { let o = ''; for (let i = 0; i < 5; i++) o += leafStr(r, P.leafSize, 30 + r.f() * 50); return o + `F(0.15)L(${n(P.leafSize)})`; } },
+        juvenile: { A: (p, r) => { let o = ''; for (let i = 0; i < 5; i++) o += leafStr(r, P.leafSize * 0.9, 35 + r.f() * 40); return o; } }, juvenileLife: 2.6,
         display: [
           `ω : !(1) F(${n(P.trunk)}) A(1)`,
           `A(s) → ~(${n(P.gravity)}) F(s·${n(P.internode)}) { [ !(${n(P.widthRatio)}) &(${n(P.angle)}°±7) F A(s·${n(P.lenRatio)}) ] /(${n(P.div)}°) } × k`,
@@ -426,13 +468,13 @@ const SPECIES = {
   pinheiro: {
     name: 'Pinheiro Boreal', emoji: '🌲', height: 12, theme: 'day', leafKind: 'needles',
     desc: 'Crescimento monopodial: o ápice gera um verticilo de galhos por iteração; galhos mais velhos ficam mais longos e formam o cone.',
-    baseWidth: 0.42, taper: 0.985,
+    baseWidth: 0.5, bump: 0.035, wood: { leo: [2.0, 2.3], G: 0.6, tip: 0.02, ring: 0.5 },
     params(r) {
       const blue = r.chance(0.25);
       return {
         iterations: r.int(11, 13), whorl: r.int(4, 6), angle: r.range(62, 82), rot: r.range(128, 146), internode: r.range(0.7, 0.95),
         branchSeg: r.range(0.42, 0.55), twig: r.range(0.42, 0.6), twigAngle: r.range(45, 65), droop: r.range(0.08, 0.24), apical: r.range(0.9, 0.93),
-        skip: r.range(0, 0.18), trunk0: r.range(1.4, 2.4), needleLen: r.range(0.5, 0.72),
+        skip: r.range(0, 0.18), trunk0: r.range(0.5, 1.0), needleLen: r.range(0.5, 0.72),
         blue, needleH: blue ? r.range(170, 195) : r.range(100, 145), needleS: blue ? r.range(0.15, 0.3) : r.range(0.35, 0.6), needleL: r.range(0.18, 0.27),
         barkH: r.range(12, 24),
       };
@@ -453,6 +495,7 @@ const SPECIES = {
           B: (p, r) => { const l = p[0]; return `N(${n(l)})F(${n(l)})[+(${n(P.twigAngle + r.jit(8))})!(0.6)C(${n(l * P.twig)})][-(${n(P.twigAngle + r.jit(8))})!(0.6)C(${n(l * P.twig)})]B(${n(l * 0.98)})`; },
           C: (p) => p[0] < 0.11 ? `N(${n(p[0])})` : `N(${n(p[0])})F(${n(p[0])})C(${n(p[0] * 0.78)})`,
         },
+        juvenile: { A: () => `N(0.45)` },
         finalize: { A: () => `N(0.5)F(0.5)N(0.4)F(0.4)`, B: (p) => `N(${n(p[0])})F(${n(p[0])})`, C: (p) => `N(${n(p[0])})F(${n(p[0])})` },
         display: [
           `ω : !(1) F(${n(P.trunk0)}) A(1)`,
@@ -471,7 +514,7 @@ const SPECIES = {
   samambaia: {
     name: 'Samambaia Espiral', emoji: '🌿', height: 4.5, theme: 'day', leafKind: 'fern',
     desc: 'Roseta de frondes com atraso de brotação; cada fronde se curva (circinação) e gera pinas com folíolos. Frondes jovens ainda enroladas.',
-    baseWidth: 0.12, taper: 0.985, leafRoll: 10,
+    baseWidth: 0.04, leafRoll: 10, bump: 0, wood: { leo: [2.5, 2.8], G: 0.3, tip: 0.18, ring: 0.15 },
     params(r) {
       const fronds = r.int(8, 13);
       const list = [];
@@ -522,7 +565,7 @@ const SPECIES = {
   arbusto: {
     name: 'Arbusto Florido', emoji: '🌺', height: 5, theme: 'day', leafKind: 'bush',
     desc: 'Arbusto multicaule com regras estocásticas (3 ramos, 2 ramos ou flor precoce). Paleta, nº de pétalas e abertura vêm da seed.',
-    baseWidth: 0.09, taper: 0.97, leafRoll: 40,
+    baseWidth: 0.17, leafRoll: 40, bump: 0.03, wood: { leo: [2.2, 2.5], G: 0.6, tip: 0.03, ring: 0.4 },
     params(r) {
       const pal = r.pick([
         { name: 'rosa', h: 335, s: 0.75, l: 0.72 }, { name: 'magenta', h: 305, s: 0.7, l: 0.6 }, { name: 'vermelho', h: 355, s: 0.8, l: 0.52 },
@@ -548,6 +591,7 @@ const SPECIES = {
             { w: P.pFlower, s: (p, r) => `F(${n(p[0] * P.internode * 0.6)})${leafStr(r, P.leafSize)}K(${n(P.flowerSize * 0.9)})` },
           ],
         },
+        juvenile: { A: (p, r) => leafStr(r, P.leafSize, 40) + leafStr(r, P.leafSize, 40) + leafStr(r, P.leafSize, 40) }, juvenileLife: 2.2,
         finalize: { A: (p, r) => `F(0.12)${leafStr(r, P.leafSize, 70)}K(${n(P.flowerSize * (0.8 + r.f() * 0.35))})` },
         display: [
           `ω : !(1) F(0.25) { [ /(360/${P.stems}·i) &(12–38°) ~(${n(-P.photo)}) A(1) ] } × ${P.stems}`,
@@ -570,7 +614,7 @@ const SPECIES = {
   salgueiro: {
     name: 'Salgueiro Lumínico', emoji: '✨', height: 10, theme: 'night', leafKind: 'willow',
     desc: 'Espécie fantástica: ramos superiores soltam gavinhas pendentes com gravitropismo forte, folhas e orbes bioluminescentes.',
-    baseWidth: 0.55, taper: 0.97, leafRoll: 60,
+    baseWidth: 0.5, leafRoll: 60, bump: 0.05, wood: { leo: [2.3, 2.6], G: 0.8, tip: 0.015, ring: 0.4, share: 0.75 },
     params(r) {
       const glow = r.pick([{ name: 'ciano', h: 182 }, { name: 'violeta', h: 280 }, { name: 'magenta', h: 318 }, { name: 'esmeralda', h: 150 }, { name: 'âmbar', h: 42 }, { name: 'azul elétrico', h: 212 }]);
       return {
@@ -603,6 +647,7 @@ const SPECIES = {
             return o + `T(${n(l * 0.97)})`;
           },
         },
+        juvenile: { A: (p, r) => leafStr(r, 0.5, 40) + leafStr(r, 0.5, 40) + leafStr(r, 0.5, 40) },
         finalize: { T: () => `O(${n(P.orbSize * 1.3)})`, A: () => `O(${n(P.orbSize)})` },
         display: [
           `ω : !(1) F(${n(P.trunk)}) /(30°) A(1)`,
@@ -623,69 +668,138 @@ const SPECIES = {
 const ORDER = ['carvalho', 'pinheiro', 'samambaia', 'arbusto', 'salgueiro'];
 
 /* =====================================================================
-   7. Montagem da planta (galhos mesclados + folhas instanciadas)
+   7. Montagem: esqueleto -> raios (Leonardo + idade) -> tubos contínuos
    ===================================================================== */
-function buildBranchGeometry(segs, sp, P, rng, total) {
-  const R = 7, nv = segs.length * (R * 2 + 1);
-  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
-  const base = new Float32Array(nv * 3), cen = new Float32Array(nv * 3), birth = new Float32Array(nv * 2);
-  const idx = new Uint32Array(segs.length * R * 9);
-  const [c0, c1] = sp.bark(P); const c = new THREE.Color();
-  const rmax = segs.reduce((m, s) => Math.max(m, s.r0), 0.0001);
-  const cosT = [], sinT = [];
-  for (let j = 0; j < R; j++) { cosT.push(Math.cos(j / R * Math.PI * 2)); sinT.push(Math.sin(j / R * Math.PI * 2)); }
-  let v = 0, ii = 0;
-  for (const s of segs) {
-    const b0 = s.d0 / total * 0.9, b1 = s.d1 / total * 0.9;
-    const thin = Math.pow(1 - s.r0 / rmax, 2.5);
-    c.copy(c0).lerp(c1, thin).offsetHSL(0, 0, rng.jit(0.02));
-    const vstart = v;
-    for (let k = 0; k < 2; k++) {
-      const C = k ? s.e : s.s, r = k ? s.r1 : s.r0;
-      for (let j = 0; j < R; j++) {
-        const dx = s.L.x * cosT[j] + s.U.x * sinT[j], dy = s.L.y * cosT[j] + s.U.y * sinT[j], dz = s.L.z * cosT[j] + s.U.z * sinT[j];
-        const o = v * 3;
-        pos[o] = C.x + dx * r; pos[o + 1] = C.y + dy * r; pos[o + 2] = C.z + dz * r;
-        nor[o] = dx; nor[o + 1] = dy; nor[o + 2] = dz;
-        col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
-        base[o] = s.s.x; base[o + 1] = s.s.y; base[o + 2] = s.s.z;
-        cen[o] = C.x; cen[o + 1] = C.y; cen[o + 2] = C.z;
-        birth[v * 2] = b0; birth[v * 2 + 1] = b1;
-        v++;
+// Regra de Leonardo: r^e = Σ r_filho^e (pontas = 1), só com os nós que já existem na idade T,
+// vezes o crescimento secundário (1 + G·idade_do_nó). Barato: O(N) por quadro.
+function computeRadii(sk, T, W, s, out) {
+  const { N, PAR, T0, T1 } = sk; s.fill(0);
+  for (let i = N - 1; i >= 1; i--) {
+    if (T0[i] > T) continue;
+    if (s[i] === 0) s[i] = Math.min(1, (T - T0[i]) / Math.max(T1[i] - T0[i], 1e-4)) + 1e-6; // ponta (crescendo)
+    s[PAR[i]] += s[i];
+  }
+  let smax = 1e-6; for (let i = 1; i < N; i++) if (s[i] > smax) smax = s[i];
+  // r = parte de Leonardo (cano: Σ r^e dos filhos) × (1 + G·idade) + anéis de crescimento (∝ idade, ponderado pela "carga" do nó)
+  const invE = 1 / W.leo, G = W.G / W.tEnd, sc = W.scale, rmin = W.rMin, ring = W.ring, sh = W.share;
+  let mx = 0;
+  for (let i = 0; i < N; i++) {
+    if (s[i] === 0) { out[i] = 0; continue; }
+    const age = Math.max(0, T - T1[i]);
+    const r = Math.max(Math.pow(s[i], invE) * (1 + G * age) * sc + ring * age * Math.pow(s[i] / smax, sh), rmin * Math.min(1, s[i]));
+    out[i] = r; if (i > 0 && r > mx) mx = r;
+  }
+  return mx;
+}
+
+const catmull = (a, b, c, d, t) => { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); };
+
+function buildTubes(sk, rFull, sp, P, rng, W) {
+  const { N, X, Y, Z, PAR, T0, T1 } = sk;
+  const kids = Array.from({ length: N }, () => []);
+  for (let i = 1; i < N; i++) kids[PAR[i]].push(i);
+  const dir = (i, out) => { if (i === 0) return out.set(0, 1, 0); const p = PAR[i]; return out.set(X[i] - X[p], Y[i] - Y[p], Z[i] - Z[p]).normalize(); };
+  // eixo principal: o filho mais alinhado continua o mesmo tubo
+  const main = new Int32Array(N).fill(-1), da = new V3(), db = new V3();
+  for (let i = 0; i < N; i++) {
+    const k = kids[i]; if (!k.length) continue;
+    dir(i, da); let best = -9, bi = -1;
+    for (const c of k) { const sc = dir(c, db).dot(da) + 0.25 * Math.pow(rFull[c] / (rFull[i] || 1), 2); if (sc > best) { best = sc; bi = c; } }
+    main[i] = bi;
+  }
+  const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], idx = [];
+  const [cOld] = sp.bark(P);
+  const rMaxFull = W.rMaxFull;
+  let vtx = 0, chains = 0;
+  const C = new V3(), Tn = new V3(), Nn = new V3(), Bn = new V3(), tmp = new V3();
+  const emit = (list, collarParent) => {
+    chains++;
+    const k = list.length - 1;
+    const rel = rFull[list[1]] / rMaxFull;
+    const R = rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    const Sbase = rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
+    // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
+    const J = list[0], l1 = Math.hypot(X[list[1]] - X[J], Y[list[1]] - Y[J], Z[list[1]] - Z[J]);
+    dir(J, da);
+    const g0 = collarParent >= 0 ? [X[J] - da.x * l1, Y[J] - da.y * l1, Z[J] - da.z * l1] : [2 * X[J] - X[list[1]], 2 * Y[J] - Y[list[1]], 2 * Z[J] - Z[list[1]]];
+    const px = (j) => j < 0 ? g0[0] : j > k ? 2 * X[list[k]] - X[list[k - 1]] : X[list[j]];
+    const py = (j) => j < 0 ? g0[1] : j > k ? 2 * Y[list[k]] - Y[list[k - 1]] : Y[list[j]];
+    const pz = (j) => j < 0 ? g0[2] : j > k ? 2 * Z[list[k]] - Z[list[k - 1]] : Z[list[j]];
+    const rings = []; // {x,y,z,b,nA,nB,f}
+    for (let j = 1; j <= k; j++) {
+      const S = Sbase + (j === 1 ? 3 : 0), B = list[j], A = list[j - 1];
+      for (let s = (j === 1 ? 0 : 1); s <= S; s++) {
+        let f = s / S; if (j === 1) f = Math.pow(f, 1.8);
+        rings.push({
+          x: catmull(px(j - 2), px(j - 1), px(j), px(j + 1), f), y: catmull(py(j - 2), py(j - 1), py(j), py(j + 1), f), z: catmull(pz(j - 2), pz(j - 1), pz(j), pz(j + 1), f),
+          b: T0[B] + f * (T1[B] - T0[B]), nA: j === 1 ? B : A, nB: B, f: j === 1 ? 0 : f,
+        });
       }
     }
-    for (let j = 0; j < R; j++) {
-      const a = vstart + j, b = vstart + (j + 1) % R, cc = a + R, d = b + R;
-      idx[ii++] = a; idx[ii++] = b; idx[ii++] = d; idx[ii++] = a; idx[ii++] = d; idx[ii++] = cc;
+    // tampa: anel de raio zero na ponta
+    const last = rings[rings.length - 1]; rings.push({ ...last, cap: true });
+    const M = rings.length;
+    const ph1 = rng.f() * 6.28, ph2 = rng.f() * 6.28, amp = sp.bump ?? 0.03;
+    const scaleD = 1 / Math.max(rFull[list[1]] * 3, 1e-4);
+    let arc = 0, prevB = rings[0].b;
+    const c0 = cOld.clone().offsetHSL(rng.jit(0.01), rng.jit(0.04), rng.jit(0.03));
+    for (let m = 0; m < M; m++) {
+      const g = rings[m], gp = rings[Math.max(m - 1, 0)], gn = rings[Math.min(m + 1, M - 2)];
+      if (m > 0) arc += Math.hypot(g.x - gp.x, g.y - gp.y, g.z - gp.z);
+      // tangente + transporte paralelo do referencial (sem torção)
+      const ga = rings[Math.max(m - 1, 0)], gb = (m === M - 1) ? g : gn;
+      Tn.set(gb.x - ga.x, gb.y - ga.y, gb.z - ga.z); if (Tn.lengthSq() < 1e-12) Tn.set(X[list[1]] - X[list[0]], Y[list[1]] - Y[list[0]], Z[list[1]] - Z[list[0]]); Tn.normalize();
+      if (m === 0) { tmp.set(Math.abs(Tn.y) < 0.9 ? 0 : 1, Math.abs(Tn.y) < 0.9 ? 1 : 0, 0); Nn.crossVectors(Tn, tmp).normalize(); }
+      else { Nn.addScaledVector(Tn, -Nn.dot(Tn)); if (Nn.lengthSq() < 1e-10) { tmp.set(1, 0, 0); Nn.crossVectors(Tn, tmp); } Nn.normalize(); }
+      Bn.crossVectors(Tn, Nn);
+      const nr = rng.f();
+      const pr = m > 0 ? rings[m - 1] : g;
+      for (let q = 0; q < R; q++) {
+        const th = q / R * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
+        const dx = Nn.x * cs + Bn.x * sn, dy = Nn.y * cs + Bn.y * sn, dz = Nn.z * cs + Bn.z * sn;
+        pos.push(g.x, g.y, g.z); nor.push(dx, dy, dz); cp.push(pr.x, pr.y, pr.z);
+        bb.push(g.b, m > 0 ? prevB : g.b); nn.push(g.nA, g.nB, g.f);
+        col.push(collarParent, arc);
+        const d = arc * scaleD;
+        bump.push(g.cap ? 0 : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr)));
+        clr.push(c0.r, c0.g, c0.b);
+      }
+      if (m > 0) {
+        const a0 = vtx + (m - 1) * R, b0 = vtx + m * R;
+        for (let q = 0; q < R; q++) { const q1 = (q + 1) % R; idx.push(a0 + q, a0 + q1, b0 + q1, a0 + q, b0 + q1, b0 + q); }
+      }
+      prevB = g.b;
     }
-    { // tampa na ponta (evita tubo oco visível nas bifurcações)
-      const o = v * 3, hx = s.e.x - s.s.x, hy = s.e.y - s.s.y, hz = s.e.z - s.s.z, hl = Math.hypot(hx, hy, hz) || 1;
-      pos[o] = s.e.x; pos[o + 1] = s.e.y; pos[o + 2] = s.e.z; nor[o] = hx / hl; nor[o + 1] = hy / hl; nor[o + 2] = hz / hl;
-      col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
-      base[o] = s.s.x; base[o + 1] = s.s.y; base[o + 2] = s.s.z; cen[o] = s.e.x; cen[o + 1] = s.e.y; cen[o + 2] = s.e.z;
-      birth[v * 2] = b0; birth[v * 2 + 1] = b1;
-      for (let j = 0; j < R; j++) { idx[ii++] = vstart + R + j; idx[ii++] = vstart + R + (j + 1) % R; idx[ii++] = v; }
-      v++;
+    vtx += M * R;
+  };
+  for (let p = 0; p < N; p++) {
+    for (const c of kids[p]) {
+      if (p !== 0 && c === main[p]) continue;
+      const list = [p, c]; let t = c; while (main[t] >= 0) { t = main[t]; list.push(t); }
+      emit(list, p === 0 ? -1 : p);
     }
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setAttribute('aBase', new THREE.BufferAttribute(base, 3));
-  g.setAttribute('aCenter', new THREE.BufferAttribute(cen, 3));
-  g.setAttribute('aBirth', new THREE.BufferAttribute(birth, 2));
-  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aCp', new THREE.Float32BufferAttribute(cp, 3));
+  g.setAttribute('aB', new THREE.Float32BufferAttribute(bb, 2));
+  g.setAttribute('aN', new THREE.Float32BufferAttribute(nn, 3));
+  g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 2));
+  g.setAttribute('aBump', new THREE.Float32BufferAttribute(bump, 1));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
+  g.setIndex(vtx > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   g.computeBoundingSphere();
-  return g;
+  return { geo: g, chains, verts: vtx, tris: idx.length / 3 };
 }
 
-function makeInstanced(kind, items, sp, P, rng, total, uH, night) {
+function makeInstanced(kind, items, sp, P, rng, U, night) {
   const geomKey = kind === 'leaf' ? sp.leafKind : (kind === 'orb' || kind === 'center') ? 'sphere' : kind;
   const geo = GEOMS[geomKey]();
   const count = items.length;
-  const mats = new Float32Array(count * 16), cols = new Float32Array(count * 3), births = new Float32Array(count);
+  const mats = new Float32Array(count * 16), cols = new Float32Array(count * 3), lives = new Float32Array(count * 2);
   const m = new THREE.Matrix4(), x = new V3(), y = new V3(), z = new V3();
+  const delay = (kind === 'petal' || kind === 'center') ? 0.2 : 0.05;
   items.forEach((it, i) => {
     y.copy(it.y).normalize(); x.crossVectors(y, it.z).normalize(); z.crossVectors(x, y);
     let sx = it.s, sy = it.s, sz = it.s;
@@ -693,9 +807,9 @@ function makeInstanced(kind, items, sp, P, rng, total, uH, night) {
     m.makeBasis(x.multiplyScalar(sx), y.multiplyScalar(sy), z.multiplyScalar(sz)); m.setPosition(it.p);
     m.toArray(mats, i * 16);
     const c = sp.color(kind, it, P, rng); cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
-    births[i] = Math.min(it.d / total * 0.9 + (kind === 'petal' || kind === 'center' ? 0.04 : 0.01), 0.92);
+    lives[i * 2] = it.life[0] + delay; lives[i * 2 + 1] = it.life[1];
   });
-  geo.setAttribute('aBirth', new THREE.InstancedBufferAttribute(births, 1));
+  geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(lives, 2));
   let mat;
   if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   else {
@@ -703,13 +817,13 @@ function makeInstanced(kind, items, sp, P, rng, total, uH, night) {
     if (sp.leafKind === 'willow' && kind === 'leaf') { mat.emissive = hsl(P.glowH, 0.9, 0.5); mat.emissiveIntensity = night ? 0.35 : 0.3; }
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
-  patch(mat, 'inst', uH);
+  patch(mat, 'inst', U);
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
   mesh.frustumCulled = false;
   mesh.castShadow = kind !== 'orb'; mesh.receiveShadow = kind !== 'orb';
-  mesh.customDepthMaterial = depthMat('inst', uH);
+  mesh.customDepthMaterial = depthMat('inst', U);
   return mesh;
 }
 
@@ -718,45 +832,76 @@ function buildPlant(id, seed) {
   const sp = SPECIES[id];
   const P = sp.params(new Rand(`${seed}::${id}::params`));
   const def = sp.build(P);
-  const { word, done } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`));
+  const { word, done, tEnd } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
   const tLs = performance.now();
   const rng = new Rand(`${seed}::${id}::turtle`);
-  const { segs, inst } = interpret(word, sp, P, rng);
+  const { sk, inst } = interpret(word, sp, P, rng);
+  const tSk = performance.now();
+  // parâmetros da madeira (seed)
+  const wr = new Rand(`${seed}::${id}::wood`);
+  const lam = sp.wood.ring ?? 0.5;
+  const W = { leo: sp.wood.leo[0] + wr.f() * (sp.wood.leo[1] - sp.wood.leo[0]), G: sp.wood.G * (0.8 + wr.f() * 0.4), tEnd, scale: 1, rMin: 0, ring: 0, share: sp.wood.share ?? 0.4 };
+  const sbuf = new Float32Array(sk.N), rFull = new Float32Array(sk.N);
+  const unitMax = computeRadii(sk, tEnd, W, sbuf, rFull) || 1;
+  W.scale = (1 - lam) * sp.baseWidth / unitMax; W.ring = lam * sp.baseWidth / tEnd; W.rMin = sp.baseWidth * (sp.wood.tip ?? 0.012);
+  const rMaxFull = computeRadii(sk, tEnd, W, sbuf, rFull); W.rMaxFull = rMaxFull;
   // extensão / altura
-  const box = new THREE.Box3();
-  for (const s of segs) { box.expandByPoint(s.s); box.expandByPoint(s.e); }
+  const box = new THREE.Box3(), v = new V3();
+  for (let i = 0; i < sk.N; i++) box.expandByPoint(v.set(sk.X[i], sk.Y[i], sk.Z[i]));
   for (const k in inst) for (const it of inst[k]) box.expandByPoint(it.p);
   box.min.y = Math.min(box.min.y, 0);
   const size = box.getSize(new V3());
   const rawH = Math.max(size.y, 0.001), rawW = Math.max(size.x, size.z);
-  const uH = { value: rawH };
-  let total = 0; for (const s of segs) total = Math.max(total, s.d1); for (const k in inst) for (const it of inst[k]) total = Math.max(total, it.d); total = total || 1;
+  // textura de raios (1 texel por nó), atualizada quando a idade muda
+  const TW = 1024, TH = Math.max(1, Math.ceil(sk.N / TW));
+  const radData = new Float32Array(TW * TH);
+  const radTex = new THREE.DataTexture(radData, TW, TH, THREE.RedFormat, THREE.FloatType);
+  radTex.minFilter = radTex.magFilter = THREE.NearestFilter; radTex.needsUpdate = true;
+  const [, cYoung] = sp.bark(P);
+  const U = { uH: { value: rawH }, uTend: { value: tEnd }, uRad: { value: radTex }, uRmax: { value: rMaxFull }, uYoung: { value: cYoung } };
   const group = new THREE.Group();
   const night = sp.theme === 'night';
-  const bmat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }), 'branch', uH);
-  const bmesh = new THREE.Mesh(buildBranchGeometry(segs, sp, P, rng, total), bmat);
+  const tTube0 = performance.now();
+  const tube = buildTubes(sk, rFull, sp, P, rng, W);
+  const tTube = performance.now() - tTube0;
+  const bmat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'branch', U);
+  const bmesh = new THREE.Mesh(tube.geo, bmat);
   bmesh.castShadow = bmesh.receiveShadow = true; bmesh.frustumCulled = false;
-  bmesh.customDepthMaterial = depthMat('branch', uH);
+  bmesh.customDepthMaterial = depthMat('branch', U);
   group.add(bmesh);
   let nInst = 0;
-  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, total, uH, night)); nInst += inst[k].length; }
-  // centraliza na base e normaliza a escala para a altura-alvo da espécie
+  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night)); nInst += inst[k].length; }
   const scale = sp.height / Math.max(rawH, rawW * 0.75);
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, 0, -cz);
   inner.scale.setScalar(scale);
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
-  return {
-    id, sp, P, def, word, done, object: inner, box: wbox,
-    stats: { modules: word.length, segs: segs.length, inst: nInst, counts: Object.fromEntries(Object.entries(inst).map(([k, v]) => [k, v.length])), ms: performance.now() - t0, lsMs: tLs - t0 },
+  const pl = {
+    id, sp, P, def, word, done, W, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0,
+    update(age) {
+      if (age === this.lastAge) return;
+      const t = performance.now();
+      const T = Math.pow(age, 0.8) * tEnd;
+      computeRadii(sk, T, W, sbuf, radData); radTex.needsUpdate = true;
+      let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && sk.Y[i] > hy) hy = sk.Y[i];
+      this.curH = hy * inner.scale.x;
+      this.lastAge = age; this.radUpdateMs = performance.now() - t;
+    },
+    stats: {
+      modules: word.length, nodes: sk.N, chains: tube.chains, verts: tube.verts, tris: tube.tris, inst: nInst,
+      counts: Object.fromEntries(Object.entries(inst).map(([k, v]) => [k, v.length])),
+      ms: performance.now() - t0, lsMs: tLs - t0, skMs: tSk - tLs, tubeMs: tTube,
+    },
   };
+  pl.update(1);
+  return pl;
 }
 function disposePlant(pl) {
   pl.object.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); if (o.customDepthMaterial) o.customDepthMaterial.dispose(); });
+  pl.object.traverse(o => { if (o.material && o.material.uniforms) {} });
   pl.object.removeFromParent();
 }
-
 /* =====================================================================
    8. Cena, luz, céu, solo
    ===================================================================== */
@@ -838,6 +983,7 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12 } = {}) {
   const target = center.clone(); target.y = size.y * 0.46;
   camera.position.copy(target).addScaledVector(dir.clone().normalize(), dist);
   controls.target.copy(target); controls.update();
+  follow = { dist, ty: target.y, h: size.y, z: 1 };
   // sombra cobre a planta
   const rad = Math.max(size.x, size.y, size.z) * 0.85 + 2;
   sun.position.copy(center).add(new V3(rad * 0.8, rad * 1.6, rad * 0.6)); sun.target.position.copy(center);
@@ -852,6 +998,7 @@ const $ = (id) => document.getElementById(id);
 const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
 for (const id of ORDER) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; ui.species.appendChild(o); }
 let plants = [], mode = 'single', anim = null, labels = [];
+let follow = null;
 
 const WORDS = ['orvalho', 'musgo', 'aurora', 'raiz', 'brisa', 'semente', 'samba', 'ipê', 'jabuti', 'lua', 'cipó', 'trovão', 'sereno', 'pólen', 'arara', 'neblina', 'carvalho', 'vento', 'jardim', 'galáxia'];
 const randomSeed = () => `${WORDS[Math.floor(Math.random() * WORDS.length)]}-${WORDS[Math.floor(Math.random() * WORDS.length)]}-${Math.floor(Math.random() * 1000)}`;
@@ -868,18 +1015,21 @@ function writeHash() {
 
 function fmtVal(v, unit) { if (typeof v === 'boolean') return v ? 'sim' : 'não'; if (typeof v === 'number') return (Number.isInteger(v) ? v : v.toFixed(unit === '°' ? 1 : 3)) + (unit || ''); return v; }
 function showInfo(pl) {
-  const { sp, P, def, stats } = pl;
-  $('params').innerHTML = sp.show.map(([k, label, unit]) => `<tr><td>${label}</td><td>${fmtVal(k === 'iterations' ? pl.done : P[k], unit)}</td></tr>`).join('');
-  $('rules').textContent = def.display.join('\n');
+  const { sp, P, def, W } = pl;
+  const wood = [['Expoente de Leonardo (e)', W.leo.toFixed(2)], ['Crescimento secundário (G)', W.G.toFixed(2)], ['Irregularidade da casca', (sp.bump ?? 0).toFixed(2)]];
+  $('params').innerHTML = sp.show.map(([k, label, unit]) => `<tr><td>${label}</td><td>${fmtVal(k === 'iterations' ? pl.done : P[k], unit)}</td></tr>`).join('')
+    + wood.map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('');
+  $('rules').textContent = def.display.join('\n') + `\n\nraio (Leonardo): r(nó)^${W.leo.toFixed(2)} = Σ r(filho)^${W.leo.toFixed(2)}, pontas = r₀\n` +
+    `idade: só existem nós nascidos até t; r ×= 1 + ${W.G.toFixed(2)}·(t − nascimento)/t_max`;
   $('word').textContent = wordToString(pl.word, 700);
   $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 32)}</b>`;
 }
 function showStats() {
-  const s = plants.reduce((a, p) => ({ modules: a.modules + p.stats.modules, segs: a.segs + p.stats.segs, inst: a.inst + p.stats.inst, ms: a.ms + p.stats.ms }), { modules: 0, segs: 0, inst: 0, ms: 0 });
-  const detail = plants.length === 1 ? ' · ' + Object.entries(plants[0].stats.counts).map(([k, v]) => `${k}: ${v}`).join(' · ') : '';
-  $('stats').textContent = `${s.modules.toLocaleString('pt-BR')} módulos · ${s.segs.toLocaleString('pt-BR')} segmentos · ${s.inst.toLocaleString('pt-BR')} instâncias${detail} · ${s.ms.toFixed(0)} ms`;
+  const s = plants.reduce((a, p) => ({ modules: a.modules + p.stats.modules, nodes: a.nodes + p.stats.nodes, verts: a.verts + p.stats.verts, inst: a.inst + p.stats.inst, ms: a.ms + p.stats.ms }), { modules: 0, nodes: 0, verts: 0, inst: 0, ms: 0 });
+  const f = (x) => x.toLocaleString('pt-BR');
+  const detail = plants.length === 1 ? ' · ' + Object.entries(plants[0].stats.counts).map(([k, v]) => `${k}: ${v}`).join(' · ') + ` · ${plants[0].stats.chains} galhos` : '';
+  $('stats').textContent = `${f(s.modules)} módulos · ${f(s.nodes)} nós · ${f(s.verts)} vértices de tubo · ${f(s.inst)} instâncias${detail} · ${s.ms.toFixed(0)} ms`;
 }
-
 function clearPlants() { plants.forEach(disposePlant); plants = []; labels.forEach(l => l.el.remove()); labels = []; }
 
 async function generate({ animate = true } = {}) {
@@ -926,7 +1076,7 @@ async function generate({ animate = true } = {}) {
   $('busy').style.display = 'none';
 }
 
-function startGrowth() { anim = { t0: performance.now(), dur: 3600 }; SHARED.uGrowth.value = 0; }
+function startGrowth() { anim = { t0: performance.now(), dur: 7000 }; SHARED.uGrowth.value = 0; }
 function syncSlider() { ui.growth.value = SHARED.uGrowth.value; $('gval').textContent = Math.round(SHARED.uGrowth.value * 100) + '%'; }
 function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 5'; }
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
@@ -954,7 +1104,8 @@ function init() {
   ui.seed.value = h.seed || 'lindenmayer';
   if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); if (SPECIES[h.esp]) ui.species.value = h.esp; }
   const q = new URLSearchParams(location.search);
-  if (q.has('nogrow')) { generate({ animate: false }); } else generate();
+  if (q.has('age')) { generate({ animate: false }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
+  else if (q.has('nogrow')) { generate({ animate: false }); } else generate();
   if (q.has('norotate')) { controls.autoRotate = false; $('rotate').checked = false; }
 }
 
@@ -966,8 +1117,17 @@ function loop() {
   SHARED.uTime.value += dt;
   if (anim) {
     const k = Math.min((performance.now() - anim.t0) / anim.dur, 1);
-    SHARED.uGrowth.value = 1 - Math.pow(1 - k, 2.2);
+    SHARED.uGrowth.value = 1 - Math.pow(1 - k, 1.6);
     syncSlider(); if (k >= 1) anim = null;
+  }
+  const ageChanged = plants.some(pl => pl.lastAge !== SHARED.uGrowth.value);
+  for (const pl of plants) pl.update(SHARED.uGrowth.value);
+  if (follow && mode === 'single' && plants[0] && $('follow').checked && (ageChanged || anim)) {
+    // câmera acompanha a idade: aproxima na muda, afasta conforme cresce
+    const want = THREE.MathUtils.clamp((plants[0].curH || 0) / follow.h * 1.15, 0.22, 1);
+    follow.z += (want - follow.z) * (anim ? 0.08 : 1);
+    const d = camera.position.clone().sub(controls.target).normalize();
+    controls.target.y = follow.ty * follow.z; camera.position.copy(controls.target).addScaledVector(d, follow.dist * follow.z);
   }
   controls.update();
   composer.render();
@@ -977,7 +1137,7 @@ function loop() {
     l.el.style.display = tmpV.z < 1 ? 'block' : 'none';
   }
 }
-window.camera = camera; window.__lsys = { buildPlant, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
+window.camera = camera; window.controls = controls; window.THREE = THREE; window.__lsys = { buildPlant, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>
