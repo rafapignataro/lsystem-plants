@@ -1,4 +1,6 @@
-# As 5 espécies
+# As 10 espécies
+
+5 realistas (v1–v3) e 5 exóticas (v4, no fim deste arquivo).
 
 Cada espécie é um objeto em `SPECIES` (`index.html`, seção 6) com:
 
@@ -241,3 +243,129 @@ Campos: `type` (0 lisa, 1 sulcada, 2 placas, 3 raque), `stretch` (compressão do
 
 Paletas: carvalho `hi` ≈ (1.45, 1.38, 1.3), `lo` ≈ (0.3, 0.28, 0.28); pinheiro `hi` = (k, 0.72k, 0.55k) com k = 1.6–2.4 (placas avermelhadas), `lo` = (0.35, 0.32, 0.32); arbusto `hi` ≈ 1.12, `lo` = (0.6, 0.55, 0.5); salgueiro `hi` ≈ (1.2, 1.15, 1.25), `lo` = (0.45, 0.42, 0.5); samambaia `hi` = (1.1, 1.1, 1.05), `lo` = (0.85, 0.85, 0.8).
 
+
+---
+
+# As 5 espécies exóticas (v4)
+
+Mesmo motor das realistas, com os ganchos descritos em [ARQUITETURA §10](ARQUITETURA.md#10-espécies-exóticas-v4). Fluxos de RNG próprios (`seed::<id>::params`, `rules`, `turtle`, `wood`, `bark`, `fx`), então nada muda nas realistas.
+
+## 💎 Árvore de Cristal (`cristal`)
+
+**Ideia:** um "fractal mineral". Cristais não crescem por escolha, crescem por simetria, então a gramática é **determinística** (nenhuma regra estocástica): a seed só escolhe parâmetros.
+
+```
+ω : { [ /(360/c·i + 30°) &(30|60°) A(0.5) ] } × c   { [ /(yaw) &(90°) f(d) ^(90°−tilt) X(s) ] } × lascas   A(1)
+A(s) → F(s·len) { [ &(60°|90°) A(s·ratio) ] /(120°|90°) } × (3|4)  /(60°|45°) A(s·apex)      (s < 0.1 → F)
+final: A → F(s·len·0.6)
+```
+
+- Simetria `hexagonal` (3 filhos a 60°, giro de 120°, prisma de 6 faces) ou `cúbica` (4 filhos a 90°, giro de 90°, prisma de 5 ou 6 faces).
+- Tubo `straight`: cada entrenó é um prisma reto separado (sem Catmull-Rom nem colar), com ponta piramidal de 1.8–2.8× o raio.
+- **Mineral** (seed): ametista, esmeralda, quartzo rosa, citrino, safira, cristal de rocha ou obsidiana arco-íris (opaca, com iridescência). Cada um define cor, transmissão, IOR, dispersão e distância de atenuação.
+- Lascas `X` espalhadas na base (10–18), 3–6 cristais laterais.
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` | 4 |
+| `ratio` | hex 0.56–0.66 · cúbica 0.45–0.55 |
+| `apex` | 0.7–0.85 |
+| `len` | 1.6–2.2 |
+| `cluster` | 3–6 |
+| `point` | 1.8–2.8 |
+
+## 🪼 Medusa Flutuante (`medusa`)
+
+**Ideia:** uma planta de cabeça para baixo. O "solo" dela é o sino, e os galhos pendem.
+
+```
+ω : { [ /(360/n·i) &(90°) f(rim) &(flare) ~(g) T(seg) ] } × n    { [ /(…) &(166°) M(armSeg) ] } × braços
+T(l) → F(l) ±(0–curl°) O? T(l·0.985)         (O com p = beads: nematocisto luminoso)
+M(l) → F(l) /(37°) [ &(75°) L ] [ ^(75°) L ] M(l·0.97)   (braço oral com babados)
+final: T → O (ponta brilhante), M → L
+```
+
+- Um entrenó por iteração (20–26): os tentáculos crescem em linha com a idade; o sino escala de 30% a 100% e pulsa (`max(0, sin(ωt))²`), e a planta toda boia (`float = 0.14`, sobe e desce devagar).
+- Sino: superfície paramétrica com borda em 8–16 lóbulos, canais radiais e borda emissivos com fresnel, 4 gônadas luminosas dentro; neve marinha em volta.
+- Ondulação no vertex shader pela distância à raiz no esqueleto (ver ARQUITETURA §10). Paleta: lunar, rosa abissal, âmbar, violeta, verde ácido ou azul elétrico, com matiz secundário de ±30–70°.
+
+| Parâmetro | Faixa |
+|---|---|
+| `tentacles` | 12–22 |
+| `arms` | 3–5 |
+| `rim` / `bellH` | 1.5–2.1 / 0.55–0.95 |
+| `flare` | 58–80° |
+| `gravity` | 0.03–0.08 |
+| `beads` | 0.08–0.25 |
+| `wave` / `amp` / `pulse` | 0.7–1.3 / 0.05–0.09 / 1.4–2.2 |
+
+## 🌵 Cacto Gravitacional (`cacto`)
+
+**Ideia:** um cacto colunar que sente a gravidade de um planetinha. Os braços se curvam para cima (gravitropismo negativo) **e** para o ponto onde o planeta passa mais perto (periastro da órbita).
+
+```
+ω : !(1) C(0)
+C(k) → F(seg) [ /(?) &(armAngle) ~(−up) $(att) B(1) ]? /(137.5°) C(k+1)     (braço com p = pArm; k = segs → Z)
+B(l) → F(l·seg·0.8) [ +(55°) $(att) B(l·0.7) ]? B(l·0.9)                       (l < 0.5 → Z)
+final: C, B, Z → coroa de 3 flores K
+```
+
+- Tubo com **costelas** (8, 13 ou 21: números de Fibonacci) que giram em espiral pelo arco, e estrangulamento entre gomos. Aréolas brancas desenhadas no shader nas cristas.
+- **Planeta**: gigante gasoso, anelado, gelo, lava ou violeta anelado (textura de faixas seedada, luz pontual própria). Órbita elíptica (excentricidade 0.25–0.45, inclinação 12–32°, período 14–22 s, sentido pela seed).
+- **Flores**: 14–22 pétalas em duas camadas, cor pela seed. Ficam em botão e só abrem (e brilham) quando o planeta passa perto.
+
+| Parâmetro | Faixa |
+|---|---|
+| `segs` (gomos do tronco) | 5–7 |
+| `iterations` | segs + 2–3 |
+| `ribs` | 8 · 13 · 21 |
+| `spiral` | ±0.05–0.12 rad por unidade |
+| `pArm` / `armAngle` | 0.55–0.85 / 72–88° |
+| `up` / `att` | 0.1–0.18 / 0.1–0.2 |
+
+## 🧠 Raiz Neural (`neural`)
+
+**Ideia:** um neurônio que é planta. O soma é a semente; os dendritos são a copa; o axônio é o caule que desce e vira raiz.
+
+```
+ω : [ &(180°) X(axonSegs) ]  { [ /(137.5°·i) &(12–80°) D(1) ] } × dend
+D(s) → p = pSplit : F(s·dLen) [ +(dAngle) D(s·decay) ] [ −(dAngle) D(s·decay) ]
+       senão      : F(s·dLen) /(±60°) &(±14°) O? D(s·0.93)          (s < 0.22 → F O: espinha dendrítica)
+X(k) → F(axonLen) O? X(k−1)   |   X(0) → R(1)                         (O: nós de Ranvier, se sorteado)
+R(s) → F(s) ~(rootGrav) { [ &(rootAngle) R(s·rootRatio) ] /(120°) } × 3   (s < 0.3 → botão sináptico O)
+```
+
+- `tags`: os nós da subárvore do axônio ganham etiqueta 1. Os pulsos de luz **saem** do soma pelo axônio e **chegam** ao soma pelos dendritos (como o sinal de verdade). Os botões sinápticos e nós de Ranvier piscam quando o pulso passa; o soma pisca no ritmo do trem de pulsos.
+- `float = 0`: a ponta mais baixa das raízes encosta no chão.
+
+| Parâmetro | Faixa |
+|---|---|
+| `dend` | 5–8 |
+| `dAngle` / `decay` / `pSplit` | 26–42° / 0.8–0.86 / 0.55–0.8 |
+| `axonSegs` / `axonLen` | 5–7 / 0.75–0.95 |
+| `rootAngle` / `rootGrav` | 38–58° / 0.04–0.12 |
+| `speed` / `spacing` / `width` | 2.2–3.8 / 5–9 / 0.35–0.55 |
+| cor | ciano, violeta, magenta, âmbar, verde sináptico, azul |
+
+## 🍄 Coral-Fungo Bioluminescente (`coral`)
+
+**Ideia:** trocar folhas por chapéus. Um símbolo novo, `P(r)`, desenha um chapéu (domo com a borda virada) e lamelas radiais por baixo, que brilham.
+
+```
+ω : !(1) F(0.45) { [ /(360/estipes·i) S(1) ] } × estipes
+S(s) → p = pBranch : F(s·seg) P(s·cap)? [ +(angle) S(s·0.82) ] /(137.5°) S(s·capDecay)
+       senão       : F(s·seg) P(s·cap·0.85)? /(137.5°) S(s·capDecay)
+final: S → F P (chapéu do topo, um pouco maior)
+```
+
+- A seed escolhe a **variante**: *coral do fundo do mar* (tons azulados/violeta/rosa coral, chapéus quase planos, bolhas subindo, cenário `abismo`) ou *fungo da floresta* (laranja/âmbar/ferrugem/dourado, chapéus abaulados, esporos dourados, cenário `floresta`).
+- Os chapéus inclinam um pouco na direção do ramo (`capTilt = 0.35`). A estipe usa a casca da v3 (lisa com lenticelas luminosas).
+
+| Parâmetro | Faixa |
+|---|---|
+| `stems` | 2–4 |
+| `iterations` | 6–7 |
+| `pBranch` / `angle` | 0.55–0.8 / 28–45° |
+| `cap` / `capDecay` / `pCap` | 0.5–0.72 / 0.8–0.88 / 0.35–0.6 |
+| `dome` | mar 0.04–0.1 · floresta 0.22–0.34 |
+| `gills` | 28–44 |

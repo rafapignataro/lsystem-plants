@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v3 · POC Three.js</title>
+<title>Jardim L-System v4 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -62,7 +62,7 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v3 · Three.js · L-Systems com seed determinística · tubos contínuos, regra de Leonardo, idade e casca procedural</p>
+  <p class="sub">POC v4 · Three.js · L-Systems com seed determinística · 5 espécies realistas + 5 exóticas (cristal, medusa, cacto gravitacional, raiz neural, coral-fungo)</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -74,7 +74,7 @@
     <button id="gen" class="primary">Gerar</button>
   </div>
   <div class="row">
-    <button id="garden">🌿 Ver todas as 5</button>
+    <button id="garden">🌿 Ver todas as 10</button>
     <button id="share">🔗 Copiar link</button>
   </div>
 
@@ -106,6 +106,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const V3 = THREE.Vector3;
 const DEG = Math.PI / 180;
@@ -222,17 +223,19 @@ const wordToString = (w, max = 600) => {
 /* =====================================================================
    3. Tartaruga 3D (H = heading, L = left, U = up) -> esqueleto de nós
    F f + - & ^ \ / | [ ] ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
+   v4: $ (tropismo para um ponto atrator P.attractor)  P (chapéu/prateleira com lamelas)  X (lasca de cristal)
    Cada F cria um nó {posição, pai, t0, t1}. Os raios saem depois do esqueleto.
    ===================================================================== */
 const GRAV = new V3(0, -1, 0);
+const UPV = new V3(0, 1, 0);
 function interpret(word, sp, P, rng) {
   const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0];
   const inst = {};
-  const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) a.push(it); };
-  let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), trop: 0, node: 0 };
+  const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) { it.node = st.node; it.arc = st.arc; a.push(it); } };
+  let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), trop: 0, node: 0, att: 0, arc: 0 };
   const stack = [];
-  const ax = new V3();
-  const clone = (s) => ({ pos: s.pos.clone(), H: s.H.clone(), L: s.L.clone(), U: s.U.clone(), trop: s.trop, node: s.node });
+  const ax = new V3(), tv = new V3();
+  const clone = (s) => ({ pos: s.pos.clone(), H: s.H.clone(), L: s.L.clone(), U: s.U.clone(), trop: s.trop, node: s.node, att: s.att, arc: s.arc });
   const defA = (P.angle || 25) * DEG;
   const roll = (sp.leafRoll ?? 35) * DEG;
   const life = (m) => [Math.max(m.t1 ?? 0, T1[st.node]), m.die ?? 1e9];
@@ -241,7 +244,7 @@ function interpret(word, sp, P, rng) {
     switch (m.c) {
       case 'F': case 'f': {
         const len = p ? p[0] : 1;
-        st.pos.addScaledVector(st.H, len);
+        st.pos.addScaledVector(st.H, len); st.arc += len;
         if (m.c === 'F' && len > 1e-5 && X.length < MAX_NODES) {
           const par = st.node; let t0 = m.t0 ?? 0, t1 = m.t1 ?? t0;
           if (t0 < T1[par]) { const dd = Math.max(t1 - t0, 0.02); t0 = T1[par]; t1 = t0 + dd; }
@@ -251,6 +254,11 @@ function interpret(word, sp, P, rng) {
         if (st.trop !== 0) { // tropismo (gravidade / fototropismo)
           ax.crossVectors(st.H, GRAV); const mag = ax.length();
           if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.trop * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
+        }
+        if (st.att !== 0 && P.attractor) { // v4: tropismo para um ponto (planeta do cacto)
+          const A = P.attractor; tv.set(A[0] - st.pos.x, A[1] - st.pos.y, A[2] - st.pos.z).normalize();
+          ax.crossVectors(st.H, tv); const mag = ax.length();
+          if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.att * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
         }
         st.H.normalize(); st.L.crossVectors(st.U, st.H).normalize(); st.U.crossVectors(st.H, st.L);
         break;
@@ -288,6 +296,14 @@ function interpret(word, sp, P, rng) {
         break;
       }
       case 'O': add('orb', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.1, life: life(m) }); break;
+      case '$': st.att = p ? p[0] : 0; break;
+      case 'P': { // chapéu: virado para cima, inclinado um pouco na direção do ramo
+        const s = p ? p[0] : 0.5, y = st.H.clone().multiplyScalar(sp.capTilt ?? 0.3).add(UPV).normalize();
+        const a = rng.f() * Math.PI * 2, z = new V3(Math.cos(a), 0, Math.sin(a)); z.addScaledVector(y, -z.dot(y)).normalize();
+        const it = { p: st.pos.clone(), y, z, s, life: life(m) };
+        add('cap', it); add('gill', { ...it }); break;
+      }
+      case 'X': add('shard', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.3, life: life(m) }); break;
       case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
     }
   }
@@ -345,7 +361,45 @@ const GEOMS = {
   petal: () => sheet({ width: 0.34, fold: 0.0, curve: -0.12, cup: 0.25, profile: PROFILES.petal, nu: 7, nv: 3 }),
   needles: () => needleTuft(26),
   sphere: () => new THREE.IcosahedronGeometry(1, 1),
+  // v4
+  shard: () => crystalGeo(6),
+  frill: () => frillGeo(),
+  cap: () => capGeo(0.25),
+  gill: () => gillGeo(0.25, 36),
 };
+// lasca de cristal: prisma facetado com ponta (lathe de poucos lados + flatShading no material)
+function crystalGeo(sides) {
+  const g = new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.2, 0.02), new THREE.Vector2(0.17, 0.72), new THREE.Vector2(0, 1.05)], sides);
+  return g;
+}
+// babado das medusas: fita ondulada
+function frillGeo() {
+  const g = sheet({ width: 0.5, fold: 0, curve: 0.05, profile: PROFILES.lance, nu: 12, nv: 3 });
+  const a = g.attributes.position;
+  for (let i = 0; i < a.count; i++) { const u = a.getY(i), x = a.getX(i); a.setZ(i, a.getZ(i) + 0.09 * Math.sin(u * 26) * Math.abs(x) * 4); }
+  g.computeVertexNormals(); return g;
+}
+// chapéu: domo (dome = altura relativa) com borda virada para baixo; raio 1
+function capGeo(dome) {
+  const pts = [];
+  for (let i = 0; i <= 14; i++) { const t = i / 14, r = Math.sin(t * Math.PI / 2) * 1.0; pts.push(new THREE.Vector2(Math.max(r, 1e-3), dome * Math.cos(t * Math.PI / 2) - 0.07 * Math.pow(t, 6))); }
+  const g = new THREE.LatheGeometry(pts, 40); g.computeVertexNormals(); return g;
+}
+// lamelas radiais embaixo do chapéu
+function gillGeo(dome, n) {
+  const pos = [], idx = [];
+  const yTop = (r) => dome * Math.cos(Math.asin(Math.min(r, 0.999))) - 0.07 * Math.pow(r, 6) - 0.012;
+  for (let k = 0; k < n; k++) {
+    const a = k / n * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), b = pos.length / 3;
+    const r0 = k % 2 ? 0.38 : 0.12, M = 6;
+    for (let j = 0; j <= M; j++) {
+      const r = r0 + (0.95 - r0) * j / M, y = yTop(r), d = 0.13 * Math.sin(Math.PI * (r - r0) / (0.95 - r0)) + 0.01;
+      pos.push(c * r, y, sn * r, c * r, y - d, sn * r);
+    }
+    for (let j = 0; j < M; j++) { const q = b + j * 2; idx.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+}
 
 /* =====================================================================
    5. Shaders: idade (crescimento + engrossamento) + vento
@@ -360,6 +414,83 @@ vec3 lsSway(vec3 p){
   return vec3(sin(uTime*1.3 + p.x*0.35 + p.z*0.2)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25, 0.0, cos(uTime*1.07 + p.z*0.33)*k*0.7);
 }
 `;
+/* v4: efeitos das espécies exóticas. Tudo atrás de #ifdef LS_FX: as 5 espécies realistas compilam o mesmo shader de antes.
+   uFx/uFx2: parâmetros por espécie · uFxP: ponto (planeta do cacto) · uFxC/uFxC2: cores · aFx: etiqueta do galho (axônio = 1)
+   aFxI (instâncias): (distância no esqueleto, etiqueta) */
+const FX_COMMON = /* glsl */`
+#ifdef LS_FX
+uniform vec4 uFx; uniform vec4 uFx2; uniform vec3 uFxP; uniform vec3 uFxC; uniform vec3 uFxC2;
+// pulso neural: o axônio (tag 1) leva o sinal para fora do soma, os dendritos trazem para dentro
+float lsPulse(float d, float tag){
+  float s = tag > 0.5 ? d - uTime * uFx.x : d + uTime * uFx.x;
+  float w = fract(s / uFx.y) - 0.5;
+  float p = exp(-pow(w * uFx.y / uFx.z, 2.0));
+  float w2 = fract(s / (uFx.y * 0.618) + 0.37) - 0.5;
+  return p + 0.55 * exp(-pow(w2 * uFx.y * 0.618 / uFx.z, 2.0));
+}
+#endif
+`;
+const FX_V = FX_COMMON + /* glsl */`
+#ifdef LS_FX
+attribute float aFx; attribute vec2 aFxI; varying vec4 vFx; varying float vFxI;
+#ifdef LS_FX_MEDUSA
+// ondulação dos tentáculos: amplitude cresce com a distância ao anel do sino; fase pelo ângulo em volta do eixo
+vec3 lsMedusa(vec3 p, float arc){
+  float a = max(arc - uFx.x, 0.0);
+  float ph = atan(p.z, p.x) * 3.0;
+  float amp = uFx.y * pow(a, 1.25);
+  vec3 radial = vec3(p.x, 0.0, p.z) * uFx.w * 0.1 * exp(-a * 0.5);
+  return vec3(sin(uTime * 1.6 - a * uFx.z + ph) * amp, 0.25 * amp * sin(uTime * 2.1 - a * uFx.z * 1.7 + ph), cos(uTime * 1.25 - a * uFx.z * 0.85 + ph * 1.3) * amp) + radial;
+}
+#endif
+void lsFxInst(inout vec3 t, vec3 ip){
+#ifdef LS_FX_CACTO
+  // flor abre quando o planeta passa perto: escala + pétalas giram para fora
+  float op = 1.0 - smoothstep(uFx2.x, uFx2.y, distance(ip, uFxP));
+  float ang = uFx2.z * (1.0 - op);
+  float c = cos(ang), s = sin(ang);
+  t = vec3(t.x, c * t.y - s * t.z, s * t.y + c * t.z) * mix(0.35, 1.15, op);
+  vFxI = 1.0 + 1.4 * op;
+#endif
+#ifdef LS_FX_NEURAL
+  vFxI = 1.0 + 9.0 * lsPulse(aFxI.x, aFxI.y);
+#endif
+#ifdef LS_FX_MEDUSA
+  vFxI = 1.0 + 1.5 * pow(0.5 + 0.5 * sin(aFxI.x * 1.4 - uTime * 2.6), 6.0);
+#endif
+}
+#endif
+`;
+// fragment dos galhos sem casca (medusa, neural, cacto)
+const FX_F = 'uniform float uTime;\n' + FX_COMMON + /* glsl */`
+varying vec4 vFx;
+vec3 lsFxCol(vec3 base){
+#ifdef LS_FX_CACTO
+  float th = atan(vFx.y, vFx.x); float x = uFx.x * (th + vFx.z * uFx.y);
+  float cr = 0.5 + 0.5 * cos(x);
+  vec3 col = base * mix(0.55, 1.18, pow(cr, 1.5));
+  float ri = floor(x / 6.2831853 + 0.5);
+  float dt = (fract(x / 6.2831853 + 0.5) - 0.5) * 6.2831853 / uFx.x * 2.2;  // ~distância angular ao topo da costela
+  float da = fract(vFx.z * uFx.z + ri * 0.618) - 0.5;
+  float ar = 1.0 - smoothstep(0.1, 0.2, length(vec2(dt * uFx.z * 3.0, da * 1.6)));
+  return mix(col, vec3(0.92, 0.9, 0.8), ar * 0.9);
+#else
+  return base;
+#endif
+}
+vec3 lsFxEmis(vec3 n, vec3 v){
+  float fres = pow(1.0 - abs(dot(n, v)), 2.5);
+#ifdef LS_FX_NEURAL
+  return uFxC * (uFx.w + 1.8 * lsPulse(vFx.z, vFx.w)) + uFxC2 * fres * 0.25;
+#elif defined(LS_FX_MEDUSA)
+  float wave = pow(0.5 + 0.5 * sin(vFx.z * 1.4 - uTime * 2.6), 6.0);
+  return uFxC * (0.18 + 0.9 * fres) + uFxC2 * wave * 0.9;
+#else
+  return uFxC * fres * 0.15;
+#endif
+}
+`;
+const FX = { cristal: { frag: 'none' }, medusa: { frag: 'own' }, neural: { frag: 'own' }, cacto: { frag: 'own' }, coral: { frag: 'bark' } };
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
@@ -367,7 +498,7 @@ attribute vec3 aCp; attribute vec2 aB; attribute vec3 aN; attribute vec2 aCol; a
 uniform float uBkFreq; uniform float uMatT;
 varying vec3 vBk; varying vec2 vMt;
 float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 1024, ii / 1024), 0).r; }
-` + SWAY,
+` + SWAY + FX_V,
     begin: `#include <begin_vertex>
     {
       float T = pow(uGrowth, 0.8) * uTend;
@@ -387,6 +518,12 @@ float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 
       transformed = c + normal * (r * aBump) + lsSway(c);
       vBk = vec3(aBk.xy * flare, aBk.z) * uBkFreq; // domínio da casca: (cos θ·r_final, sin θ·r_final, arco), em células
       vMt = vec2(clamp((T - aB.x) / (uTend * uMatT), 0.0, 1.0), r);
+      #ifdef LS_FX
+        vFx = vec4(aBk.xy / max(length(aBk.xy), 1e-6), aBk.z, aFx);
+        #ifdef LS_FX_MEDUSA
+          transformed += lsMedusa(c, aBk.z);
+        #endif
+      #endif
       #ifdef USE_COLOR
         vColor = mix(uYoung, color.rgb, smoothstep(0.012, 0.2, r / uRmax));
       #endif
@@ -488,35 +625,53 @@ vec3 lsPerturb(vec3 sp, vec3 N, float hW, float fd){
     },
   },
   inst: {
-    head: `attribute vec2 aLife;\n` + SWAY,
+    head: `attribute vec2 aLife;\n` + SWAY + FX_V,
     begin: `#include <begin_vertex>
     { float T = pow(uGrowth, 0.8) * uTend;
-      transformed *= smoothstep(aLife.x, aLife.x + 0.6, T) * (1.0 - smoothstep(aLife.y, aLife.y + 0.6, T)); }`,
+      transformed *= smoothstep(aLife.x, aLife.x + 0.6, T) * (1.0 - smoothstep(aLife.y, aLife.y + 0.6, T)); }
+    #ifdef LS_FX
+      vFxI = 1.0;
+      #ifdef USE_INSTANCING
+        lsFxInst(transformed, instanceMatrix[3].xyz);
+      #endif
+    #endif`,
     project: `vec4 mvPosition = vec4( transformed, 1.0 );
     #ifdef USE_INSTANCING
       mvPosition = instanceMatrix * mvPosition;
       mvPosition.xyz += lsSway(instanceMatrix[3].xyz);
+      #ifdef LS_FX_MEDUSA
+        mvPosition.xyz += lsMedusa(instanceMatrix[3].xyz, aFxI.x);
+      #endif
     #endif
     mvPosition = modelViewMatrix * mvPosition;
     gl_Position = projectionMatrix * mvPosition;`,
   },
 };
-function patch(mat, kind, U) {
-  const ch = CHUNKS[kind];
+function patch(mat, kind, U, fx) {
+  const ch = CHUNKS[kind], fxc = fx ? FX[fx] : null;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind;
     Object.assign(sh.uniforms, U);
     sh.vertexShader = ch.head + sh.vertexShader.replace('#include <begin_vertex>', ch.begin).replace('#include <project_vertex>', ch.project);
-    if (ch.frag && mat.isMeshStandardMaterial) {
+    if (ch.frag && mat.isMeshStandardMaterial && (!fxc || fxc.frag === 'bark')) {
       const f = ch.frag;
       sh.fragmentShader = f.head + sh.fragmentShader.replace('#include <color_fragment>', f.color).replace('#include <roughnessmap_fragment>', f.rough)
         .replace('#include <normal_fragment_maps>', f.normal).replace('#include <emissivemap_fragment>', f.emis);
     }
+    if (fxc) { // v4: espécies exóticas
+      if (kind === 'branch' && fxc.frag === 'own' && mat.isMeshStandardMaterial) {
+        sh.fragmentShader = FX_F + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = lsFxCol(diffuseColor.rgb);')
+          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += lsFxEmis(normalize(normal), normalize(vViewPosition));');
+      }
+      if (kind === 'inst' && !mat.isMeshDepthMaterial) sh.fragmentShader = 'varying float vFxI;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= vFxI;');
+      const def = `#define LS_FX\n#define LS_FX_${fx.toUpperCase()}\n`;
+      sh.vertexShader = def + sh.vertexShader; sh.fragmentShader = def + sh.fragmentShader;
+    }
   };
-  mat.customProgramCacheKey = () => 'lsys3-' + kind + (mat.isMeshStandardMaterial ? 's' : 'd');
+  mat.customProgramCacheKey = () => 'lsys3-' + kind + (mat.isMeshStandardMaterial ? 's' : 'd') + (fx ? '-' + fx + (mat.isMeshPhysicalMaterial ? 'p' : mat.isMeshBasicMaterial ? 'b' : '') : '');
   return mat;
 }
-const depthMat = (kind, U) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, U);
+const depthMat = (kind, U, fx) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, U, fx);
 /* =====================================================================
    6. As 5 espécies
    ===================================================================== */
@@ -807,6 +962,439 @@ const BARK = {
 };
 
 /* =====================================================================
+   6b. v4: as 5 espécies exóticas
+   Cada uma usa fluxos de RNG próprios (`seed::id::...`), então as realistas não mudam.
+   Ganchos novos (opcionais) por espécie: fx (efeito no shader), tube (opções de tubo), material/instMaterial/geom,
+   float (flutua), tags (etiqueta por nó), extra (objetos extras + tick por quadro), glow (luz pontual), theme(P).
+   ===================================================================== */
+const MINERALS = [
+  { name: 'ametista', h: 278, s: 0.7, l: 0.6, ior: 1.54, tr: 0.88, disp: 1.5, att: 0.9 },
+  { name: 'esmeralda', h: 150, s: 0.8, l: 0.5, ior: 1.58, tr: 0.85, disp: 1.2, att: 0.8 },
+  { name: 'quartzo rosa', h: 345, s: 0.6, l: 0.78, ior: 1.54, tr: 0.8, disp: 1.0, att: 1.4 },
+  { name: 'citrino', h: 40, s: 0.9, l: 0.6, ior: 1.55, tr: 0.88, disp: 1.5, att: 1.0 },
+  { name: 'safira', h: 222, s: 0.85, l: 0.55, ior: 1.77, tr: 0.88, disp: 2.5, att: 0.8 },
+  { name: 'cristal de rocha', h: 200, s: 0.15, l: 0.92, ior: 1.54, tr: 1.0, disp: 5, att: 3 },
+  { name: 'obsidiana arco-íris', h: 265, s: 0.3, l: 0.035, ior: 1.5, tr: 0, disp: 0, att: 1, irid: 0.9 },
+];
+let ENV = null; // mapa de ambiente (RoomEnvironment) só para materiais de cristal; scene.environment continua nulo
+const envMap = () => ENV || (ENV = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture);
+function crystalMat(P, instanced) {
+  const M = P.M, c = hsl(M.h, M.s, M.l);
+  return new THREE.MeshPhysicalMaterial({
+    color: instanced ? 0xffffff : c, roughness: M.tr ? 0.04 : 0.02, metalness: 0, transmission: M.tr, thickness: 2.0, ior: M.ior, dispersion: M.disp,
+    attenuationColor: c, attenuationDistance: M.att * 0.6, flatShading: true, envMap: envMap(), envMapIntensity: M.tr ? 0.9 : 0.55,
+    clearcoat: M.tr ? 0 : 1, clearcoatRoughness: 0.03, iridescence: M.irid || 0.25, iridescenceIOR: 1.8, iridescenceThicknessRange: [200, 600], specularIntensity: M.tr ? 1 : 0.4,
+    emissive: hsl(M.h, M.s, 0.5), emissiveIntensity: M.tr ? 0.05 : 0.02,
+  });
+}
+const glowMat = (c, opacity = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+// partículas que sobem (esporos/bolhas) ou descem (neve marinha), animadas só no shader
+function particles({ origins, count, rng, spread, rise, speed, size, color, kind }) {
+  const n = Math.min(count, 4000), o = new Float32Array(n * 3), a = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const q = origins[Math.floor(rng.f() * origins.length)];
+    o[i * 3] = q.x + rng.jit(spread * 0.3); o[i * 3 + 1] = q.y + rng.jit(spread * 0.1); o[i * 3 + 2] = q.z + rng.jit(spread * 0.3);
+    a[i * 4] = rng.f(); a[i * 4 + 1] = 0.6 + rng.f() * 0.8; a[i * 4 + 2] = rng.f() * 6.28; a[i * 4 + 3] = 0.5 + rng.f();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(o, 3)); g.setAttribute('aR', new THREE.Float32BufferAttribute(a, 4));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime: SHARED.uTime, uGrowth: SHARED.uGrowth, uC: { value: color }, uRise: { value: rise }, uSpeed: { value: speed }, uSpread: { value: spread }, uSize: { value: size }, uKind: { value: kind === 'bubble' ? 1 : 0 } },
+    vertexShader: `uniform float uTime, uGrowth, uRise, uSpeed, uSpread, uSize; attribute vec4 aR; varying float vA;
+      void main(){
+        float t = fract(uTime * uSpeed * aR.y / abs(uRise) + aR.x);
+        vec3 p = position + vec3(sin(t * 5.0 + aR.z) * uSpread * (0.3 + t), t * uRise, cos(t * 4.0 + aR.z * 1.7) * uSpread * (0.3 + t));
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sc = length(modelMatrix[0].xyz);
+        vA = sin(3.14159 * t) * smoothstep(0.55, 0.95, uGrowth);
+        gl_PointSize = uSize * aR.w * sc * projectionMatrix[1][1] * 400.0 / -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `uniform vec3 uC; uniform float uKind; varying float vA;
+      void main(){
+        vec2 q = gl_PointCoord * 2.0 - 1.0; float d = length(q); if (d > 1.0) discard;
+        float a = uKind > 0.5 ? (smoothstep(0.65, 0.92, d) * (1.0 - smoothstep(0.92, 1.0, d)) + 0.6 * smoothstep(0.35, 0.0, length(q - vec2(-0.35, 0.35)))) : pow(1.0 - d, 2.0);
+        gl_FragColor = vec4(uC * a * vA, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; return pts;
+}
+function plainBark(variant, extra = {}) {
+  return { variant, type: 0, stretch: 1, crack: 0.1, freq: 10, depth: 0, fbm: 0.5, lent: 0, hi: [1, 1, 1], lo: [1, 1, 1], moss: 0, mossH: 90, mat: 0.5, ...extra };
+}
+
+Object.assign(SPECIES, {
+  cristal: {
+    name: 'Árvore de Cristal', emoji: '💎', height: 8, theme: 'gruta', leafKind: 'oak', fx: 'cristal',
+    desc: 'Fractal mineral determinístico (sem regra estocástica): cada ponta se divide em ângulos fixos de 60° (simetria hexagonal) ou 90° (cúbica). Prismas facetados de vidro com refração e dispersão; a seed escolhe o mineral.',
+    baseWidth: 0.6, bump: 0, wood: { leo: [2.0, 2.3], G: 0.5, tip: 0.07, ring: 0.3 },
+    tube: { R: (rel, P) => P.facets, S: () => 1, straight: true, point: (P) => P.point, noCollar: true },
+    params(r) {
+      const M = r.pick(MINERALS), sym = r.chance(0.6) ? 'hexagonal' : 'cúbica';
+      const cluster = r.int(3, 6), shards = r.int(10, 18), list = [];
+      for (let i = 0; i < shards; i++) list.push({ yaw: r.f() * 360, d: r.range(0.5, 2.6), tilt: r.range(20, 70), s: r.range(0.35, 0.9) });
+      return {
+        iterations: 4, sym, mineral: M.name, M, facets: sym === 'hexagonal' ? 6 : r.pick([5, 6]),
+        len: r.range(1.6, 2.2), ratio: sym === 'hexagonal' ? r.range(0.56, 0.66) : r.range(0.45, 0.55), apex: r.range(0.7, 0.85),
+        tilt: sym === 'hexagonal' ? 60 : 90, cluster, sideTilt: r.pick([30, 60]), point: r.range(1.8, 2.8), shards: list,
+      };
+    },
+    show: [['mineral', 'Mineral'], ['sym', 'Simetria'], ['iterations', 'Iterações'], ['facets', 'Faces do prisma'], ['tilt', 'Ângulo de ramificação', '°'], ['ratio', 'Razão dos ramos'], ['apex', 'Razão do ápice'], ['cluster', 'Cristais na base'], ['sideTilt', 'Inclinação lateral', '°']],
+    build(P) {
+      const k = P.sym === 'hexagonal' ? 3 : 4, rot = 360 / k;
+      let axiom = ``; // ramos e lascas vêm antes do A: o que vem depois de um módulo reescrito nasce no fim dele
+      for (let i = 0; i < P.cluster; i++) axiom += `[/(${n(i * 360 / P.cluster + 30)})&(${P.sideTilt})!(0.6)A(${n(0.5)})]`;
+      for (const s of P.shards) axiom += `[/(${n(s.yaw)})&(90)f(${n(s.d)})^(${n(90 - s.tilt)})X(${n(s.s)})]`;
+      axiom += `!(1)A(1)`;
+      return {
+        axiom,
+        rules: {
+          A: (p) => {
+            const s = p[0]; let o = `F(${n(s * P.len)})`;
+            if (s < 0.1) return o;
+            for (let i = 0; i < k; i++) o += `[&(${P.tilt})!(0.62)A(${n(s * P.ratio)})]/(${rot})`;
+            return o + `/(${n(rot / 2)})A(${n(s * P.apex)})`;
+          },
+        },
+        finalize: { A: (p) => `F(${n(p[0] * P.len * 0.6)})` },
+        display: [
+          `ω : { [ /(360/${P.cluster}·i) &(${P.sideTilt}°) A(0.55) ] } × ${P.cluster}  { [ f X ] } × ${P.shards.length}  A(1)   (lascas X na base)`,
+          `A(s) → F(s·${n(P.len)}) { [ &(${P.tilt}°) !(0.62) A(s·${n(P.ratio)}) ] /(${rot}°) } × ${k}  /(${rot / 2}°) A(s·${n(P.apex)})`,
+          `        determinística: ângulos fixos (${P.sym}), nenhuma escolha aleatória nas regras`,
+          `tubo: prisma de ${P.facets} faces, reto de nó a nó, ponta piramidal (${n(P.point)}×raio)`,
+          `material: vidro físico (transmissão ${P.M.tr}, IOR ${P.M.ior}, dispersão ${P.M.disp})`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.M.h, P.M.s, P.M.l), hsl(P.M.h, P.M.s, P.M.l)],
+    material: (P) => crystalMat(P, false),
+    instMaterial: (kind, P) => kind === 'shard' ? crystalMat(P, true) : null,
+    geom: (kind, P) => kind === 'shard' ? crystalGeo(P.facets) : null,
+    color(kind, it, P, r) { return hsl(P.M.h + r.jit(10), P.M.s, P.M.l + r.jit(0.06)); },
+  },
+
+  medusa: {
+    name: 'Medusa Flutuante', emoji: '🪼', height: 9, theme: 'abismo', leafKind: 'frill', fx: 'medusa', float: 0.14, leafRoll: 90,
+    desc: 'Planta de cabeça para baixo que boia: um sino translúcido pulsa no topo e os tentáculos L-System pendem e ondulam (o vertex shader desloca cada anel pela distância à raiz no esqueleto).',
+    baseWidth: 0.075, bump: 0, wood: { leo: [2.6, 3.0], G: 1.6, tip: 0.3, ring: 0.05 },
+    noShadow: (kind) => kind === 'orb',
+    params(r) {
+      const pal = r.pick([{ name: 'lunar', h: 195 }, { name: 'rosa abissal', h: 322 }, { name: 'âmbar', h: 34 }, { name: 'violeta', h: 272 }, { name: 'verde ácido', h: 118 }, { name: 'azul elétrico', h: 214 }]);
+      return {
+        iterations: r.int(20, 26), tentacles: r.int(12, 22), rim: r.range(1.5, 2.1), bellH: r.range(0.55, 0.95), seg: r.range(0.3, 0.4), flare: r.range(58, 80),
+        gravity: r.range(0.03, 0.08), curl: r.range(4, 11), arms: r.int(3, 5), armSeg: r.range(0.28, 0.36), beads: r.range(0.08, 0.25), lobes: r.int(8, 16),
+        palette: pal.name, h: pal.h + r.jit(8), h2: pal.h + r.range(30, 70) * (r.chance(0.5) ? 1 : -1), wave: r.range(0.7, 1.3), amp: r.range(0.05, 0.09), pulse: r.range(1.4, 2.2),
+      };
+    },
+    show: [['iterations', 'Iterações (segmentos)'], ['tentacles', 'Tentáculos'], ['arms', 'Braços orais'], ['rim', 'Raio do sino'], ['bellH', 'Altura do sino'], ['flare', 'Abertura dos tentáculos', '°'], ['gravity', 'Gravitropismo'], ['curl', 'Ondulação de crescimento', '°'], ['beads', 'Prob. de nematocisto'], ['palette', 'Paleta'], ['wave', 'Frequência da onda'], ['pulse', 'Ritmo do pulso']],
+    build(P) {
+      const ax = (() => {
+        const r = new Rand('medusa-axiom' + P.h + P.tentacles); let o = '';
+        for (let i = 0; i < P.tentacles; i++) o += `[/(${n(i * 360 / P.tentacles + r.jit(6))})&(90)f(${n(P.rim * (0.92 + r.f() * 0.08))})&(${n(P.flare + r.jit(8))})!(0.55)~(${n(P.gravity)})T(${n(P.seg)})]`;
+        for (let i = 0; i < P.arms; i++) o += `[/(${n(i * 360 / P.arms + 20)})&(${n(166 + r.jit(6))})M(${n(P.armSeg)})]`;
+        return o;
+      })();
+      return {
+        axiom: `!(1)` + ax,
+        rules: {
+          T: [
+            { w: 1, s: (p, r) => { const l = p[0]; return `F(${n(l)})${r.chance(0.5) ? '+' : '-'}(${n(r.f() * P.curl)})${r.chance(P.beads) ? `O(${n(0.045 + r.f() * 0.04)})` : ''}T(${n(l * 0.985)})`; } },
+          ],
+          M: (p, r) => { const l = p[0]; return `F(${n(l)})/(${n(37 + r.jit(10))})[&(75)L(${n(0.5 + r.f() * 0.4)})][^(75)L(${n(0.45 + r.f() * 0.4)})]M(${n(l * 0.97)})`; },
+        },
+        finalize: { T: () => `O(${n(0.09)})`, M: () => `L(0.4)` },
+        display: [
+          `ω : { [ /(360/${P.tentacles}·i) &(90°) f(${n(P.rim)}) &(${n(P.flare)}°) ~(${n(P.gravity)}) T(${n(P.seg)}) ] } × ${P.tentacles}  { [ &(166°) M ] } × ${P.arms}`,
+          `T(l) → F(l) ±(0–${n(P.curl)}°) O? T(l·0.985)     (O com p=${n(P.beads)}: nematocisto luminoso)`,
+          `M(l) → F(l) /(37°) [ &(75°) L ] [ ^(75°) L ] M(l·0.97)   (braço oral com babados)`,
+          `final: T → O (ponta brilhante)`,
+          `animação: desloca(p) = A·d^1.25·sin(ωt − k·d + 3·θ), d = distância no esqueleto além do sino`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.h, 0.65, 0.6), hsl(P.h, 0.7, 0.7)],
+    material: (P) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0, transparent: true, opacity: 0.82 }),
+    instMaterial: (kind, P) => kind === 'leaf' ? new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.4, transparent: true, opacity: 0.55, emissive: hsl(P.h2, 0.95, 0.5), emissiveIntensity: 1.1, depthWrite: false }) : null,
+    color(kind, it, P, r) {
+      if (kind === 'orb') return hsl(P.h2 + r.jit(15), 0.95, 0.6).multiplyScalar(1.6 + r.f());
+      return hsl(P.h2 + r.jit(12), 0.85, 0.4 + r.jit(0.08));
+    },
+    glow: (pl) => ({ color: hsl(pl.P.h, 0.9, 0.6), i: 10, y: 0.75 }),
+    extra({ group, P, fxU, rng }) {
+      const R = P.rim * 1.12, H = P.rim * P.bellH;
+      fxU.uFx.value.set(P.rim, P.amp, P.wave, 0); fxU.uFxC.value.setFromColor(hsl(P.h, 0.9, 0.45)).multiplyScalar(0.8); fxU.uFxC2.value.setFromColor(hsl(P.h2, 0.95, 0.6)).multiplyScalar(1.6);
+      // sino: superfície paramétrica com borda recortada em lóbulos
+      const nu = 64, nv = 22, pos = [], uv = [], idx = [];
+      for (let i = 0; i <= nv; i++) {
+        const v = i / nv;
+        for (let j = 0; j <= nu; j++) {
+          const phi = j / nu * Math.PI * 2, lobe = 1 + 0.07 * Math.pow(v, 5) * Math.cos(P.lobes * phi);
+          const r = R * Math.pow(Math.sin(v * Math.PI / 2), 0.85) * lobe, y = H * Math.pow(Math.cos(v * Math.PI / 2), 0.9) - 0.12 * R * Math.pow(v, 8) * (1 + 0.5 * Math.cos(P.lobes * phi));
+          pos.push(Math.cos(phi) * r, y, Math.sin(phi) * r); uv.push(j / nu, v);
+        }
+      }
+      for (let i = 0; i < nv; i++) for (let j = 0; j < nu; j++) { const a = i * (nu + 1) + j, b = a + 1, c = a + nu + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); bg.setIndex(idx); bg.computeVertexNormals();
+      const bm = new THREE.MeshStandardMaterial({ color: hsl(P.h, 0.6, 0.4), roughness: 0.25, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false, emissive: hsl(P.h, 0.9, 0.42), emissiveIntensity: 0.45 });
+      const canals = Math.max(4, Math.round(P.lobes / 2));
+      bm.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = SHARED.uTime;
+        sh.vertexShader = 'varying vec2 vUv2;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vUv2 = uv;');
+        sh.fragmentShader = 'uniform float uTime; varying vec2 vUv2;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.0);
+          float canal = pow(0.5 + 0.5 * cos(vUv2.x * 6.2831853 * ${canals}.0), 30.0) * smoothstep(0.15, 0.6, vUv2.y);
+          float rim = smoothstep(0.86, 1.0, vUv2.y);
+          totalEmissiveRadiance *= 0.12 + 1.3 * fres + 1.2 * canal + 1.6 * rim * (0.6 + 0.4 * sin(uTime * 3.0 + vUv2.x * 40.0));`);
+      };
+      bm.customProgramCacheKey = () => 'medusa-bell';
+      const bell = new THREE.Mesh(bg, bm); bell.renderOrder = 2;
+      // gônadas: 4 arcos luminosos dentro do sino
+      const gon = new THREE.Group(), gm = glowMat(hsl(P.h2, 0.95, 0.55).multiplyScalar(1.1));
+      for (let i = 0; i < 4; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(R * 0.22, R * 0.045, 8, 24, Math.PI * 1.3), gm); t.rotation.set(Math.PI / 2, 0, i * Math.PI / 2); t.position.set(Math.cos(i * Math.PI / 2 + 0.6) * R * 0.33, H * 0.42, Math.sin(i * Math.PI / 2 + 0.6) * R * 0.33); gon.add(t); }
+      const bellG = new THREE.Group(); bellG.add(bell, gon); group.add(bellG);
+      // neve marinha em volta
+      const origins = []; for (let i = 0; i < 60; i++) origins.push(new V3(rng.jit(R * 3.5), rng.range(-P.iterations * P.seg * 1.2, H * 1.5), rng.jit(R * 3.5)));
+      group.add(particles({ origins, count: 900, rng, spread: R * 0.6, rise: -P.iterations * P.seg * 0.8, speed: 0.12, size: 0.018, color: hsl(P.h, 0.4, 0.75), kind: 'snow' }));
+      let base = null;
+      return {
+        points: [new V3(R, H * 1.45, R), new V3(-R, H, -R)],
+        tick(t, age, pl) {
+          if (base === null) base = pl.group.position.y;
+          const k = 0.3 + 0.7 * THREE.MathUtils.smoothstep(age, 0, 0.7);
+          const ph = (t * P.pulse) % (Math.PI * 2), pulse = Math.pow(Math.max(0, Math.sin(ph)), 2);
+          bellG.scale.set(k * (1 - 0.1 * pulse), k * (1 + 0.06 * pulse), k * (1 - 0.1 * pulse));
+          fxU.uFx.value.w = pulse * k;
+          pl.group.position.y = base + Math.sin(t * 0.55) * H * 0.18 + pulse * 0.05 * H;
+        },
+      };
+    },
+  },
+
+  cacto: {
+    name: 'Cacto Gravitacional', emoji: '🌵', height: 9, theme: 'deserto', leafKind: 'oak', fx: 'cacto',
+    desc: 'Cacto de gomos com costelas em espiral de Fibonacci (8, 13 ou 21). Os braços sofrem tropismo em direção a um planetinha em órbita, e as flores só se abrem quando o planeta passa perto.',
+    baseWidth: 0.6, bump: 0, wood: { leo: [3.6, 4.4], G: 0.3, tip: 0.62, ring: 0.12 },
+    tube: { R: (rel, P) => rel > 0.5 ? P.ribs * 4 : P.ribs * 3, S: () => 6, point: () => 0.75, ribs: true },
+    params(r) {
+      const ribs = r.pick([8, 13, 21]), segs = r.int(5, 7), seg = r.range(0.85, 1.1), trunkH = segs * seg;
+      const planet = r.pick([{ name: 'gigante gasoso', h: 28 }, { name: 'anelado', h: 45, ring: true }, { name: 'gelo', h: 195 }, { name: 'lava', h: 8 }, { name: 'violeta anelado', h: 275, ring: true }]);
+      const fl = r.pick([{ name: 'magenta', h: 318 }, { name: 'vermelho', h: 356 }, { name: 'amarelo', h: 48 }, { name: 'branco', h: 50, s: 0.15 }, { name: 'laranja', h: 22 }, { name: 'rosa', h: 335 }]);
+      const a = trunkH * r.range(0.8, 1.05), e = r.range(0.25, 0.45), alpha = r.f() * Math.PI * 2, incl = r.range(12, 32) * DEG, cy = trunkH * r.range(0.6, 0.8);
+      const pD = [Math.cos(alpha), 0, Math.sin(alpha)], qD = [-Math.sin(alpha) * Math.cos(incl), Math.sin(incl), Math.cos(alpha) * Math.cos(incl)];
+      const rp = a * (1 - e);
+      return {
+        iterations: segs + r.int(2, 3), ribs, spiral: r.range(0.05, 0.12) * (r.chance(0.5) ? 1 : -1), ribAmp: ribs === 8 ? 0.28 : ribs === 13 ? 0.2 : 0.13, pinch: r.range(0.08, 0.16),
+        segs, seg, pArm: r.range(0.55, 0.85), armAngle: r.range(72, 88), up: r.range(0.1, 0.18), att: r.range(0.1, 0.2), areole: r.range(2.2, 3.2),
+        petals: r.int(14, 22), open: r.range(58, 76), double: true, flowerSize: r.range(0.5, 0.7), flower: fl.name, flowerH: fl.h + r.jit(6), flowerS: fl.s ?? 0.85,
+        bodyH: r.range(95, 150), bodyL: r.range(0.3, 0.38),
+        planet: planet.name, planetH: planet.h + r.jit(10), ring: !!planet.ring, orbit: { a, e, cy, pD, qD, period: r.range(14, 22), dir: r.chance(0.5) ? 1 : -1 },
+        attractor: [pD[0] * rp, cy, pD[2] * rp], ecc: e,
+      };
+    },
+    show: [['iterations', 'Iterações (gomos)'], ['ribs', 'Costelas (Fibonacci)'], ['spiral', 'Torção da espiral'], ['pArm', 'Prob. de braço'], ['armAngle', 'Ângulo dos braços', '°'], ['up', 'Tropismo para cima'], ['att', 'Atração pelo planeta'], ['ecc', 'Excentricidade da órbita'], ['planet', 'Planeta'], ['flower', 'Cor da flor'], ['petals', 'Pétalas por flor']],
+    build(P) {
+      const crown = (s) => `[&(28)f(0.24)K(${n(s)})]/(120)[&(28)f(0.24)K(${n(s * 0.9)})]/(120)[&(28)f(0.24)K(${n(s * 0.95)})]`;
+      return {
+        axiom: `!(1)C(0)`,
+        rules: {
+          C: (p, r) => {
+            const k = p[0]; let o = `F(${n(P.seg * (0.95 + r.f() * 0.1))})`;
+            if (k >= 1 && k < P.segs - 1 && r.chance(P.pArm)) o += `[/(${n(r.f() * 360)})&(${n(P.armAngle + r.jit(5))})~(${n(-P.up)})$(${n(P.att)})!(0.8)B(1)]`;
+            return o + `/(137.5)` + (k + 1 < P.segs ? `C(${k + 1})` : `Z`);
+          },
+          B: (p, r) => {
+            const l = p[0]; if (l < 0.5) return `Z`;
+            let o = `F(${n(P.seg * 0.8 * l)})`;
+            if (r.chance(0.12)) o += `[+(${n(55 + r.jit(10))})$(${n(P.att)})!(0.85)B(${n(l * 0.7)})]`;
+            return o + `B(${n(l * 0.9)})`;
+          },
+        },
+        finalize: { C: () => crown(P.flowerSize), B: () => crown(P.flowerSize * 0.85), Z: () => crown(P.flowerSize * 0.9) },
+        display: [
+          `ω : !(1) C(0)`,
+          `C(k) → F(${n(P.seg)}) [ /(?) &(${n(P.armAngle)}°) ~(${n(-P.up)}) $(${n(P.att)}) B(1) ]? /(137.5°) C(k+1)   (braço com p=${n(P.pArm)}; k = ${P.segs} → Z)`,
+          `B(l) → F(l·${n(P.seg * 0.8)}) [ +(55°) $ B(l·0.7) ]? B(l·0.9)     (l < 0.5 → Z)`,
+          `$(a) = tropismo para o ponto atrator (periastro da órbita do planeta)`,
+          `final: pontas → coroa de 3 flores K (${P.petals} pétalas)`,
+          `tubo: ${P.ribs} costelas, espiral ${n(P.spiral)} rad/unidade, estrangulamento ${n(P.pinch)} entre gomos`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.bodyH, 0.45, P.bodyL), hsl(P.bodyH - 15, 0.5, P.bodyL + 0.12)],
+    material: () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0 }),
+    color(kind, it, P, r) {
+      if (kind === 'petal') return hsl(P.flowerH + r.jit(10), P.flowerS, 0.6 + (it.layer ? 0.1 : 0) + r.jit(0.05));
+      if (kind === 'center') return hsl(52, 0.95, 0.55);
+      return hsl(P.bodyH, 0.5, 0.3);
+    },
+    extra({ group, P, fxU, rng }) {
+      const O = P.orbit, trunkH = P.segs * P.seg, pr = trunkH * 0.09;
+      fxU.uFx.value.set(P.ribs, P.spiral, 1 / P.areole * 2.4, 0); fxU.uFx2.value.set(trunkH * 0.25, trunkH * 0.55, 1.25, 0);
+      // planeta: textura de faixas desenhada num canvas (seedada)
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
+      for (let y = 0; y < 128; y++) { const c = hsl(P.planetH + 18 * Math.sin(y * 0.21 + rng.f() * 0.3) + rng.jit(4), 0.75, 0.42 + 0.16 * Math.sin(y * 0.13 + 1) + rng.jit(0.03)); g.fillStyle = '#' + c.getHexString(); g.fillRect(0, y, 256, 1); }
+      for (let i = 0; i < 6; i++) { const c = hsl(P.planetH + 30, 0.9, 0.7); g.fillStyle = '#' + c.getHexString(); g.globalAlpha = 0.35; g.beginPath(); g.ellipse(rng.f() * 256, 20 + rng.f() * 88, 8 + rng.f() * 14, 3 + rng.f() * 4, 0, 0, 7); g.fill(); }
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const planet = new THREE.Group();
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(pr, 40, 24), new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.8 }));
+      planet.add(ball);
+      if (P.ring) { const ring = new THREE.Mesh(new THREE.RingGeometry(pr * 1.4, pr * 2.1, 64), new THREE.MeshBasicMaterial({ color: hsl(P.planetH + 20, 0.6, 0.7), side: THREE.DoubleSide, transparent: true, opacity: 0.6 })); ring.rotation.x = Math.PI / 2 - 0.4; planet.add(ring); }
+      const light = new THREE.PointLight(hsl(P.planetH, 0.8, 0.65), 7, 0, 1.5); planet.add(light);
+      group.add(planet);
+      const pos = (th, out) => { const r = O.a * (1 - O.e * O.e) / (1 + O.e * Math.cos(th)), c = Math.cos(th) * r, s = Math.sin(th) * r; return out.set(O.pD[0] * c + O.qD[0] * s, O.cy + O.qD[1] * s, O.pD[2] * c + O.qD[2] * s); };
+      const pts = []; for (let i = 0; i <= 160; i++) pts.push(pos(i / 160 * Math.PI * 2, new V3()));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: hsl(P.planetH, 0.7, 0.7), transparent: true, opacity: 0.35 }));
+      group.add(line);
+      return {
+        points: pts.filter((_, i) => i % 10 === 0).map(p => p.clone().addScalar(0)),
+        tick(t) {
+          // anomalia média → excêntrica (Kepler) para o planeta acelerar no periastro
+          const M = (t / O.period * O.dir) * Math.PI * 2; let E = M; for (let i = 0; i < 5; i++) E = M + O.e * Math.sin(E);
+          const th = 2 * Math.atan2(Math.sqrt(1 + O.e) * Math.sin(E / 2), Math.sqrt(1 - O.e) * Math.cos(E / 2));
+          pos(th, planet.position); ball.rotation.y = t * 0.6; fxU.uFxP.value.copy(planet.position);
+        },
+      };
+    },
+  },
+
+  neural: {
+    name: 'Raiz Neural', emoji: '🧠', height: 10, theme: 'vazio', leafKind: 'oak', fx: 'neural', float: 0,
+    desc: 'Cresce a partir de um soma, como um neurônio: dendritos ramificam para cima e o axônio desce até virar raízes. Pulsos de luz correm pelo esqueleto: chegam ao soma pelos dendritos e saem pelo axônio até as pontas.',
+    baseWidth: 0.16, bump: 0.03, wood: { leo: [2.0, 2.4], G: 0.6, tip: 0.08, ring: 0.3 },
+    params(r) {
+      const pal = r.pick([{ name: 'ciano', h: 188 }, { name: 'violeta', h: 275 }, { name: 'magenta', h: 315 }, { name: 'âmbar', h: 38 }, { name: 'verde sináptico', h: 135 }, { name: 'azul', h: 218 }]);
+      const dend = r.int(5, 8), list = [];
+      for (let i = 0; i < dend; i++) list.push({ yaw: i * 137.5 + r.jit(20), pitch: r.range(12, 80) });
+      return {
+        iterations: 12, dend, list, dAngle: r.range(26, 42), dLen: r.range(0.75, 1.0), decay: r.range(0.8, 0.86), pSplit: r.range(0.55, 0.8),
+        axonSegs: r.int(5, 7), axonLen: r.range(0.75, 0.95), rootAngle: r.range(38, 58), rootGrav: r.range(0.04, 0.12), rootRatio: r.range(0.68, 0.76), ranvier: r.chance(0.6),
+        palette: pal.name, h: pal.h + r.jit(6), speed: r.range(2.2, 3.8), spacing: r.range(5, 9), width: r.range(0.35, 0.55), soma: r.range(0.55, 0.75),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['dend', 'Dendritos primários'], ['dAngle', 'Ângulo dos dendritos', '°'], ['pSplit', 'Prob. de bifurcar'], ['decay', 'Decaimento'], ['axonSegs', 'Segmentos do axônio'], ['rootAngle', 'Ângulo das raízes', '°'], ['ranvier', 'Nós de Ranvier'], ['palette', 'Cor do pulso'], ['speed', 'Velocidade do pulso'], ['spacing', 'Espaçamento dos pulsos']],
+    build(P) {
+      let axiom = `[&(180)!(1)X(${P.axonSegs})]`;
+      for (const d of P.list) axiom += `[/(${n(d.yaw)})&(${n(d.pitch)})!(0.6)D(1)]`;
+      return {
+        axiom,
+        rules: {
+          D: [
+            { w: P.pSplit, s: (p, r) => { const s = p[0]; if (s < 0.22) return `F(${n(s * P.dLen)})O(0.05)`; return `F(${n(s * P.dLen)})~(-0.03)[+(${n(P.dAngle + r.jit(10))})/(${n(r.jit(40))})!(0.75)D(${n(s * P.decay)})][-(${n(P.dAngle + r.jit(10))})/(${n(r.jit(40))})!(0.75)D(${n(s * P.decay)})]`; } },
+            { w: 1 - P.pSplit, s: (p, r) => { const s = p[0]; if (s < 0.22) return `F(${n(s * P.dLen)})O(0.05)`; return `F(${n(s * P.dLen)})/(${n(r.jit(60))})&(${n(r.jit(14))})${r.chance(0.3) ? 'O(0.035)' : ''}D(${n(s * 0.93)})`; } },
+          ],
+          X: (p, r) => p[0] > 0 ? `F(${n(P.axonLen)})${P.ranvier ? 'O(0.07)' : ''}/(${n(r.jit(25))})&(${n(r.jit(5))})X(${p[0] - 1})` : `R(1)`,
+          R: (p, r) => { const s = p[0]; if (s < 0.3) return `F(${n(s * 0.9)})O(0.1)`; let o = `F(${n(s)})~(${n(P.rootGrav)})`; for (let i = 0; i < 3; i++) o += `[&(${n(P.rootAngle + r.jit(8))})!(0.7)R(${n(s * P.rootRatio * (0.9 + r.f() * 0.2))})]/(${n(120 + r.jit(15))})`; return o; },
+        },
+        finalize: { D: () => `O(0.045)`, R: () => `O(0.09)`, X: () => `` },
+        display: [
+          `ω : [ &(180°) X(${P.axonSegs}) ]  { [ /(137.5°·i) &(12–80°) D(1) ] } × ${P.dend}`,
+          `D(s) → p=${n(P.pSplit)} : F(s·${n(P.dLen)}) [ +(${n(P.dAngle)}°) D(s·${n(P.decay)}) ] [ −(${n(P.dAngle)}°) D(s·${n(P.decay)}) ]`,
+          `       p=${n(1 - P.pSplit)} : F /(±60°) &(±14°) O? D(s·0.93)       (s < 0.22 → F O: espinha)`,
+          `X(k) → F(${n(P.axonLen)}) ${P.ranvier ? 'O ' : ''}X(k−1)   |   X(0) → R(1)   (axônio${P.ranvier ? ' com nós de Ranvier' : ''})`,
+          `R(s) → F(s) ~(${n(P.rootGrav)}) { [ &(${n(P.rootAngle)}°) R(s·${n(P.rootRatio)}) ] /(120°) } × 3   (s < 0.3 → botão sináptico O)`,
+          `pulso: brilho = exp(−((d ∓ v·t) mod λ)²/w²), v=${n(P.speed)}, λ=${n(P.spacing)}; axônio sai do soma, dendritos chegam nele`,
+        ],
+      };
+    },
+    tags(sk) { // 1 = subárvore do axônio (o primeiro nó do ramo fica abaixo do soma)
+      const t = new Float32Array(sk.N);
+      for (let i = 1; i < sk.N; i++) t[i] = sk.PAR[i] === 0 ? (sk.Y[i] < -0.3 ? 1 : 0) : t[sk.PAR[i]];
+      return t;
+    },
+    bark: (P) => [hsl(P.h, 0.25, 0.16), hsl(P.h, 0.45, 0.35)],
+    material: () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 }),
+    instMaterial: (kind) => kind === 'orb' ? new THREE.MeshBasicMaterial({ color: 0xffffff }) : null,
+    color(kind, it, P, r) { return hsl(P.h + r.jit(12), 0.9, 0.55).multiplyScalar(0.22 + r.f() * 0.12); },
+    glow: (pl) => ({ color: hsl(pl.P.h, 0.9, 0.6), i: 14, y: pl.oy * pl.object.scale.x / pl.box.max.y }),
+    extra({ group, P, fxU, rng }) {
+      fxU.uFx.value.set(P.speed, P.spacing, P.width, 0.015); fxU.uFxC.value.setFromColor(hsl(P.h, 0.95, 0.55)); fxU.uFxC2.value.setFromColor(hsl(P.h + 30, 0.7, 0.4));
+      const g = new THREE.IcosahedronGeometry(P.soma, 4), a = g.attributes.position, ph = [rng.f() * 6, rng.f() * 6, rng.f() * 6];
+      for (let i = 0; i < a.count; i++) { const x = a.getX(i), y = a.getY(i), z = a.getZ(i), k = 1 + 0.12 * Math.sin(x * 4 + ph[0]) * Math.sin(y * 5 + ph[1]) * Math.sin(z * 4 + ph[2]); a.setXYZ(i, x * k, y * k * 1.12, z * k); }
+      g.computeVertexNormals();
+      const sm = new THREE.MeshStandardMaterial({ color: hsl(P.h, 0.3, 0.2), roughness: 0.4, emissive: hsl(P.h, 0.9, 0.5), emissiveIntensity: 0.4, transparent: true, opacity: 0.88 });
+      const soma = new THREE.Mesh(g, sm); soma.castShadow = true;
+      const nuc = new THREE.Mesh(new THREE.IcosahedronGeometry(P.soma * 0.42, 2), glowMat(hsl(P.h + 20, 0.9, 0.65).multiplyScalar(1.5)));
+      const sg = new THREE.Group(); sg.add(soma, nuc); group.add(sg);
+      // pulso no soma: mesmo trem de pulsos do shader avaliado em d = 0
+      const pulse = (t) => { const s = -t * P.speed, w = ((s / P.spacing) % 1 + 1) % 1 - 0.5, w2 = ((s / (P.spacing * 0.618) + 0.37) % 1 + 1) % 1 - 0.5; return Math.exp(-((w * P.spacing / P.width) ** 2)) + 0.55 * Math.exp(-((w2 * P.spacing * 0.618 / P.width) ** 2)); };
+      return {
+        points: [new V3(P.soma, P.soma, P.soma), new V3(-P.soma, -P.soma, -P.soma)],
+        tick(t, age) { const k = 0.35 + 0.65 * THREE.MathUtils.smoothstep(age, 0, 0.5), p = pulse(t); sg.scale.setScalar(k * (1 + 0.05 * p)); sm.emissiveIntensity = 0.35 + 2.2 * p; },
+      };
+    },
+  },
+
+  coral: {
+    name: 'Coral-Fungo Bioluminescente', emoji: '🍄', height: 7, theme: (P) => P.sea ? 'abismo' : 'floresta', leafKind: 'oak', fx: 'coral', capTilt: 0.35,
+    desc: 'Em vez de folhas, cresce em chapéus empilhados (símbolo novo P) com lamelas que brilham por baixo e partículas subindo. A seed decide: coral do fundo do mar (azulado, com bolhas) ou fungo da floresta (laranja, com esporos).',
+    baseWidth: 0.2, bump: 0.05, wood: { leo: [2.2, 2.6], G: 0.7, tip: 0.07, ring: 0.35 },
+    params(r) {
+      const sea = r.chance(0.5);
+      const pal = sea ? r.pick([{ name: 'turquesa', h: 188, g: 168 }, { name: 'azul profundo', h: 215, g: 180 }, { name: 'violeta', h: 268, g: 190 }, { name: 'rosa coral', h: 330, g: 175 }])
+        : r.pick([{ name: 'laranja', h: 22, g: 95 }, { name: 'âmbar', h: 32, g: 75 }, { name: 'ferrugem', h: 10, g: 48 }, { name: 'dourado', h: 40, g: 110 }]);
+      return {
+        sea, variant: sea ? 'coral do fundo do mar' : 'fungo da floresta', palette: pal.name, capH: pal.h + r.jit(8), glowH: pal.g + r.jit(8),
+        iterations: r.int(6, 7), stems: r.int(2, 4), angle: r.range(28, 45), pBranch: r.range(0.55, 0.8), seg: r.range(0.75, 0.95),
+        cap: r.range(0.5, 0.72), capDecay: r.range(0.8, 0.88), pCap: r.range(0.35, 0.6), dome: sea ? r.range(0.04, 0.1) : r.range(0.22, 0.34), gills: r.int(28, 44),
+      };
+    },
+    show: [['variant', 'Variante'], ['palette', 'Paleta'], ['iterations', 'Iterações'], ['stems', 'Estipes'], ['angle', 'Ângulo de ramificação', '°'], ['pBranch', 'Prob. de ramo'], ['cap', 'Tamanho do chapéu'], ['capDecay', 'Decaimento do chapéu'], ['dome', 'Curvatura do chapéu'], ['gills', 'Lamelas']],
+    build(P) {
+      let axiom = `!(1)F(0.45)`;
+      for (let i = 0; i < P.stems; i++) axiom += `[/(${n(i * 360 / P.stems + 20)})&(${P.stems > 1 ? 16 : 0})!(${P.stems > 1 ? 0.75 : 1})S(1)]`;
+      return {
+        axiom,
+        rules: {
+          S: [
+            { w: P.pBranch, s: (p, r) => { const s = p[0]; return `F(${n(P.seg * s)})${r.chance(P.pCap) ? `P(${n(P.cap * s)})` : ''}[+(${n(P.angle + r.jit(8))})/(${n(r.jit(60))})!(0.7)S(${n(s * 0.82)})]/(137.5)!(0.85)S(${n(s * P.capDecay)})`; } },
+            { w: 1 - P.pBranch, s: (p, r) => { const s = p[0]; return `F(${n(P.seg * s)})${r.chance(P.pCap * 0.7) ? `P(${n(P.cap * s * 0.85)})` : ''}/(137.5)&(${n(r.jit(8))})S(${n(s * P.capDecay)})`; } },
+          ],
+        },
+        finalize: { S: (p) => `F(${n(P.seg * p[0] * 0.4)})P(${n(P.cap * p[0] * 1.05)})` },
+        display: [
+          `ω : !(1) F(0.45) { [ /(360/${P.stems}·i) S(1) ] } × ${P.stems}`,
+          `S(s) → p=${n(P.pBranch)} : F(s·${n(P.seg)}) P(s·${n(P.cap)})? [ +(${n(P.angle)}°) S(s·0.82) ] /(137.5°) S(s·${n(P.capDecay)})   (P com p=${n(P.pCap)})`,
+          `       p=${n(1 - P.pBranch)} : F(s·${n(P.seg)}) P? /(137.5°) S(s·${n(P.capDecay)})`,
+          `P(r) = chapéu (domo ${n(P.dome)}) + ${P.gills} lamelas luminosas por baixo   (símbolo novo da tartaruga)`,
+          `final: S → F P (chapéu do topo)`,
+          `partículas: ${P.sea ? 'bolhas' : 'esporos'} saindo dos chapéus`,
+        ],
+      };
+    },
+    bark: (P) => P.sea ? [hsl(P.capH, 0.35, 0.55), hsl(P.capH, 0.4, 0.62)] : [hsl(P.capH + 10, 0.3, 0.72), hsl(P.capH + 15, 0.35, 0.78)],
+    geom: (kind, P) => kind === 'cap' ? capGeo(P.dome) : kind === 'gill' ? gillGeo(P.dome, P.gills) : null,
+    instMaterial: (kind, P) => kind === 'gill' ? new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      : kind === 'cap' ? new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: P.sea ? 0.45 : 0.7, metalness: 0, emissive: hsl(P.glowH, 0.9, 0.5), emissiveIntensity: 0.05 }) : null,
+    color(kind, it, P, r) {
+      if (kind === 'gill') return hsl(P.glowH + r.jit(10), 0.95, 0.55).multiplyScalar(1.5 + r.f() * 0.8);
+      return hsl(P.capH + r.jit(8), P.sea ? 0.65 : 0.9, (P.sea ? 0.42 : 0.4) + r.jit(0.06));
+    },
+    glow: (pl) => ({ color: hsl(pl.P.sea ? pl.P.glowH : pl.P.capH, 0.9, 0.6), i: 8, y: 0.5 }),
+    extra({ group, inst, P, rng }) {
+      const caps = (inst.cap || []).map(c => c.p.clone().addScaledVector(c.y, -0.1));
+      if (!caps.length) return null;
+      const points = []; for (const c of inst.cap) points.push(c.p.clone().addScalar(c.s), c.p.clone().addScalar(-c.s));
+      const H = P.seg * 6;
+      group.add(P.sea
+        ? particles({ origins: caps, count: Math.min(caps.length * 14, 900), rng, spread: 0.35, rise: H * 1.1, speed: 0.55, size: 0.05, color: hsl(P.glowH, 0.5, 0.75), kind: 'bubble' })
+        : particles({ origins: caps, count: Math.min(caps.length * 40, 2500), rng, spread: 0.8, rise: H * 0.9, speed: 0.18, size: 0.022, color: hsl(P.capH + 15, 0.95, 0.6).multiplyScalar(1.5), kind: 'spore' }));
+      return { points };
+    },
+  },
+});
+const EXOTIC = ['cristal', 'medusa', 'cacto', 'neural', 'coral'];
+const ALL = [...ORDER, ...EXOTIC];
+Object.assign(BARK, {
+  cristal: (P) => plainBark('facetada (' + P.mineral + ')'),
+  medusa: () => plainBark('mesogleia translúcida'),
+  cacto: (P) => plainBark(P.ribs + ' costelas em espiral'),
+  neural: () => plainBark('membrana'),
+  coral: (P, r) => ({ variant: P.sea ? 'calcária porosa' : 'estipe fibrosa', type: 0, stretch: 1, crack: 0.1, freq: r.range(9, 13), depth: 0.08, fbm: 0.8, lent: 1, glow: 1.8,
+    hi: [1.1, 1.1, 1.1], lo: [0.7, 0.7, 0.75], moss: 0, mossH: 90, mat: 0.3 }),
+});
+
+/* =====================================================================
    7. Montagem: esqueleto -> raios (Leonardo + idade) -> tubos contínuos
    ===================================================================== */
 // Regra de Leonardo: r^e = Σ r_filho^e (pontas = 1), só com os nós que já existem na idade T,
@@ -833,7 +1421,8 @@ function computeRadii(sk, T, W, s, out) {
 
 const catmull = (a, b, c, d, t) => { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); };
 
-function buildTubes(sk, rFull, sp, P, rng, W) {
+function buildTubes(sk, rFull, sp, P, rng, W, tags) {
+  const TB = sp.tube; // v4: opções de tubo das exóticas (lados fixos, segmentos retos, ponta, costelas)
   const { N, X, Y, Z, PAR, T0, T1 } = sk;
   const kids = Array.from({ length: N }, () => []);
   for (let i = 1; i < N; i++) kids[PAR[i]].push(i);
@@ -844,9 +1433,9 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     const k = kids[i]; if (!k.length) continue;
     dir(i, da); let best = -9, bi = -1;
     for (const c of k) { const sc = dir(c, db).dot(da) + 0.25 * Math.pow(rFull[c] / (rFull[i] || 1), 2); if (sc > best) { best = sc; bi = c; } }
-    main[i] = bi;
+    main[i] = TB && TB.straight ? -1 : bi;
   }
-  const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], bk = [], idx = [];
+  const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], bk = [], idx = [], fxa = [];
   const arcNode = new Float32Array(N); // comprimento de arco acumulado até cada nó (UV v contínuo pelo colar)
   const [cOld] = sp.bark(P);
   const rMaxFull = W.rMaxFull;
@@ -856,8 +1445,8 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     chains++;
     const k = list.length - 1;
     const rel = rFull[list[1]] / rMaxFull;
-    const R = rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
-    const Sbase = rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
+    const R = TB && TB.R ? TB.R(rel, P) : rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    const Sbase = TB && TB.S ? TB.S(rel, P) : rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
     // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
     const J = list[0], l1 = Math.hypot(X[list[1]] - X[J], Y[list[1]] - Y[J], Z[list[1]] - Z[J]);
     dir(J, da);
@@ -866,13 +1455,18 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     const py = (j) => j < 0 ? g0[1] : j > k ? 2 * Y[list[k]] - Y[list[k - 1]] : Y[list[j]];
     const pz = (j) => j < 0 ? g0[2] : j > k ? 2 * Z[list[k]] - Z[list[k - 1]] : Z[list[j]];
     const rings = []; // {x,y,z,b,nA,nB,f}
+    if (TB && TB.straight) { // cristal: prisma reto de nó a nó
+      const B = list[1];
+      rings.push({ x: X[J], y: Y[J], z: Z[J], b: T0[B], nA: B, nB: B, f: 0, end: -1, sf: 0 });
+      rings.push({ x: X[B], y: Y[B], z: Z[B], b: T1[B], nA: B, nB: B, f: 0, end: B, sf: 1 });
+    } else
     for (let j = 1; j <= k; j++) {
       const S = Sbase + (j === 1 ? 3 : 0), B = list[j], A = list[j - 1];
       for (let s = (j === 1 ? 0 : 1); s <= S; s++) {
         let f = s / S; if (j === 1) f = Math.pow(f, 1.8);
         rings.push({
           x: catmull(px(j - 2), px(j - 1), px(j), px(j + 1), f), y: catmull(py(j - 2), py(j - 1), py(j), py(j + 1), f), z: catmull(pz(j - 2), pz(j - 1), pz(j), pz(j + 1), f),
-          b: T0[B] + f * (T1[B] - T0[B]), nA: j === 1 ? B : A, nB: B, f: j === 1 ? 0 : f, end: s === S ? B : -1,
+          b: T0[B] + f * (T1[B] - T0[B]), nA: j === 1 ? B : A, nB: B, f: j === 1 ? 0 : f, end: s === S ? B : -1, sf: s / S,
         });
       }
     }
@@ -883,6 +1477,7 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     const scaleD = 1 / Math.max(rFull[list[1]] * 3, 1e-4);
     const arc0 = collarParent >= 0 ? arcNode[J] : 0; let arc = arc0, prevB = rings[0].b;
     const c0 = cOld.clone().offsetHSL(rng.jit(0.01), rng.jit(0.04), rng.jit(0.03));
+    const tag = tags ? tags[list[1]] : 0, pointK = TB && TB.point ? TB.point(P) : 0, collarP = TB && TB.noCollar ? -2 : collarParent;
     for (let m = 0; m < M; m++) {
       const g = rings[m], gp = rings[Math.max(m - 1, 0)], gn = rings[Math.min(m + 1, M - 2)];
       if (m > 0) arc += Math.hypot(g.x - gp.x, g.y - gp.y, g.z - gp.z);
@@ -892,6 +1487,7 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
       if (m === 0) { tmp.set(Math.abs(Tn.y) < 0.9 ? 0 : 1, Math.abs(Tn.y) < 0.9 ? 1 : 0, 0); Nn.crossVectors(Tn, tmp).normalize(); }
       else { Nn.addScaledVector(Tn, -Nn.dot(Tn)); if (Nn.lengthSq() < 1e-10) { tmp.set(1, 0, 0); Nn.crossVectors(Tn, tmp); } Nn.normalize(); }
       Bn.crossVectors(Tn, Nn);
+      if (g.cap && pointK) { Tn.set(X[list[k]] - X[list[k - 1]], Y[list[k]] - Y[list[k - 1]], Z[list[k]] - Z[list[k - 1]]).normalize(); } // ponta: segue o último entrenó
       const nr = rng.f();
       const pr = m > 0 ? rings[m - 1] : g;
       if (g.end >= 0 && !g.cap) arcNode[g.end] = arc;
@@ -899,11 +1495,17 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
       for (let q = 0; q < R; q++) {
         const th = q / R * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
         const dx = Nn.x * cs + Bn.x * sn, dy = Nn.y * cs + Bn.y * sn, dz = Nn.z * cs + Bn.z * sn;
-        pos.push(g.x, g.y, g.z); nor.push(dx, dy, dz); cp.push(pr.x, pr.y, pr.z);
+        if (g.cap && pointK) nor.push(Tn.x, Tn.y, Tn.z); else nor.push(dx, dy, dz);
+        pos.push(g.x, g.y, g.z); cp.push(pr.x, pr.y, pr.z);
         bb.push(g.b, m > 0 ? prevB : g.b); nn.push(g.nA, g.nB, g.f);
-        col.push(collarParent, arc - arc0);
+        col.push(collarP, arc - arc0);
         const d = (arc - arc0) * scaleD;
-        bump.push(g.cap ? 0 : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr)));
+        if (TB && TB.ribs) { // cacto: costelas em espiral + estrangulamento entre gomos
+          const x = P.ribs * (th + arc * P.spiral), rib = Math.pow(Math.abs(Math.cos(x / 2)), 1.6);
+          const seg = 1 - P.pinch * Math.pow(1 - Math.sin(Math.PI * Math.min(Math.max(g.sf, 0), 1)), 2);
+          bump.push(g.cap ? pointK : (1 + P.ribAmp * (rib - 0.6)) * seg);
+        } else bump.push(g.cap ? pointK : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr)));
+        if (sp.fx) fxa.push(tag);
         clr.push(c0.r, c0.g, c0.b);
         bk.push(cs * rF, sn * rF, arc);
       }
@@ -932,14 +1534,15 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
   g.setAttribute('aBump', new THREE.Float32BufferAttribute(bump, 1));
   g.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
   g.setAttribute('aBk', new THREE.Float32BufferAttribute(bk, 3));
+  if (sp.fx) g.setAttribute('aFx', new THREE.Float32BufferAttribute(fxa, 1));
   g.setIndex(vtx > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   g.computeBoundingSphere();
   return { geo: g, chains, verts: vtx, tris: idx.length / 3 };
 }
 
-function makeInstanced(kind, items, sp, P, rng, U, night) {
+function makeInstanced(kind, items, sp, P, rng, U, night, tags) {
   const geomKey = kind === 'leaf' ? sp.leafKind : (kind === 'orb' || kind === 'center') ? 'sphere' : kind;
-  const geo = GEOMS[geomKey]();
+  const geo = (sp.geom && sp.geom(kind, P)) || GEOMS[geomKey]();
   const count = items.length;
   const mats = new Float32Array(count * 16), cols = new Float32Array(count * 3), lives = new Float32Array(count * 2);
   const m = new THREE.Matrix4(), x = new V3(), y = new V3(), z = new V3();
@@ -954,20 +1557,27 @@ function makeInstanced(kind, items, sp, P, rng, U, night) {
     lives[i * 2] = it.life[0] + delay; lives[i * 2 + 1] = it.life[1];
   });
   geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(lives, 2));
-  let mat;
-  if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  if (sp.fx) { // v4: distância no esqueleto + etiqueta, para ondas/pulsos nas instâncias
+    const fi = new Float32Array(count * 2);
+    items.forEach((it, i) => { fi[i * 2] = it.arc || 0; fi[i * 2 + 1] = tags ? tags[it.node] || 0 : 0; });
+    geo.setAttribute('aFxI', new THREE.InstancedBufferAttribute(fi, 2));
+  }
+  let mat = sp.instMaterial ? sp.instMaterial(kind, P) : null;
+  if (mat) {}
+  else if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   else {
     mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: kind === 'petal' ? 0.45 : 0.7, metalness: 0 });
     if (sp.leafKind === 'willow' && kind === 'leaf') { mat.emissive = hsl(P.glowH, 0.9, 0.5); mat.emissiveIntensity = night ? 0.35 : 0.3; }
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
-  patch(mat, 'inst', U);
+  patch(mat, 'inst', U, sp.fx);
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
   mesh.frustumCulled = false;
   mesh.castShadow = kind !== 'orb'; mesh.receiveShadow = kind !== 'orb';
-  mesh.customDepthMaterial = depthMat('inst', U);
+  if (sp.noShadow && sp.noShadow(kind)) mesh.castShadow = false;
+  mesh.customDepthMaterial = depthMat('inst', U, sp.fx);
   return mesh;
 }
 
@@ -989,10 +1599,18 @@ function buildPlant(id, seed) {
   const unitMax = computeRadii(sk, tEnd, W, sbuf, rFull) || 1;
   W.scale = (1 - lam) * sp.baseWidth / unitMax; W.ring = lam * sp.baseWidth / tEnd; W.rMin = sp.baseWidth * (sp.wood.tip ?? 0.012);
   const rMaxFull = computeRadii(sk, tEnd, W, sbuf, rFull); W.rMaxFull = rMaxFull;
+  // v4: etiquetas por nó (neural: axônio x dendritos), uniforms de efeito e objetos extras (sino, planeta, soma, esporos)
+  const tags = sp.tags ? sp.tags(sk) : null;
+  const fxU = sp.fx ? { uFx: { value: new THREE.Vector4() }, uFx2: { value: new THREE.Vector4() }, uFxP: { value: new V3() }, uFxC: { value: new V3() }, uFxC2: { value: new V3() } } : null;
+  const group = new THREE.Group();
+  const ex = sp.extra ? sp.extra({ group, sk, inst, P, rFull, W, fxU, rng: new Rand(`${seed}::${id}::fx`), tEnd }) : null;
   // extensão / altura
   const box = new THREE.Box3(), v = new V3();
   for (let i = 0; i < sk.N; i++) box.expandByPoint(v.set(sk.X[i], sk.Y[i], sk.Z[i]));
   for (const k in inst) for (const it of inst[k]) box.expandByPoint(it.p);
+  if (ex && ex.points) for (const q of ex.points) box.expandByPoint(q);
+  let oy = 0;
+  if (sp.float != null) { oy = -box.min.y + sp.float * (box.max.y - box.min.y); box.translate(new V3(0, oy, 0)); } // flutua: base acima do chão
   box.min.y = Math.min(box.min.y, 0);
   const size = box.getSize(new V3());
   const rawH = Math.max(size.y, 0.001), rawW = Math.max(size.x, size.z);
@@ -1012,32 +1630,33 @@ function buildPlant(id, seed) {
     uGlowC: { value: new THREE.Vector3().setFromColor(P.glowH != null ? hsl(P.glowH, 0.9, 0.55) : new THREE.Color(0)).multiplyScalar(BK.glow || 0) },
     uSeedOff: { value: new THREE.Vector3(so.range(-500, 500), so.range(-500, 500), so.range(-500, 500)) },
     uScale: { value: 1 }, uBkFreq: { value: 1 }, uMatT: { value: BK.mat } };
-  const group = new THREE.Group();
+  if (fxU) Object.assign(U, fxU);
   const tTube0 = performance.now();
-  const tube = buildTubes(sk, rFull, sp, P, rng, W);
+  const tube = buildTubes(sk, rFull, sp, P, rng, W, tags);
   const tTube = performance.now() - tTube0;
-  const bmat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'branch', U);
+  const bmat = patch(sp.material ? sp.material(P) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'branch', U, sp.fx);
   const bmesh = new THREE.Mesh(tube.geo, bmat);
   bmesh.castShadow = bmesh.receiveShadow = true; bmesh.frustumCulled = false;
-  bmesh.customDepthMaterial = depthMat('branch', U);
+  bmesh.customDepthMaterial = depthMat('branch', U, sp.fx);
   group.add(bmesh);
   let nInst = 0;
-  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night)); nInst += inst[k].length; }
+  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags)); nInst += inst[k].length; }
   const scale = sp.height / Math.max(rawH, rawW * 0.75);
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
-  const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, 0, -cz);
+  const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, oy, -cz);
   inner.scale.setScalar(scale);
   U.uScale.value = scale; U.uBkFreq.value = BK.freq * scale; // células por unidade de mundo -> por unidade da planta
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
   const pl = {
-    id, sp, P, def, word, done, W, BK, rFull, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0,
+    id, sp, P, def, word, done, W, BK, rFull, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
+    theme: typeof sp.theme === 'function' ? sp.theme(P) : sp.theme,
     update(age) {
       if (age === this.lastAge) return;
       const t = performance.now();
       const T = Math.pow(age, 0.8) * tEnd;
       computeRadii(sk, T, W, sbuf, radData); radTex.needsUpdate = true;
-      let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && sk.Y[i] > hy) hy = sk.Y[i];
+      let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
       this.curH = hy * inner.scale.x;
       this.lastAge = age; this.radUpdateMs = performance.now() - t;
     },
@@ -1095,7 +1714,26 @@ function gradientTex(stops) {
 const THEMES = {
   day: { bg: gradientTex([[0, '#7fb2e5'], [0.55, '#cfe4ef'], [1, '#e9e3d0']]), fog: 0xdfe3d6, ground: 0x6a8a4c, soil: 0x4a3a2a, hemi: [0xdfefff, 0x4a3a28, 1.1], sun: [0xfff1d6, 2.7], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.95] },
   night: { bg: gradientTex([[0, '#03040d'], [0.6, '#0c1030'], [1, '#1d1838']]), fog: 0x141433, ground: 0x10182a, soil: 0x0a0d18, hemi: [0x7080d0, 0x202040, 0.8], sun: [0x9fb4ff, 1.0], fill: 0.3, exp: 1.1, bloom: [0.6, 0.45, 0.85] },
+  // v4: cenários das exóticas
+  gruta: { bg: gradientTex([[0, '#06040e'], [0.55, '#1b1233'], [1, '#3a2c52']]), fog: 0x1d1630, ground: 0x241e30, soil: 0x16121e, hemi: [0xc8b8ff, 0x2a2038, 0.9], sun: [0xffffff, 3.2], fill: 0.9, exp: 1.05, bloom: [0.4, 0.4, 0.88], stars: true },
+  abismo: { bg: gradientTex([[0, '#00030a'], [0.55, '#02172e'], [1, '#05384f']]), fog: 0x032036, ground: 0x0b2a35, soil: 0x061a22, hemi: [0x3f86d8, 0x02101a, 0.75], sun: [0x9fd8ff, 0.9], fill: 0.3, exp: 1.05, bloom: [0.6, 0.45, 0.78] },
+  deserto: { bg: gradientTex([[0, '#090822'], [0.5, '#35204d'], [0.82, '#b45a6c'], [1, '#f0a368']]), fog: 0x4a2a4a, ground: 0x8a5a3c, soil: 0x6a4028, hemi: [0xffc0b0, 0x402030, 0.85], sun: [0xffb890, 1.5], fill: 0.45, exp: 1.0, bloom: [0.55, 0.45, 0.85], stars: true },
+  vazio: { bg: gradientTex([[0, '#000000'], [0.6, '#050918'], [1, '#0e1430']]), fog: 0x070b1a, ground: 0x0a0e1a, soil: 0x05070d, hemi: [0x5868b0, 0x0a0a14, 0.7], sun: [0x8090ff, 1.0], fill: 0.3, exp: 1.05, bloom: [0.75, 0.45, 0.72], stars: true },
+  floresta: { bg: gradientTex([[0, '#010403'], [0.6, '#0a1810'], [1, '#1b2a1a']]), fog: 0x0c1810, ground: 0x18220f, soil: 0x120e08, hemi: [0xb0b0c0, 0x100c08, 0.6], sun: [0xc8d0ff, 0.9], fill: 0.3, exp: 1.1, bloom: [0.75, 0.5, 0.72], stars: true },
+  jardim: { bg: gradientTex([[0, '#1d2752'], [0.55, '#7d6894'], [1, '#efb487']]), fog: 0xa88f98, ground: 0x4c6640, soil: 0x3a2c22, hemi: [0xdcdcff, 0x3a2a28, 1.0], sun: [0xffd6b0, 2.4], fill: 0.5, exp: 1.0, bloom: [0.5, 0.45, 0.86], stars: true },
 };
+// céu estrelado (só nos cenários com stars)
+const stars = (() => {
+  const r = new Rand('ceu'), N = 1800, p = new Float32Array(N * 3), c = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const u = r.f() * 2 * Math.PI, v = 0.04 + r.f() * 0.96, y = v * v, rr = Math.sqrt(1 - y * y);
+    p.set([Math.cos(u) * rr * 420, y * 420, Math.sin(u) * rr * 420], i * 3);
+    const k = 0.5 + r.f() * 0.9; c.set([k, k * (0.85 + r.f() * 0.15), k * (0.9 + r.f() * 0.2)], i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+  const m = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
+  m.visible = false; m.frustumCulled = false; scene.add(m); return m;
+})();
 const composerRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
 const composer = new EffectComposer(renderer, composerRT);
 composer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -1112,6 +1750,7 @@ function setTheme(name) {
   sun.color.set(t.sun[0]); sun.intensity = t.sun[1]; fill.intensity = t.fill;
   renderer.toneMappingExposure = t.exp;
   [bloom.strength, bloom.radius, bloom.threshold] = t.bloom;
+  stars.visible = !!t.stars;
 }
 
 function panelOffset() {
@@ -1149,7 +1788,11 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12 } = {}) {
    ===================================================================== */
 const $ = (id) => document.getElementById(id);
 const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
-for (const id of ORDER) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; ui.species.appendChild(o); }
+for (const [label, ids] of [['Realistas', ORDER], ['Exóticas', EXOTIC]]) {
+  const og = document.createElement('optgroup'); og.label = label;
+  for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; og.appendChild(o); }
+  ui.species.appendChild(og);
+}
 let plants = [], mode = 'single', anim = null, labels = [];
 let follow = null;
 
@@ -1196,34 +1839,44 @@ async function generate({ animate = true } = {}) {
     if (mode === 'single') {
       const id = ui.species.value; const pl = buildPlant(id, seed);
       plants.push(pl); scene.add(pl.object);
-      setTheme(pl.sp.theme);
+      setTheme(pl.theme);
       const size = pl.box.getSize(new V3());
       soil.scale.setScalar(Math.max(size.x, size.z) * 0.32 + 0.5);
       glowLight.intensity = id === 'salgueiro' ? 30 : 0;
       if (id === 'salgueiro') { glowLight.color = hsl(pl.P.glowH, 0.9, 0.6); glowLight.position.set(0, size.y * 0.35, 0); glowLight.distance = size.y * 3; }
+      if (pl.sp.glow) { const g = pl.sp.glow(pl); glowLight.color = g.color; glowLight.intensity = g.i; glowLight.position.set(0, size.y * g.y, 0); glowLight.distance = size.y * 3; }
       frame(pl.box);
       $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`; $('capD').textContent = pl.sp.desc;
       showInfo(pl);
     } else {
-      setTheme('day'); glowLight.intensity = 0;
-      const gap = 2.2; let x = 0; const built = ORDER.map(id => buildPlant(id, seed));
-      const widths = built.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * 0.72; });
-      const totalW = widths.reduce((a, b) => a + b, 0) + gap * (built.length - 1);
-      x = -totalW / 2;
+      // v4: duas fileiras: exóticas na frente (mais baixas), realistas atrás
+      setTheme('jardim'); glowLight.intensity = 0;
+      const gap = 2.2; const built = ALL.map(id => buildPlant(id, seed));
       const all = new THREE.Box3();
-      built.forEach((pl, i) => {
-        const cx = x + widths[i] / 2; x += widths[i] + gap;
-        const z = -Math.abs(cx) * 0.18;
-        pl.object.position.set(cx, 0, z); scene.add(pl.object); plants.push(pl);
-        const b = pl.box.clone().translate(new V3(cx, 0, z)); all.union(b);
-        const el = document.createElement('div'); el.className = 'glabel'; el.textContent = `${pl.sp.emoji} ${pl.sp.name}`;
-        el.onclick = () => { ui.species.value = pl.id; setMode('single'); generate(); };
-        $('labels').appendChild(el); labels.push({ el, pos: new V3(cx, -0.2, z + 0.5) });
-      });
+      let zRow = 0;
+      for (const ids of [EXOTIC, ORDER]) {
+        const row = ids.map(id => built[ALL.indexOf(id)]);
+        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * 0.72; });
+        const depth = Math.max(...row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z); }));
+        const totalW = widths.reduce((a, b) => a + b, 0) + gap * (row.length - 1);
+        let x = -totalW / 2;
+        if (ids === ORDER) zRow -= depth * 0.55;
+        row.forEach((pl, i) => {
+          const cx = x + widths[i] / 2; x += widths[i] + gap;
+          const z = zRow - Math.abs(cx) * 0.18;
+          pl.object.position.set(cx, 0, z); scene.add(pl.object);
+          const b = pl.box.clone().translate(new V3(cx, 0, z)); all.union(b);
+          const el = document.createElement('div'); el.className = 'glabel'; el.textContent = `${pl.sp.emoji} ${pl.sp.name}`;
+          el.onclick = () => { ui.species.value = pl.id; setMode('single'); generate(); };
+          $('labels').appendChild(el); labels.push({ el, pos: new V3(cx, -0.2, z + 0.5) });
+        });
+        if (ids === EXOTIC) zRow -= depth * 0.55;
+      }
+      plants.push(...built);
       soil.scale.setScalar(0.001);
-      frame(all, { dir: new V3(0.12, 0.22, 1), pad: 1.04 });
-      $('capT').textContent = '🌿 Jardim: as 5 espécies'; $('capD').textContent = `Mesma seed "${seed}", cinco gramáticas diferentes. Clique no nome para abrir a espécie.`;
-      showInfo(built[ORDER.indexOf(ui.species.value)] || built[0]);
+      frame(all, { dir: new V3(0.1, 0.24, 1), pad: 0.96 });
+      $('capT').textContent = '🌿 Jardim: as 10 espécies'; $('capD').textContent = `Mesma seed "${seed}", dez gramáticas diferentes: exóticas na frente, realistas atrás. Clique no nome para abrir a espécie.`;
+      showInfo(built[ALL.indexOf(ui.species.value)] || built[0]);
     }
     showStats(); writeHash();
     if (animate) startGrowth(); else { SHARED.uGrowth.value = 1; syncSlider(); }
@@ -1233,13 +1886,13 @@ async function generate({ animate = true } = {}) {
 
 function startGrowth() { anim = { t0: performance.now(), dur: 7000 }; SHARED.uGrowth.value = 0; }
 function syncSlider() { ui.growth.value = SHARED.uGrowth.value; $('gval').textContent = Math.round(SHARED.uGrowth.value * 100) + '%'; }
-function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 5'; }
+function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 10'; }
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
 
 $('gen').onclick = () => generate();
 $('rand').onclick = () => { ui.seed.value = randomSeed(); generate(); };
 ui.seed.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
-ui.species.onchange = () => { if (mode === 'garden') { showInfo(plants[ORDER.indexOf(ui.species.value)]); writeHash(); } else generate(); };
+ui.species.onchange = () => { if (mode === 'garden') { showInfo(plants[ALL.indexOf(ui.species.value)]); writeHash(); } else generate(); };
 $('garden').onclick = () => { setMode(mode === 'garden' ? 'single' : 'garden'); generate(); };
 $('replay').onclick = () => startGrowth();
 ui.growth.oninput = () => { anim = null; SHARED.uGrowth.value = +ui.growth.value; syncSlider(); };
@@ -1277,6 +1930,7 @@ function loop() {
   }
   const ageChanged = plants.some(pl => pl.lastAge !== SHARED.uGrowth.value);
   for (const pl of plants) pl.update(SHARED.uGrowth.value);
+  for (const pl of plants) if (pl.tick) pl.tick(SHARED.uTime.value, SHARED.uGrowth.value, pl); // v4: sino, planeta, soma
   if (follow && mode === 'single' && plants[0] && $('follow').checked && (ageChanged || anim)) {
     // câmera acompanha a idade: aproxima na muda, afasta conforme cresce
     const want = THREE.MathUtils.clamp((plants[0].curH || 0) / follow.h * 1.15, 0.22, 1);

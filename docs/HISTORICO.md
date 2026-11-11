@@ -2,6 +2,19 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v4: 5 espécies exóticas (11/11/2026)
+
+Commit COMMIT_V4.
+
+- **5 espécies novas**, num grupo "Exóticas" do seletor: 💎 Árvore de Cristal, 🪼 Medusa Flutuante, 🌵 Cacto Gravitacional, 🧠 Raiz Neural, 🍄 Coral-Fungo Bioluminescente (ver [ESPECIES](ESPECIES.md#as-5-espécies-exóticas-v4)).
+- **Motor**: ganchos opcionais por espécie (`fx`, `tube`, `material`, `instMaterial`, `geom`, `float`, `tags`, `extra`/`tick`, `glow`, `theme(P)`), símbolos novos da tartaruga (`$` tropismo para um ponto, `P` chapéu com lamelas, `X` lasca de cristal) e distância acumulada no esqueleto.
+- **Shaders**: efeitos atrás de `#ifdef LS_FX`: ondulação dos tentáculos pela distância à raiz, pulsos neurais em dois sentidos, costelas e aréolas do cacto, flores que abrem perto do planeta, prismas facetados de vidro físico (transmissão, IOR, dispersão, iridescência).
+- **Objetos extras**: sino pulsante com gônadas, planeta em órbita kepleriana com luz, soma que pisca, partículas (bolhas, esporos, neve marinha), céu estrelado.
+- **Cenários**: `gruta`, `abismo`, `deserto`, `vazio`, `floresta` e `jardim`.
+- **Jardim com as 10** em duas fileiras (exóticas na frente, realistas atrás). URL aceita `#especie=cristal|medusa|cacto|neural|coral`.
+- **Compatibilidade**: as 5 realistas continuam idênticas à v3 para a mesma seed (hash de palavra, esqueleto, raios, geometria e instâncias, e screenshot da cena pixel a pixel). As exóticas são determinísticas entre recarregamentos.
+- Screenshots: `screenshots/v4/` (no workspace do POC, fora do repositório).
+
 ## v3: casca procedural (10/11/2026)
 
 Commit [`45ae0ca`](https://github.com/rafapignataro/lsystem-plants/commit/45ae0ca303c25b5f72ab88ee4cfa5d49d8c82106), 22:22.

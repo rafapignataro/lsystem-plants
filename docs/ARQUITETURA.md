@@ -7,7 +7,7 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
 5. Shaders (idade + vento + casca procedural)
-6. As 5 espécies
+6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4)
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
 9. UI / estado
@@ -126,7 +126,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - Temas `day` / `night` (céu em gradiente, neblina, luzes, bloom); o salgueiro usa `night` e uma `PointLight` com a cor da luz.
 - Escala: cada planta é normalizada para a altura-alvo da espécie (`height`), considerando a largura (`max(altura, 0.75·largura)`).
 - Enquadramento: `frame()` ajusta a câmera ao bounding box e desloca a projeção (`setViewOffset`) para não ficar atrás do painel (no desktop, à direita; no celular, para cima). "Câmera segue" aproxima a câmera na muda e afasta conforme a planta cresce.
-- Jardim: as 5 espécies em fila com rótulos clicáveis projetados na tela.
+- Jardim (v4): as 10 espécies em duas fileiras (exóticas na frente, realistas atrás), tema `jardim` (crepúsculo), rótulos clicáveis projetados na tela.
 
 ## 8. Desempenho medido
 
@@ -141,7 +141,7 @@ Seed `lindenmayer`, v2, Chrome headless (SwiftShader) nesta máquina, `buildPlan
 | Salgueiro | 8.815 | 1.461 | 201 | 32.270 | 61.590 | 1.142 folhas, 365 orbes | 20–30 ms | ~5 / ~2 / ~15 ms |
 
 - Recalcular os raios para uma nova idade (`update`): 0,02–0,09 ms por planta (carvalho é o maior).
-- No modo Jardim as 5 são montadas juntas (soma das linhas acima).
+- No modo Jardim as 10 são montadas juntas (soma das linhas acima e da tabela da v4 abaixo).
 - O FPS medido no headless (~1–2 fps) é limitado pela renderização por software e **não representa uma GPU real**; o FPS em GPU real ainda não foi medido (ver ROADMAP).
 - v3 (casca procedural): no mesmo headless, carvalho em tela cheia passou de ~940 para ~1130 ms por quadro (+20%), e o custo cresce com a área de tronco na tela. A montagem quase não muda (só um atributo a mais).
 
@@ -186,3 +186,38 @@ Tudo no fragment shader do `MeshStandardMaterial` dos galhos, via `onBeforeCompi
 
 Os valores estão em `BARK` (`index.html`) e em [ESPECIES.md](ESPECIES.md#casca-procedural-v3). O painel mostra a variante, a escala, a profundidade e o musgo.
 
+
+## 10. Espécies exóticas (v4)
+
+As 5 exóticas usam o mesmo motor (L-System → tartaruga → esqueleto → Leonardo → tubos → instâncias), mais alguns **ganchos opcionais** na definição da espécie. Quando o gancho não existe, o caminho de código é o mesmo da v3, então as 5 realistas saem **idênticas** (verificado: hash de palavra, esqueleto, raios, todos os atributos de geometria e matrizes/cores das instâncias para 4 seeds × 5 espécies, e screenshot da cena 3D pixel a pixel).
+
+| Gancho | Para que serve | Quem usa |
+|---|---|---|
+| `fx` | liga `#define LS_FX` + `LS_FX_<NOME>` nos shaders do galho e das instâncias | todas as exóticas |
+| `tube` | `R` (lados fixos), `S` (anéis por entrenó), `straight` (prisma reto nó a nó, sem continuar a cadeia), `point` (ponta: o anel final avança `k·raio` na tangente), `noCollar`, `ribs` (costelas) | cristal, cacto |
+| `material(P)` / `instMaterial(kind, P)` / `geom(kind, P)` | material do galho, material e geometria de cada tipo de instância | todas |
+| `float` | sobe a planta para que a base fique `float × altura` acima do chão | medusa (0.14), neural (0) |
+| `tags(sk)` | etiqueta por nó, vira atributo `aFx` | neural (1 = subárvore do axônio) |
+| `extra(ctx)` | objetos fora do L-System (sino, planeta, soma, partículas), pontos extras para o enquadramento e um `tick(t, idade, pl)` por quadro | medusa, cacto, neural, coral |
+| `glow(pl)` | luz pontual colorida da cena | medusa, neural, coral |
+| `theme(P)` | cenário pode depender da seed | coral (abismo ou floresta) |
+
+**Símbolos novos da tartaruga:** `$(a)` tropismo para um ponto (`P.attractor`), `P(r)` chapéu com lamelas (gera instâncias `cap` + `gill`), `X(s)` lasca de cristal. A tartaruga também passou a acumular a distância percorrida (`arc`) e grava `arc` e o nó atual em cada instância (campos extras, não afetam as realistas).
+
+**Shaders:** tudo atrás de `#ifdef LS_FX`.
+- Galho (vertex): `vFx = (cos θ, sin θ, arco, etiqueta)`; na medusa soma `lsMedusa(p, arco)`.
+- Galho (fragment, medusa/neural/cacto): substitui a casca por `lsFxCol` (cor) e `lsFxEmis` (emissão). O coral reusa a casca da v3 (tipo lisa com lenticelas luminosas); o cristal não tem fragment próprio (é `MeshPhysicalMaterial`).
+- Instâncias: atributo `aFxI = (arco, etiqueta)`, `vFxI` multiplica a cor (pulso nos botões sinápticos, onda nos nematocistos, flor que abre perto do planeta).
+- Sombras: os materiais de profundidade recebem o mesmo `fx`, então o deslocamento da medusa também move a sombra.
+
+**Efeitos:**
+- *Ondulação da medusa*: `d = max(arco − raio_do_sino, 0)`, `A = amp·d^1.25`, deslocamento `(sin(1.6t − k·d + 3θ), 0.25·sin(…), cos(1.25t − 0.85k·d + 3.9θ))·A`, com `θ = atan(z, x)` (cada tentáculo tem fase própria sem precisar de atributo) e um empurrão radial perto do sino sincronizado com o pulso.
+- *Pulso neural*: `s = d ∓ v·t` (axônio: para fora; dendritos: para dentro), brilho `exp(−((fract(s/λ) − ½)·λ/w)²)` + um segundo trem com `λ·0.618`. O soma pisca com a mesma função avaliada em `d = 0` (no JS).
+- *Flor do cacto*: `abre = 1 − smoothstep(perto, longe, |pos_flor − pos_planeta|)`; a pétala gira em torno do eixo local X por `1.25·(1 − abre)` rad (botão fechado) e escala de 0.35 a 1.15. O planeta segue uma órbita kepleriana (equação de Kepler resolvida com 5 iterações de Newton simples), acelera no periastro.
+- *Costelas do cacto*: no CPU, `bump = (1 + amp·(|cos(x/2)|^1.6 − 0.6))·(1 − pinch·(1 − sin(π·f))²)`, `x = costelas·(θ + arco·espiral)`; no fragment, aréolas brancas nas cristas com espaçamento pelo arco e defasagem de 0.618 entre costelas.
+- *Partículas*: `THREE.Points` com `ShaderMaterial` aditivo; cada ponto sobe (ou desce, na neve marinha) com `t = fract(tempo·vel + fase)`, balança em x/z e some nas pontas; só aparecem a partir de ~55% de idade.
+- *Cristal*: `MeshPhysicalMaterial` com `transmission`, `ior`, `dispersion`, `attenuationColor`, `iridescence`, `flatShading` (facetas) e um `envMap` próprio (`RoomEnvironment` via PMREM). `scene.environment` continua nulo, para não mudar a iluminação das realistas.
+
+**Cenários novos:** `gruta` (cristal), `abismo` (medusa, coral do mar), `deserto` (cacto), `vazio` (neural), `floresta` (fungo), `jardim` (crepúsculo, modo Jardim). Os que têm `stars` mostram um céu estrelado (`Points` fixo, sem neblina).
+
+**Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 1,0 fps; cristal 2,0; medusa 3,5; cacto 3,5; neural 3,3; coral 3,0; jardim com as 10: 0,5 fps. Montagem: cristal ~20–50 ms (1,3–3,5 mil nós), medusa ~10–20 ms, cacto < 15 ms, neural 30–200 ms (1,4–8 mil nós), coral < 15 ms.

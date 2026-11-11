@@ -20,6 +20,16 @@
 - **Sistemas clássicos do ABOP.** Incluir exemplos de *The Algorithmic Beauty of Plants* (Prusinkiewicz & Lindenmayer) para comparação: bush 3D, árvores de Honda/Aono-Kunii, sistemas com contexto (`<`, `>`).
 - Flores e folhas com mais variedade de forma (lobos do carvalho, folha composta, sépalas).
 
+## Espécies exóticas (v4)
+
+- **Cristal**: os prismas se cruzam nas junções (não há união de sólidos) e todo entrenó ganha ponta, inclusive os internos. A transmissão custa um passe extra de renderização e, no SwiftShader, os minerais claros (cristal de rocha, quartzo rosa) parecem foscos/esbranquiçados; falta testar em GPU real. O cristal "engrossa" com a idade pela regra de Leonardo, o que é uma escolha artística (cristal de verdade não tem crescimento secundário).
+- **Medusa**: a ondulação é só deslocamento de vértice: as normais não são recalculadas (luz aproximada), os tentáculos podem se atravessar e não há física. Os primeiros segmentos ligam o centro do sino à borda (parecem canais radiais vistos de baixo). Transparência sem ordenação por fragmento: babados e sino podem ter erros de ordem de desenho. A opção "Vento" não afeta a medusa. Aparece uma faixa clara horizontal no topo do sino (provavelmente o reflexo especular do sol; não investigado).
+- **Cacto**: o atrator do tropismo é fixo (o periastro), não o planeta em movimento; o crescimento não reage à órbita ao longo do tempo. A flor "abre" por escala + rotação da pétala inteira, não por articulação de pétala. As aréolas são só cor (sem espinhos em 3D). A luz do planeta estoura quando a câmera chega muito perto.
+- **Neural**: o arco dos tubos (medido nos anéis da curva) e o arco das instâncias (medido pela tartaruga) diferem um pouco, então botões e galhos podem piscar levemente fora de sincronia. As raízes não interagem com o chão (só a ponta mais baixa encosta). Algumas seeds passam de 8 mil nós (`orvalho`), com montagem de ~200 ms.
+- **Coral-fungo**: os chapéus ficam no ponto do nó e podem se interpenetrar; a estipe atravessa o centro do chapéu. As lamelas usam material sem luz (`MeshBasic`). As partículas são aditivas, sem ordenação, e ignoram vento e colisão. A variante (mar/floresta) muda cores, curvatura do chapéu, partículas e cenário, mas a gramática é a mesma.
+- **Jardim com 10**: pesado (0,5 fps no headless, contra ~1 fps do carvalho sozinho); os rótulos das duas fileiras se sobrepõem às vezes e a samambaia fica escondida atrás das exóticas. O tema do jardim mudou de `day` para `jardim` (crepúsculo), então as realistas aparecem com outra luz no jardim (sozinhas, continuam idênticas).
+- **Câmera segue** na medusa quase não aproxima (a altura usada é a da borda do sino, que já começa alta).
+
 ## Produto / NFT
 
 - **Exportar**: PNG em alta resolução e glTF/GLB (com os raios "assados" para a idade escolhida), para metadados e arquivos de NFT.
