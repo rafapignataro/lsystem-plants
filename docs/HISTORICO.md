@@ -4,7 +4,7 @@ Datas no horário de Brasília (UTC−3).
 
 ## v3: casca procedural (10/11/2026)
 
-Commit: ver o log do repositório (`v3: casca procedural …`).
+Commit [`45ae0ca`](https://github.com/rafapignataro/lsystem-plants/commit/45ae0ca303c25b5f72ab88ee4cfa5d49d8c82106), 22:22.
 
 - **UV do tubo**: cada vértice ganha `aBk = (cos θ·r_final, sin θ·r_final, arco)`; o arco continua do pai para o filho através do colar. Usar `(cos θ, sin θ)` em vez do ângulo evita a costura em θ = 0/2π.
 - **Ruído** no fragment shader: fBm de value noise 3D (4 oitavas) e Voronoi 3D (F1, F2, id da célula), com o eixo do galho esticado para alongar as células.
