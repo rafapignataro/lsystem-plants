@@ -7,7 +7,7 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
 5. Shaders (idade + vento + casca procedural)
-6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4)
+6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4) · 6c. As 5 árvores raras (v5)
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
 9. UI / estado
@@ -126,7 +126,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - Temas `day` / `night` (céu em gradiente, neblina, luzes, bloom); o salgueiro usa `night` e uma `PointLight` com a cor da luz.
 - Escala: cada planta é normalizada para a altura-alvo da espécie (`height`), considerando a largura (`max(altura, 0.75·largura)`).
 - Enquadramento: `frame()` ajusta a câmera ao bounding box e desloca a projeção (`setViewOffset`) para não ficar atrás do painel (no desktop, à direita; no celular, para cima). "Câmera segue" aproxima a câmera na muda e afasta conforme a planta cresce.
-- Jardim (v4): as 10 espécies em duas fileiras (exóticas na frente, realistas atrás), tema `jardim` (crepúsculo), rótulos clicáveis projetados na tela.
+- Jardim (v5): as 15 espécies em três fileiras (exóticas na frente, realistas no meio, raras atrás), tema `jardim` (crepúsculo), câmera mais alta, rótulos clicáveis projetados na tela (fileira da frente embaixo da planta, as de trás em cima da copa) e afastados por um passo guloso a cada quadro (ordenados por y, cada rótulo que encosta em outro desce até não encostar mais). As plantas do jardim são montadas com LOD (ver §11).
 
 ## 8. Desempenho medido
 
@@ -221,3 +221,26 @@ As 5 exóticas usam o mesmo motor (L-System → tartaruga → esqueleto → Leon
 **Cenários novos:** `gruta` (cristal), `abismo` (medusa, coral do mar), `deserto` (cacto), `vazio` (neural), `floresta` (fungo), `jardim` (crepúsculo, modo Jardim). Os que têm `stars` mostram um céu estrelado (`Points` fixo, sem neblina).
 
 **Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 1,0 fps; cristal 2,0; medusa 3,5; cacto 3,5; neural 3,3; coral 3,0; jardim com as 10: 0,5 fps. Montagem: cristal ~20–50 ms (1,3–3,5 mil nós), medusa ~10–20 ms, cacto < 15 ms, neural 30–200 ms (1,4–8 mil nós), coral < 15 ms.
+
+## 11. Árvores raras (v5)
+
+Mesma regra da v4: todo gancho novo é opcional e, sem ele, o caminho de código é idêntico. As 10 espécies anteriores continuam **idênticas** (hash de palavra, esqueleto, raios, P/casca/regras/madeira, todos os atributos de geometria e matrizes/cores das instâncias para 10 espécies × 5 seeds, e screenshot pixel a pixel das 5 realistas).
+
+| Novidade | Onde | Como |
+|---|---|---|
+| `tube.bump(θ, arco, anel, ehTronco, P)` | `buildTubes` | multiplica o relevo de cada vértice do anel (depois da conta antiga, então quem não tem o gancho não muda). `ehTronco` = cadeia que começa na raiz. Baobá: garrafa; sequoia: sapopemas; figueira: alargamento perto do chão. |
+| `W(seg)` raiz aérea | tartaruga | cadeia vertical de nós até `y = 0`, nascendo de `max(t1 do módulo, t1 do nó) + atraso` e descendo em `sp.rootDrop` iterações. Registra `{primeiro nó, ponta, toque no chão, fração f}` em `sk.boost`. |
+| Raízes engrossando | `computeRadii` | depois da passada de Leonardo, se `W.roots` existe: `r = max(r, rTronco · f · g^0,8)`, com `g` = 0 → 1 do toque no chão até o fim da vida. Fica fora de Leonardo de propósito: a raiz é um caminho de carga próprio, e somar o peso dela incharia o tronco. |
+| `Y(s)` fruto | tartaruga | instância `fruit` sempre para baixo (geometria de cabinho + cápsula, origem no ponto de inserção). |
+| Folhas novas | `GEOMS` | `strap` (fita estreita com quilha, dragoeiro), `euca` (lanceolada, eucalipto), `banyan` (oval larga, figueira), `fruit`. |
+| Casca do eucalipto | shader da casca, `#ifdef LS_FX_EUCALIPTO` | placas de Voronoi esticadas, estágio de cor por placa a partir da maturidade do nó, paleta `uPal[5]`. Ver ESPECIES. |
+| Sangue de dragão | shader da casca, `#ifdef LS_FX_DRAGOEIRO` | ferimentos (ruído grosso) + filetes verticais finos (ruído muito esticado em z), só na madeira madura, intensidade `uFx.x`. |
+| Escala humana | `extra` da sequoia | silhueta (pernas, corpo, cabeça, braços) com altura `alturaDaPlanta · 1,8 / alturaReal`, ao pé do tronco; entra no bounding box. |
+| Cenários | `THEMES` | `arido` (dragoeiro) e `savana` (baobá). |
+| `frame(..., { ty })` | câmera | altura do alvo configurável (o jardim usa 0,22 para sobrar espaço aos rótulos). |
+
+As duas casca-FX usam o modo `frag: 'bark'` da v4 (reusam o shader da v3 e só acrescentam um bloco antes do musgo), então a casca, o relevo e a iluminação continuam os mesmos.
+
+**LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas 30% maiores. As duas reduções acontecem **depois** de todo o consumo de RNG (o número de anéis não muda, e as cores das folhas são sorteadas antes do corte), então a planta do jardim é a mesma planta, só mais leve. Espécies com lados fixos (`tube.R`, como cristal e cacto) não mudam.
+
+**Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 0,8 fps; dragoeiro 2,8; baobá 3,8; eucalipto 2,3; figueira 1,3; sequoia 2,3. Jardim com as 15 (com LOD): 0,5 fps e 360 mil vértices de tubo, contra 0,3 fps e 414 mil do jardim da v4 com 10 espécies (mesma máquina, mesma sessão). Montagem: dragoeiro ~45 ms, baobá ~15 ms, eucalipto ~80 ms, figueira 130–230 ms (3 mil nós, 14 mil folhas), sequoia ~55–80 ms; o jardim inteiro ~640 ms.

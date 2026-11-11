@@ -30,6 +30,15 @@
 - **Jardim com 10**: pesado (0,5 fps no headless, contra ~1 fps do carvalho sozinho); os rótulos das duas fileiras se sobrepõem às vezes e a samambaia fica escondida atrás das exóticas. O tema do jardim mudou de `day` para `jardim` (crepúsculo), então as realistas aparecem com outra luz no jardim (sozinhas, continuam idênticas).
 - **Câmera segue** na medusa quase não aproxima (a altura usada é a da borda do sino, que já começa alta).
 
+## Árvores raras (v5)
+
+- **Sequoia**: os galhos de baixo não caem com a idade. A parte nua do tronco é fixa pela seed (`bare`), então a muda também é um mastro nu com um tufo no topo (uma sequoia jovem de verdade é um cone cheio até o chão). Falta morte de galho (módulo `F` com `die`). A silhueta humana só se vê de perto (é para ser assim, mas no enquadramento padrão ela tem poucos pixels).
+- **Figueira**: as raízes aéreas são retas e verticais (não se enroscam nem se fundem), descem de qualquer altura e engrossam por uma regra fora de Leonardo. Elas não "seguram" o galho (o galho não afina depois da raiz). Folhas grandes em tufos densos escondem o tronco central em algumas seeds. É a mais pesada das raras (~14 mil folhas, ~90 mil vértices).
+- **Baobá**: o perfil de garrafa é um multiplicador do tubo, então o ombro do tronco pode parecer um "gargalo" que encontra galhos mais finos. A casca é lisa e uniforme, sem as cicatrizes e dobras verticais dos baobás velhos. A copa tem poucas folhas em qualquer idade (estação seca permanente).
+- **Eucalipto**: a copa é rala e irregular, às vezes em tufos separados. Aos ~50% de idade a muda perde as folhas juvenis antes dos galhos terem folhas. As placas da casca são planas (não há relevo de casca descolando).
+- **Dragoeiro**: o tronco é sempre único (sem a bifurcação baixa de alguns exemplares). Vistas de longe, as manchas de resina se juntam e o tronco parece avermelhado por inteiro. As folhas são fitas planas instanciadas (não há a dobra rígida para cima de cada roseta).
+- **Jardim com 15**: as raras atrás aparecem parcialmente cobertas pelas realistas (baobá e dragoeiro principalmente). Os rótulos não se sobrepõem, mas podem ficar longe da planta quando são empurrados. O contador de instâncias no painel do jardim mostra o total antes do LOD.
+
 ## Produto / NFT
 
 - **Exportar**: PNG em alta resolução e glTF/GLB (com os raios "assados" para a idade escolhida), para metadados e arquivos de NFT.

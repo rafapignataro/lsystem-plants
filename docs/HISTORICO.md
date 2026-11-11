@@ -2,6 +2,19 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v5: 5 árvores raras (11/11/2026)
+
+Commit COMMIT_V5.
+
+- **5 espécies novas**, no grupo "Raras" do seletor (agora Realistas / Raras / Exóticas): 🐉 Dragoeiro de Socotra, 🪵 Baobá, 🌈 Eucalipto Arco-Íris, 🌳 Figueira-de-Bengala, 🌲 Sequoia Gigante (ver [ESPECIES](ESPECIES.md#as-5-árvores-raras-v5)).
+- **Motor**: `tube.bump` (perfil do tronco: garrafa, sapopemas, alargamento), símbolo `W` (raiz aérea que desce até o chão e engrossa como tronco secundário, fora da regra de Leonardo), símbolo `Y` (fruto pendente), folhas `strap`, `euca`, `banyan` e geometria `fruit`.
+- **Casca**: tipo novo do eucalipto arco-íris (placas verticais que mudam de cor com a idade, paleta e padrão pela seed) e escorridos de resina do dragoeiro, ambos atrás de `#ifdef` no shader da casca da v3.
+- **Escala**: silhueta humana de 1,8 m ao pé da sequoia, proporcional à altura real sorteada (70–95 m).
+- **Cenários**: `arido` e `savana`.
+- **Jardim com as 15** em três fileiras (exóticas, realistas, raras), câmera mais alta, rótulos que não se sobrepõem e LOD (tubos com menos lados e metade das folhas). Mesmo com 5 plantas a mais, ficou mais leve que o da v4.
+- **Compatibilidade**: as 10 espécies anteriores continuam idênticas à v4 para a mesma seed (hash completo para 10 espécies × 5 seeds, e screenshot pixel a pixel das realistas). As raras são determinísticas entre recarregamentos.
+- Screenshots: `screenshots/v5/` (no workspace do POC, fora do repositório).
+
 ## v4: 5 espécies exóticas (11/11/2026)
 
 Commit [`7a1a60b`](https://github.com/rafapignataro/lsystem-plants/commit/7a1a60bd90aafe07cc689ea82806514197eef2c1), 01:18.

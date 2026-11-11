@@ -1,6 +1,6 @@
-# As 10 espécies
+# As 15 espécies
 
-5 realistas (v1–v3) e 5 exóticas (v4, no fim deste arquivo).
+5 realistas (v1–v3), 5 exóticas (v4) e 5 árvores raras (v5, no fim deste arquivo).
 
 Cada espécie é um objeto em `SPECIES` (`index.html`, seção 6) com:
 
@@ -369,3 +369,149 @@ final: S → F P (chapéu do topo, um pouco maior)
 | `cap` / `capDecay` / `pCap` | 0.5–0.72 / 0.8–0.88 / 0.35–0.6 |
 | `dome` | mar 0.04–0.1 · floresta 0.22–0.34 |
 | `gills` | 28–44 |
+
+---
+
+# As 5 árvores raras (v5)
+
+Árvores **reais e incomuns**, no espírito das realistas (nada de fantasia). Usam o mesmo motor e os ganchos da v4, mais três novidades descritas em [ARQUITETURA §11](ARQUITETURA.md#11-árvores-raras-v5): perfil do tronco por gancho (`tube.bump`), raízes aéreas que viram troncos (`W`) e frutos pendentes (`Y`). Fluxos de RNG próprios (`seed::<id>::…`), então as 10 espécies anteriores não mudam.
+
+## 🐉 Dragoeiro de Socotra (`dragoeiro`)
+
+**Ideia:** *Dracaena cinnabari*. A planta jovem é um caule único com uma roseta; depois cada ponta se divide **em duas**, em planos alternados (giro de 90°), por muitas gerações. Como todas as pontas têm a mesma idade, elas chegam juntas à mesma altura e formam o guarda-chuva denso. As folhas (rígidas, em fita, com quilha) só existem nas pontas.
+
+```
+ω : !(1) F(tronco) A(1)
+A(s) → /(90° ± 12°) ~(−up) F(s·entrenó) [ &(ângulo) A(s·razão) ] [ ^(ângulo) A(s·razão) ]
+final: A → F(0.12) + roseta de N folhas em espiral áurea (137,5°), inclinação 8°→78°
+juvenil: A → roseta (80% das folhas)
+```
+
+- `~(−up)` é um tropismo leve para cima, que fecha a copa em cúpula.
+- **Sangue de dragão** (seed, 55%): escorridos de resina vermelho-escura no shader da casca (`LS_FX_DRAGOEIRO`), em ferimentos espalhados e em filetes verticais finos abaixo deles. Só aparecem na madeira madura. A intensidade também vem da seed.
+- Casca lisa cinza-clara, quase sem lenticelas. Cenário `arido`.
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` (dicotomias) | 7–8 (128–256 pontas) |
+| `trunk` | 2.6–3.6 |
+| `angle` | 30–40° |
+| `ratio` | 0.80–0.86 |
+| `up` | 0.08–0.14 |
+| `leaves` por roseta | 16–24 |
+| `leafLen` | 0.75–1.0 |
+| `sap` / `sapAmt` | 55% · 0.6–1 |
+
+## 🪵 Baobá (`baoba`)
+
+**Ideia:** *Adansonia*. O tronco é uma garrafa maciça e a copa é curta e retorcida, como raízes viradas para cima. Duas coisas fazem o tronco engordar tanto:
+
+1. **Leonardo exagerado:** expoente `e` de 1,20–1,32 (nas realistas, ~2–2,6). Com `e` baixo, o pai fica muito mais grosso que a soma dos filhos, e o crescimento secundário (`G = 1,5`) engrossa mais quem é mais velho (o tronco).
+2. **Perfil de garrafa no tubo** (`tube.bump`, só na cadeia do tronco): `f = arco / altura do tronco`, `(1 + 0,15·e^(−f/0,05) + barriga·sin(π·f/0,9)) · (1 − 0,5·((f − 0,72)/0,28)^1,3)`, mais ondulações suaves em θ. Base levemente alargada, barriga no meio e um ombro que fecha para encontrar os galhos.
+
+```
+ω : !(1) F(h/6)×6 C
+C → { [ /(360°/n·i ± 20°) &(ângulo ± 10°) ~(−0.04) B(1) ] } × n          (n = 4–7 galhos)
+B(s) → F(s·len) /(±70°) &(±retorcimento) F(s·len/2) [ &(35°) B(s·razão) ] [ ^(25°) B(s·razão) ]
+       s < 0.3 → F  L L L (com prob.)  Y (fruto, com prob.)
+juvenil: C, B → folhas (a muda tem folhas antes de ter copa)
+```
+
+- **Frutos** (seed, 70%): `Y(s)` pendura uma cápsula ovalada com cabinho comprido (geometria `fruit`, origem no ponto de inserção, sempre para baixo).
+- Casca lisa acinzentada com dobras largas. Folhas poucas (copa quase nua, como na estação seca). Cenário `savana`.
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` | 4–5 |
+| `trunkH` | 4.2–5.4 |
+| `bulge` (barriga) | 0.20–0.40 |
+| `limbs` | 4–7 |
+| `angle` | 50–72° |
+| `gnarl` (retorcimento) | 20–34° |
+| `ratio` | 0.60–0.68 |
+| `leafP` | 0.35–0.7 |
+| `fruits` / `fruitP` | 70% · 0.25–0.45 |
+
+## 🌈 Eucalipto Arco-Íris (`eucalipto`)
+
+**Ideia:** *Eucalyptus deglupta*. Tronco alto, reto e liso. A casca descasca em faixas: a camada nova é verde-viva e, com o tempo, amadurece para laranja, roxo, azul e vinho. Como cada placa descasca numa época diferente, o tronco mostra todas as cores ao mesmo tempo.
+
+```
+ω : !(1) A(0)
+A(k) → F(entrenó·(1 − k/4n)) [ &(ângulo) ~(−0.03) B(1 − 0.5·u) ]? /(137.5°) A(k+1)    (galho só se k ≥ n·bare)
+A(n) → B(0.85)
+B(s) → F(s·bLen) L? [ +(35°) B(0.6s) ] [ −(30°) B(0.55s) ]? /(90° ± 30°) ^(6°) B(0.8s)     (s < 0.14 → folhas pendentes)
+juvenil: A → 4 folhas (a muda tem folhas no ápice)
+```
+
+**Casca nova (`LS_FX_EUCALIPTO`, no shader de casca da v3):**
+
+- Placas = Voronoi em `(xy·célula, z·alongamento)` com warp de ruído. `alongamento` pequeno → faixas longas; maior → placas.
+- Cada placa tem um id `v.z`. Tempo de cor da placa: `idade = clamp(maturidade_do_nó · velocidade · (0,6 + 0,8·v.z), 0, 1)`; estágio: `idade · 4 · fract(1,618·v.z + espalhamento·ruído)`. Madeira nova é toda verde; madeira velha mistura todos os estágios. Placas com `fract` baixo "descascaram há pouco" e voltam a ser verdes.
+- Cor = mistura entre `uPal[estágio]` e `uPal[estágio+1]`, com fibras finas verticais e bordas escuras e finas onde a placa descola.
+- **Paleta** (seed): `clássica`, `tropical`, `fria` ou `outono` (5 cores cada, uniform `uPal[5]`). **Padrão** (seed): `faixas longas` (0,06–0,10), `faixas` (0,12–0,18) ou `placas` (0,22–0,32).
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` | 19–20 |
+| `n` (entrenós do tronco) | 13–15 |
+| `bare` (fração sem galhos) | 0.50–0.62 |
+| `pB` | 0.6–0.85 |
+| `angle` | 55–72° |
+| `bLen` | 1.1–1.4 |
+| `speed` (maturação da cor) | 3.5–5 |
+| `cell` · `warp` · `spread` | 1.1–1.6 · 0.5–1.1 · 0.8–1.6 |
+
+## 🌳 Figueira-de-Bengala (`figueira`)
+
+**Ideia:** *Ficus benghalensis*. Galhos quase horizontais soltam **raízes aéreas** que descem até o chão. Quando a raiz toca o solo, ela engrossa com a idade e vira um tronco secundário, e uma árvore vira um pequeno bosque.
+
+```
+ω : { /(137.5°) F(tronco/n) [ &(ângulo − 2i) ~(0.005) B(1 − 0.06i) ] } × n   F(0.3) { [ &(40°) C(0.9) ] } × 3–4
+B(s) → F(seg) W(0.5)? [ ^(60°) C(0.35 + 0.3s) ] [ ±45° B(0.7s) ]? /(±30°) B(0.9s)      (s < 0.35 → C(0.45))
+C(s) → F(0.8s) L [ +(35°) C(0.68s) ] [ −(35°) C(0.68s) ] /(90°) C(0.6s)               (copa; s < 0.18 → folhas)
+```
+
+- **`W(seg)`**: a tartaruga cria uma cadeia vertical de nós do ponto atual até `y = 0`, com um leve tremor. Ela nasce depois do módulo e desce ao longo de `rootDrop` = 1,4 iteração (o slider de idade mostra a raiz descendo).
+- **Engrossamento:** quando a ponta chega ao chão, o raio da raiz cresce de 0 até `f · raio do tronco` ao longo do resto da vida da planta (`f`: 45% das raízes ficam com 25–42% do tronco e o resto com 6–16%, sorteado pela seed). Esse raio **não** passa pela regra de Leonardo: na árvore real a raiz é um caminho de carga próprio até o chão, e somar o peso dela no galho incharia o tronco principal.
+- `tube.bump` alarga a base de todos os troncos perto do chão (`1 + 0,9·e^(−y/0,3)`, com 5 lobos).
+- Folhas largas, ovais, coriáceas, em copa densa.
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` | 7–8 |
+| `trunk` | 2.4–3.0 |
+| `limbs` | 5–7 |
+| `limbAngle` | 72–84° |
+| `seg` | 0.85–1.1 |
+| `pRoot` (raiz por segmento) | 0.25–0.4 |
+| `pSide` | 0.2–0.35 |
+| `leafSize` | 0.42–0.55 |
+
+## 🌲 Sequoia Gigante (`sequoia`)
+
+**Ideia:** *Sequoiadendron giganteum*. Tronco altíssimo com sapopemas na base, nu até bem alto, casca fibrosa avermelhada e sulcada, e copa estreita, de cônica a arredondada. Uma **silhueta humana de 1,8 m** ao pé do tronco dá a escala. Ela é proporcional à altura real sorteada pela seed (70–95 m).
+
+```
+ω : !(1) A(0)
+A(k) → F(entrenó·(1 − 0.3k/n)) { [ /(360°/p·i ± 30°) &(ângulo) B(L(u), 0) ] } × p? /(137.5°) A(k+1)    (só para k ≥ n·bare)
+L(u) = √(1 − u^(1 + 2·round)) · min(1, 0.55 + 3u)          u = posição relativa na copa
+B(l, j) → ~(j < 2 ? caimento : −ponta) N F(l·seg) [ ±50° ramo com N ] … B(0.86l, j+1)     (galho cai e depois sobe)
+juvenil: A → tufo de agulhas em cone
+```
+
+- Sapopemas: `tube.bump` na cadeia do tronco: `1 + butt·e^(−arco/buttH)·(½ + ½cos(lobos·θ + …))^1,5` + estrias finas.
+- Casca tipo 1 (sulcada) com alongamento 0,06–0,10, fendas profundas e tom vermelho-ferrugem.
+- O painel mostra a `Altura real (m)` e a linha de escala nas regras.
+
+| Parâmetro | Faixa |
+|---|---|
+| `iterations` | 27–29 |
+| `n` | 24–26 |
+| `bare` | 0.42–0.55 |
+| `per` (galhos por nó) | 3–4 |
+| `angle` | 72–92° |
+| `droop` / `upturn` | 0.06–0.14 / 0.05–0.12 |
+| `round` | 0.4–1.0 |
+| `butt` / `buttH` / `lobes` | 0.45–0.8 / 1.2–2.0 / 5–8 |
+| `realH` | 70–95 m |

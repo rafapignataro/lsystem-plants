@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v4 · POC Three.js</title>
+<title>Jardim L-System v5 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -62,7 +62,7 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v4 · Three.js · L-Systems com seed determinística · 5 espécies realistas + 5 exóticas (cristal, medusa, cacto gravitacional, raiz neural, coral-fungo)</p>
+  <p class="sub">POC v5 · Three.js · L-Systems com seed determinística · 5 espécies realistas + 5 árvores raras (dragoeiro, baobá, eucalipto arco-íris, figueira-de-bengala, sequoia) + 5 exóticas</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -224,12 +224,13 @@ const wordToString = (w, max = 600) => {
    3. Tartaruga 3D (H = heading, L = left, U = up) -> esqueleto de nós
    F f + - & ^ \ / | [ ] ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
    v4: $ (tropismo para um ponto atrator P.attractor)  P (chapéu/prateleira com lamelas)  X (lasca de cristal)
+   v5: W(seg) (raiz aérea: desce na vertical até o chão e vira tronco secundário)  Y(s) (fruto pendente)
    Cada F cria um nó {posição, pai, t0, t1}. Os raios saem depois do esqueleto.
    ===================================================================== */
 const GRAV = new V3(0, -1, 0);
 const UPV = new V3(0, 1, 0);
 function interpret(word, sp, P, rng) {
-  const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0];
+  const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0], BOOST = [];
   const inst = {};
   const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) { it.node = st.node; it.arc = st.arc; a.push(it); } };
   let st = { pos: new V3(), H: new V3(0, 1, 0), L: new V3(-1, 0, 0), U: new V3(0, 0, 1), trop: 0, node: 0, att: 0, arc: 0 };
@@ -303,12 +304,28 @@ function interpret(word, sp, P, rng) {
         const it = { p: st.pos.clone(), y, z, s, life: life(m) };
         add('cap', it); add('gill', { ...it }); break;
       }
+      case 'W': { // v5: raiz aérea da figueira: cadeia de nós até y = 0, nasce depois do módulo e desce em sp.rootDrop iterações
+        if (st.pos.y < 0.8 || X.length + 40 >= MAX_NODES) break;
+        const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
+        const tb = Math.max(m.t1 ?? 0, T1[st.node]) + (p && p[1] != null ? p[1] : 0.2);
+        let par = st.node, x = st.pos.x, z = st.pos.z; const y0 = st.pos.y, a0 = X.length;
+        for (let j = 1; j <= k; j++) {
+          x += rng.jit(0.04); z += rng.jit(0.04);
+          X.push(x); Y.push(y0 * (1 - j / k)); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
+          par = X.length - 1;
+        }
+        BOOST.push({ a: a0, i: par, t: tb + drop, f: rng.f() < 0.45 ? rng.range(0.25, 0.42) : rng.range(0.06, 0.16) });
+        break;
+      }
+      case 'Y': add('fruit', { p: st.pos.clone(), y: UPV.clone(), z: new V3(1, 0, 0).applyAxisAngle(UPV, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
       case 'X': add('shard', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.3, life: life(m) }); break;
       case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
     }
   }
   const N = X.length;
-  return { sk: { N, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), PAR: Int32Array.from(PAR), T0: Float32Array.from(T0), T1: Float32Array.from(T1) }, inst };
+  const sk = { N, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), PAR: Int32Array.from(PAR), T0: Float32Array.from(T0), T1: Float32Array.from(T1) };
+  if (BOOST.length) sk.boost = BOOST;
+  return { sk, inst };
 }
 /* =====================================================================
    4. Geometrias base (folha, pétala, agulhas, esfera)
@@ -366,7 +383,18 @@ const GEOMS = {
   frill: () => frillGeo(),
   cap: () => capGeo(0.25),
   gill: () => gillGeo(0.25, 36),
+  // v5
+  strap: () => sheet({ width: 0.07, fold: 0.35, curve: 0.06, profile: (u) => Math.min(1, Math.sin(Math.PI * Math.min(u * 0.96 + 0.04, 1)) * 2.5) * (1 - 0.55 * u), nu: 7, nv: 1 }),
+  euca: () => sheet({ width: 0.2, fold: 0.04, curve: 0.18, profile: PROFILES.lance, nu: 6, nv: 1 }),
+  banyan: () => sheet({ width: 0.5, fold: 0.12, curve: 0.08, profile: PROFILES.oval }),
+  fruit: () => fruitGeo(),
 };
+// fruto do baobá: cabinho fino em cima (origem = ponto de inserção) e cápsula ovalada pendurada
+function fruitGeo() {
+  const pts = [new THREE.Vector2(0.012, 0), new THREE.Vector2(0.012, -0.55)];
+  for (let i = 0; i <= 10; i++) { const t = i / 10, a = Math.PI * t; pts.push(new THREE.Vector2(Math.max(Math.sin(a) * 0.17, 0.003), -0.55 - 0.03 - (1 - Math.cos(a)) * 0.26)); }
+  const g = new THREE.LatheGeometry(pts, 10); g.computeVertexNormals(); return g;
+}
 // lasca de cristal: prisma facetado com ponta (lathe de poucos lados + flatShading no material)
 function crystalGeo(sides) {
   const g = new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.2, 0.02), new THREE.Vector2(0.17, 0.72), new THREE.Vector2(0, 1.05)], sides);
@@ -490,7 +518,7 @@ vec3 lsFxEmis(vec3 n, vec3 v){
 #endif
 }
 `;
-const FX = { cristal: { frag: 'none' }, medusa: { frag: 'own' }, neural: { frag: 'own' }, cacto: { frag: 'own' }, coral: { frag: 'bark' } };
+const FX = { cristal: { frag: 'none' }, medusa: { frag: 'own' }, neural: { frag: 'own' }, cacto: { frag: 'own' }, coral: { frag: 'bark' }, dragoeiro: { frag: 'bark' }, eucalipto: { frag: 'bark' } };
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
@@ -547,6 +575,12 @@ vec3 lsVor(vec3 p){ // F1, F2, id da célula
   return vec3(sqrt(F1), sqrt(F2), id);
 }
 float lsHt; float lsRough; float lsEmis;
+#if defined(LS_FX_DRAGOEIRO) || defined(LS_FX_EUCALIPTO)
+uniform vec4 uFx; uniform vec4 uFx2;
+#endif
+#ifdef LS_FX_EUCALIPTO
+uniform vec3 uPal[5];
+#endif
 // tipos: 0 lisa (lenticelas), 1 sulcada (Voronoi esticado), 2 em placas, 3 raque estriada
 vec3 lsBark(vec3 base, vec3 nW){
   vec3 p = vBk + uSeedOff;
@@ -593,6 +627,31 @@ vec3 lsBark(vec3 base, vec3 nW){
   float hh = mix(0.55 + 0.05 * (n1 - 0.5), h, m);
   lsRough = mix(0.72, 0.95, m) + 0.05 * (1.0 - hh);
   lsEmis *= m * detail;
+#ifdef LS_FX_EUCALIPTO
+  { // v5: casca que descasca em placas verticais; cada placa amadurece verde → laranja → roxo → azul → vinho
+    vec3 q = vec3(p.xy * uFx.y, p.z * uFx.z) + uFx.w * vec3(lsN(p * 0.6), lsN(p * 0.6 + 3.1), 0.0);
+    vec3 v = lsVor(q); float e = v.y - v.x;
+    float age = clamp(vMt.x * uFx.x * (0.6 + 0.8 * v.z), 0.0, 1.0);        // quanto tempo a placa teve para mudar de cor
+    float stage = min(age * 4.0 * fract(v.z * 1.618 + uFx2.x * lsN(p * 0.15)), 3.999); // placas descascadas há pouco voltam a ser verdes
+    int si = int(stage); float sf = smoothstep(0.25, 0.75, fract(stage));
+    vec3 pc = mix(uPal[si], uPal[min(si + 1, 4)], sf);
+    float fib = lsN(vec3(p.xy * 7.0, p.z * 0.35));
+    pc *= 0.82 + 0.36 * fib;
+    float edge = (1.0 - smoothstep(0.0, 0.035 + aa, e)) * detail;
+    pc = mix(pc, pc * 0.55, edge * 0.5);
+    col = mix(base, pc, smoothstep(0.0, 0.12, vMt.y / uRmax));
+    hh = 0.62 - 0.3 * edge + 0.04 * fib; lsRough = 0.5 + 0.2 * edge;
+  }
+#endif
+#ifdef LS_FX_DRAGOEIRO
+  { // v5: escorridos de resina vermelha ("sangue de dragão")
+    float wound = smoothstep(0.66, 0.76, lsN(vec3(p.xy * 0.6, p.z * 0.3) + 5.0));      // ferimentos espalhados na casca
+    float streak = smoothstep(0.58, 0.7, lsN(vec3(p.xy * 3.2, p.z * 0.07) + 9.0) + 0.12 * lsN(p * 4.0)); // escorridos longos e finos
+    float drip = max(streak * smoothstep(0.45, 0.65, lsN(vec3(p.xy * 0.6, p.z * 0.12) + 5.0)), wound * 0.85) * smoothstep(0.15, 0.5, m) * uFx.x;
+    col = mix(col, vec3(0.22, 0.008, 0.012) * (0.75 + 0.5 * n1), drip);
+    hh = mix(hh, 0.8, drip); lsRough = mix(lsRough, 0.35, drip);
+  }
+#endif
   // musgo nas faces viradas para cima da madeira velha
   float up = nW.y + 0.55 * (lsF(p * 0.45 + 3.7) - 0.5);
   float moss = smoothstep(0.25, 0.65, up) * smoothstep(0.35, 0.8, m) * uBk2.z;
@@ -1384,7 +1443,7 @@ Object.assign(SPECIES, {
   },
 });
 const EXOTIC = ['cristal', 'medusa', 'cacto', 'neural', 'coral'];
-const ALL = [...ORDER, ...EXOTIC];
+const ALL_V4 = [...ORDER, ...EXOTIC];
 Object.assign(BARK, {
   cristal: (P) => plainBark('facetada (' + P.mineral + ')'),
   medusa: () => plainBark('mesogleia translúcida'),
@@ -1392,6 +1451,267 @@ Object.assign(BARK, {
   neural: () => plainBark('membrana'),
   coral: (P, r) => ({ variant: P.sea ? 'calcária porosa' : 'estipe fibrosa', type: 0, stretch: 1, crack: 0.1, freq: r.range(9, 13), depth: 0.08, fbm: 0.8, lent: 1, glow: 1.8,
     hi: [1.1, 1.1, 1.1], lo: [0.7, 0.7, 0.75], moss: 0, mossH: 90, mat: 0.3 }),
+});
+
+/* =====================================================================
+   6c. v5: as 5 espécies raras (árvores reais e incomuns)
+   Mesmos ganchos da v4, mais: tube.bump (perfil do tronco), wood.boost (raízes aéreas), símbolos W e Y.
+   ===================================================================== */
+const rosette = (r, k, len, p0, p1) => { let o = ''; for (let i = 0; i < k; i++) { const t = i / Math.max(k - 1, 1); o += `[/(${n(i * 137.508 + r.jit(8))})&(${n(p0 + (p1 - p0) * t + r.jit(6))})L(${n(len * (0.75 + 0.35 * (1 - t)) * (0.9 + r.f() * 0.2))})]`; } return o; };
+function humanFigure(h) { // silhueta de 1,8 m (escala relativa) para dar noção do tamanho
+  const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.8 }), k = h / 1.8;
+  const add = (geo, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x * k, y * k, z * k); o.scale.setScalar(k); o.castShadow = true; g.add(o); };
+  add(new THREE.CylinderGeometry(0.07, 0.06, 0.85, 8), -0.1, 0.43, 0); add(new THREE.CylinderGeometry(0.07, 0.06, 0.85, 8), 0.1, 0.43, 0);
+  add(new THREE.CapsuleGeometry(0.17, 0.42, 4, 10), 0, 1.2, 0); add(new THREE.SphereGeometry(0.12, 12, 10), 0, 1.68, 0);
+  add(new THREE.CylinderGeometry(0.045, 0.04, 0.7, 6), -0.25, 1.15, 0); add(new THREE.CylinderGeometry(0.045, 0.04, 0.7, 6), 0.25, 1.15, 0);
+  return g;
+}
+Object.assign(SPECIES, {
+  dragoeiro: {
+    name: 'Dragoeiro de Socotra', emoji: '🐉', height: 8, theme: 'arido', leafKind: 'strap', fx: 'dragoeiro',
+    desc: 'Dracaena cinnabari: ramificação dicotômica repetida (cada ponta se divide em duas, em planos alternados) formando uma copa de guarda-chuva densa, com rosetas de folhas rígidas só nas pontas. A seed decide se há escorridos de resina vermelha (sangue de dragão).',
+    baseWidth: 0.42, leafRoll: 15, bump: 0.03, wood: { leo: [2.1, 2.4], G: 0.6, tip: 0.035, ring: 0.35 },
+    params(r) {
+      const sap = r.chance(0.55);
+      return {
+        iterations: r.int(7, 8), trunk: r.range(2.6, 3.6), angle: r.range(30, 40), ratio: r.range(0.8, 0.86), internode: r.range(0.75, 0.95), up: r.range(0.08, 0.14),
+        leafLen: r.range(0.75, 1.0), leaves: r.int(16, 24), sap, sapAmt: sap ? r.range(0.6, 1) : 0, leafH: r.range(95, 135), leafS: r.range(0.25, 0.45), leafL: r.range(0.3, 0.38), barkH: r.range(25, 45),
+      };
+    },
+    show: [['iterations', 'Iterações (dicotomias)'], ['trunk', 'Tronco'], ['angle', 'Ângulo da dicotomia', '°'], ['ratio', 'Razão de comprimento'], ['up', 'Tropismo para cima'], ['leaves', 'Folhas por roseta'], ['leafLen', 'Comprimento da folha'], ['sap', 'Sangue de dragão']],
+    build(P) {
+      return {
+        axiom: `!(1)F(${n(P.trunk)})A(1)`,
+        rules: {
+          A: (p, r) => { const s = p[0], a = n(P.angle + r.jit(5)); return `/(${n(90 + r.jit(12))})~(${n(-P.up)})F(${n(s * P.internode)})[&(${a})A(${n(s * P.ratio * (0.94 + r.f() * 0.12))})][^(${a})A(${n(s * P.ratio * (0.94 + r.f() * 0.12))})]`; },
+        },
+        finalize: { A: (p, r) => `F(0.12)` + rosette(r, P.leaves, P.leafLen, 8, 78) },
+        juvenile: { A: (p, r) => rosette(r, Math.round(P.leaves * 0.8), P.leafLen * 0.9, 8, 70) }, juvenileLife: 1.3,
+        display: [
+          `ω : !(1) F(${n(P.trunk)}) A(1)`,
+          `A(s) → /(90°±12) ~(${n(-P.up)}) F(s·${n(P.internode)}) [ &(${n(P.angle)}°) A(s·${n(P.ratio)}) ] [ ^(${n(P.angle)}°) A(s·${n(P.ratio)}) ]   (dicotomia em planos alternados)`,
+          `final: A → roseta de ${P.leaves} folhas em espiral áurea (137,5°), &(8–78°)`,
+          `juvenil: A → roseta (a muda é um caule único com uma roseta, como na natureza)`,
+          P.sap ? `casca: escorridos de resina vermelha (intensidade ${n(P.sapAmt)})` : `casca: lisa, sem resina exposta`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.barkH, 0.08, 0.56), hsl(P.leafH - 20, 0.2, 0.42)],
+    color(kind, it, P, r) { return hsl(P.leafH + r.jit(6), P.leafS + r.jit(0.05), P.leafL + r.jit(0.04)); },
+    extra({ P, fxU, sk }) { fxU.uFx.value.set(P.sapAmt, 0, 0, 0); let H = 0; for (let i = 0; i < sk.N; i++) H = Math.max(H, sk.Y[i]); return { points: [new V3(0, H + P.leafLen * 0.8, 0)] }; },
+  },
+
+  baoba: {
+    name: 'Baobá', emoji: '🪵', height: 8, theme: 'savana', leafKind: 'bush',
+    desc: 'Adansonia: tronco maciço em forma de garrafa (expoente de Leonardo exagerado e engrossamento concentrado no tronco) e copa curta e retorcida, que parece um sistema de raízes virado para cima. Casca lisa acinzentada, poucas folhas e, pela seed, frutos pendurados.',
+    baseWidth: 1.05, leafRoll: 40, bump: 0.05, wood: { leo: [1.2, 1.32], G: 1.5, tip: 0.07, ring: 0.3, share: 1.6 },
+    tube: { bump: (th, arc, g, root, P) => { // perfil de garrafa: base alargada, barriga, ombro arredondado que fecha no topo
+      if (!root) return 1; const f = Math.min(arc / P.trunkH, 1);
+      const prof = (1 + 0.15 * Math.exp(-f / 0.05) + P.bulge * Math.sin(Math.PI * Math.min(f / 0.9, 1))) * (1 - 0.5 * Math.pow(Math.max(f - 0.72, 0) / 0.28, 1.3));
+      return prof * (1 + 0.035 * Math.sin(5 * th + 2 * f) + 0.025 * Math.sin(9 * th - 3 * f)); } },
+    params(r) {
+      const fruits = r.chance(0.7);
+      return {
+        iterations: r.int(4, 5), trunkH: r.range(4.2, 5.4), segs: 6, bulge: r.range(0.2, 0.4), limbs: r.int(4, 7), angle: r.range(50, 72), gnarl: r.range(20, 34), ratio: r.range(0.6, 0.68), len: r.range(0.75, 0.95),
+        leafP: r.range(0.35, 0.7), leafSize: r.range(0.22, 0.3), fruits, fruitP: fruits ? r.range(0.25, 0.45) : 0, fruitSize: r.range(0.45, 0.6), barkH: r.range(15, 35), leafH: r.range(85, 115),
+      };
+    },
+    show: [['iterations', 'Iterações da copa'], ['trunkH', 'Altura do tronco'], ['bulge', 'Barriga da garrafa'], ['limbs', 'Galhos principais'], ['angle', 'Ângulo dos galhos', '°'], ['gnarl', 'Retorcimento', '°'], ['ratio', 'Razão de comprimento'], ['leafP', 'Densidade de folhas'], ['fruits', 'Frutos pendurados']],
+    build(P) {
+      const seg = n(P.trunkH / P.segs);
+      return {
+        axiom: `!(1)${`F(${seg})`.repeat(P.segs)}C`,
+        rules: {
+          C: (p, r) => { let o = ''; for (let i = 0; i < P.limbs; i++) o += `[/(${n(i * 360 / P.limbs + r.jit(20))})&(${n(P.angle + r.jit(10))})~(-0.04)B(1)]`; return o; },
+          B: (p, r) => {
+            const s = p[0], g = P.gnarl;
+            if (s < 0.3) { let o = `F(${n(s * P.len * 0.8)})`; if (r.chance(P.leafP)) o += leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 50); if (r.chance(P.fruitP)) o += `Y(${n(P.fruitSize * (0.8 + r.f() * 0.4))})`; return o; }
+            return `F(${n(s * P.len)})/(${n(r.jit(70))})&(${n(r.jit(g))})F(${n(s * P.len * 0.5)})[&(${n(35 + r.jit(12))})B(${n(s * P.ratio)})][^(${n(25 + r.jit(12))})B(${n(s * P.ratio)})]`;
+          },
+        },
+        finalize: { B: (p, r) => { let o = `F(${n(p[0] * 0.4)})`; if (r.chance(P.leafP)) o += leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 60); if (r.chance(P.fruitP)) o += `Y(${n(P.fruitSize)})`; return o; } },
+        juvenile: { C: (p, r) => leafStr(r, P.leafSize * 1.2, 30) + leafStr(r, P.leafSize * 1.2, 45) + leafStr(r, P.leafSize * 1.2, 60) + leafStr(r, P.leafSize * 1.2, 40), B: (p, r) => leafStr(r, P.leafSize, 40) + leafStr(r, P.leafSize, 55) }, juvenileLife: 1.6,
+        display: [
+          `ω : !(1) F(${seg})×${P.segs} C          (tronco: perfil de garrafa no tubo, barriga ${n(P.bulge)})`,
+          `C → { [ /(360/${P.limbs}·i) &(${n(P.angle)}°) ~(−0.04) B(1) ] } × ${P.limbs}`,
+          `B(s) → F(s·${n(P.len)}) /(±70°) &(±${n(P.gnarl)}°) F [ &(35°) B(s·${n(P.ratio)}) ] [ ^(25°) B(s·${n(P.ratio)}) ]   (galhos retorcidos)`,
+          `       s < 0.3 → F L? ${P.fruits ? 'Y? (fruto pendurado)' : ''}`,
+          `madeira: Leonardo e ≈ 1,5 (pais muito mais grossos que os filhos), anéis concentrados no tronco (share 2,5)`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(P.barkH, 0.035, 0.56), hsl(P.barkH, 0.06, 0.52)],
+    geom: (kind) => kind === 'fruit' ? fruitGeo() : null,
+    color(kind, it, P, r) {
+      if (kind === 'fruit') return hsl(60 + r.jit(10), 0.22, 0.42 + r.jit(0.05));
+      return hsl(P.leafH + r.jit(8), 0.5, 0.3 + r.jit(0.05));
+    },
+  },
+
+  eucalipto: {
+    name: 'Eucalipto Arco-Íris', emoji: '🌈', height: 13, theme: 'day', leafKind: 'euca', fx: 'eucalipto',
+    desc: 'Eucalyptus deglupta: tronco alto, reto e liso cuja casca descasca em faixas verticais. Cada placa nasce verde e amadurece para laranja, roxo, azul e vinho; a seed escolhe a paleta e o padrão das faixas. Copa alta e rala, de folhas lanceoladas pendentes.',
+    baseWidth: 0.5, leafRoll: 30, bump: 0.015, wood: { leo: [2.3, 2.6], G: 0.6, tip: 0.02, ring: 0.45 },
+    params(r) {
+      const pal = r.pick([
+        { name: 'clássica', c: [[95, 0.6, 0.45], [28, 0.85, 0.52], [285, 0.4, 0.38], [205, 0.35, 0.45], [345, 0.45, 0.3]] },
+        { name: 'tropical', c: [[85, 0.65, 0.5], [35, 0.9, 0.55], [12, 0.8, 0.45], [300, 0.35, 0.38], [350, 0.5, 0.28]] },
+        { name: 'fria', c: [[110, 0.5, 0.45], [45, 0.7, 0.55], [265, 0.4, 0.42], [215, 0.45, 0.48], [330, 0.3, 0.3]] },
+        { name: 'outono', c: [[75, 0.55, 0.45], [32, 0.9, 0.5], [20, 0.75, 0.4], [270, 0.3, 0.35], [0, 0.45, 0.25]] }]);
+      const pattern = r.pick(['faixas longas', 'faixas', 'placas']);
+      return {
+        iterations: r.int(19, 20), n: r.int(13, 15), bare: r.range(0.5, 0.62), internode: r.range(0.9, 1.1), pB: r.range(0.6, 0.85), angle: r.range(55, 72),
+        bLen: r.range(1.1, 1.4), leafSize: r.range(0.45, 0.6), palette: pal.name, pal: pal.c, pattern,
+        stretch: { 'faixas longas': r.range(0.06, 0.1), faixas: r.range(0.12, 0.18), placas: r.range(0.22, 0.32) }[pattern], cell: r.range(1.1, 1.6), warp: r.range(0.5, 1.1), speed: r.range(3.5, 5), spread: r.range(0.8, 1.6),
+        leafH: r.range(100, 130),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['n', 'Entrenós do tronco'], ['bare', 'Fração sem galhos'], ['pB', 'Prob. de galho'], ['angle', 'Ângulo dos galhos', '°'], ['palette', 'Paleta da casca'], ['pattern', 'Padrão das faixas'], ['stretch', 'Alongamento vertical'], ['speed', 'Velocidade de maturação']],
+    build(P) {
+      const bk = Math.floor(P.n * P.bare);
+      return {
+        axiom: `!(1)A(0)`,
+        rules: {
+          A: (p, r) => {
+            const k = p[0]; if (k >= P.n) return `B(0.85)`;
+            let o = `F(${n(P.internode * (1 - 0.25 * k / P.n))})`;
+            if (k >= bk && r.chance(P.pB)) o += `[&(${n(P.angle + r.jit(8))})~(-0.03)B(${n(1 - 0.5 * (k - bk) / (P.n - bk))})]`;
+            return o + `/(137.5)A(${k + 1})`;
+          },
+          B: (p, r) => {
+            const s = p[0]; if (s < 0.14) return `F(${n(s * P.bLen)})` + leafStr(r, P.leafSize, 120) + leafStr(r, P.leafSize, 135) + leafStr(r, P.leafSize, 110);
+            return `F(${n(s * P.bLen)})${s < 0.4 ? leafStr(r, P.leafSize, 120) + leafStr(r, P.leafSize, 140) + leafStr(r, P.leafSize, 100) : ''}[+(${n(35 + r.jit(10))})B(${n(s * 0.6)})]${r.chance(0.6) ? `[-(${n(30 + r.jit(10))})B(${n(s * 0.55)})]` : ''}/(${n(90 + r.jit(30))})^(${n(6 + r.jit(5))})B(${n(s * 0.8)})`;
+          },
+        },
+        finalize: { B: (p, r) => leafStr(r, P.leafSize, 120) + leafStr(r, P.leafSize, 140) + leafStr(r, P.leafSize, 100), A: () => `` },
+        juvenile: { A: (p, r) => leafStr(r, P.leafSize * 1.3, 35) + leafStr(r, P.leafSize * 1.3, 55) + leafStr(r, P.leafSize * 1.3, 75) + leafStr(r, P.leafSize * 1.3, 50) }, juvenileLife: 3,
+        display: [
+          `ω : !(1) A(0)`,
+          `A(k) → F(${n(P.internode)}·(1 − k/4n)) [ &(${n(P.angle)}°) ~(−0.03) B(1 − 0.5·u) ]? /(137.5°) A(k+1)   (galho só se k ≥ ${bk}, p=${n(P.pB)})`,
+          `A(${P.n}) → B(0.85)   (topo)`,
+          `B(s) → F(s·${n(P.bLen)}) L? [ +(35°) B(s·0.6) ] [ −(30°) B(s·0.55) ]? /(90°±30°) ^(6°) B(s·0.8)    (s < 0.14 → folhas pendentes)`,
+          `casca: Voronoi esticado (${P.pattern}), cada placa passa por 5 cores (${P.palette}) conforme a idade do nó`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(...P.pal[0]), hsl(...P.pal[0])],
+    color(kind, it, P, r) { return hsl(P.leafH + r.jit(8), 0.45 + r.jit(0.08), 0.3 + r.jit(0.05)); },
+    extra({ P, fxU }) {
+      fxU.uFx.value.set(P.speed, P.cell, P.stretch, P.warp); fxU.uFx2.value.set(P.spread, 0, 0, 0);
+      fxU.uPal = { value: P.pal.map(c => new V3().setFromColor(hsl(...c))) };
+      return null;
+    },
+  },
+
+  figueira: {
+    name: 'Figueira-de-Bengala', emoji: '🌳', height: 9, theme: 'day', leafKind: 'banyan',
+    desc: 'Ficus benghalensis: galhos horizontais longos soltam raízes aéreas que descem até o chão; ao tocar o solo elas engrossam com a idade e viram troncos secundários, e uma árvore vira um pequeno bosque. Copa densa de folhas coriáceas.',
+    baseWidth: 0.55, leafRoll: 35, bump: 0.06, rootDrop: 1.4, wood: { leo: [2.2, 2.5], G: 0.7, tip: 0.012, ring: 0.4 },
+    tube: { bump: (th, arc, g) => 1 + 0.9 * Math.exp(-g.y / 0.3) * (0.75 + 0.25 * Math.cos(5 * th)) },
+    params(r) {
+      return {
+        iterations: r.int(7, 8), trunk: r.range(2.4, 3.0), limbs: r.int(5, 7), limbAngle: r.range(72, 84), seg: r.range(0.85, 1.1), pRoot: r.range(0.25, 0.4), pSide: r.range(0.2, 0.35),
+        leafSize: r.range(0.42, 0.55), leafH: r.range(100, 125), leafL: r.range(0.2, 0.27), crown: r.int(3, 4),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['trunk', 'Tronco'], ['limbs', 'Galhos horizontais'], ['limbAngle', 'Ângulo dos galhos', '°'], ['seg', 'Segmento do galho'], ['pRoot', 'Prob. de raiz aérea'], ['pSide', 'Prob. de ramo lateral'], ['leafSize', 'Tamanho da folha']],
+    build(P) {
+      let axiom = `!(1)`;
+      for (let i = 0; i < P.limbs; i++) axiom += `/(137.5)F(${n(P.trunk / P.limbs)})[&(${n(P.limbAngle - i * 2)})~(0.005)B(${n(1 - i * 0.06)})]`;
+      axiom += `F(0.3)` + Array.from({ length: P.crown }, (_, i) => `[/(${i * 360 / P.crown})&(40)C(0.9)]`).join('');
+      return {
+        axiom,
+        rules: {
+          B: (p, r) => {
+            const s = p[0]; if (s < 0.35) return `C(0.45)`;
+            let o = `F(${n(P.seg * (0.9 + r.f() * 0.2))})`;
+            if (r.chance(P.pRoot)) o += `W(0.5)`;
+            o += `[^(${n(60 + r.jit(15))})C(${n(0.35 + 0.3 * s)})]`;
+            if (r.chance(P.pSide)) o += `[${r.chance(0.5) ? '+' : '-'}(${n(45 + r.jit(10))})B(${n(s * 0.7)})]`;
+            return o + `/(${n(r.jit(30))})B(${n(s * 0.9)})`;
+          },
+          C: (p, r) => { const s = p[0]; if (s < 0.18) return `F(${n(s)})` + leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 60) + leafStr(r, P.leafSize, 40);
+            return `F(${n(s * 0.8)})${leafStr(r, P.leafSize, 55)}[+(${n(35 + r.jit(10))})C(${n(s * 0.68)})][-(${n(35 + r.jit(10))})C(${n(s * 0.68)})]/(90)C(${n(s * 0.6)})`; },
+        },
+        finalize: { B: (p, r) => leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 60), C: (p, r) => leafStr(r, P.leafSize, 45) + leafStr(r, P.leafSize, 65) + leafStr(r, P.leafSize, 30) },
+        juvenile: { C: (p, r) => leafStr(r, P.leafSize, 50) + leafStr(r, P.leafSize, 50) }, juvenileLife: 2,
+        display: [
+          `ω : { /(137.5°) F [ &(${n(P.limbAngle)}°) B(1) ] } × ${P.limbs}  F { [ &(40°) C(0.9) ] } × ${P.crown}`,
+          `B(s) → F(${n(P.seg)}) W? [ ^(60°) C(0.35+0.3s) ] [ ±45° B(s·0.7) ]? B(s·0.9)     (W com p=${n(P.pRoot)}, ramo com p=${n(P.pSide)})`,
+          `C(s) → F(s·0.8) L [ +(35°) C(s·0.68) ] [ −(35°) C(s·0.68) ] /(90°) C(s·0.6)   (copa, s < 0.18 → folhas)`,
+          `W = raiz aérea: desce na vertical até o chão em 1,4 iteração; depois de tocar o chão, a ponta ganha peso`,
+          `    e engrossa com a idade (45% delas até 25–42% do tronco, o resto fica fino) como tronco secundário; a carga não passa pelo galho (fora de Leonardo)`,
+        ],
+      };
+    },
+    bark: () => [hsl(35, 0.12, 0.48), hsl(40, 0.18, 0.5)],
+    color(kind, it, P, r) { return hsl(P.leafH + r.jit(8), 0.55 + r.jit(0.08), P.leafL + r.jit(0.05)); },
+  },
+
+  sequoia: {
+    name: 'Sequoia Gigante', emoji: '🌲', height: 16, theme: 'day', leafKind: 'oak',
+    desc: 'Sequoiadendron giganteum: tronco altíssimo com base em sapopemas, nu até bem alto (os galhos de baixo caem com a idade), casca fibrosa avermelhada e sulcada e copa estreita, de cônica a arredondada. A silhueta humana de 1,8 m ao pé do tronco dá a escala.',
+    baseWidth: 0.95, bump: 0.04, wood: { leo: [2.0, 2.2], G: 0.8, tip: 0.02, ring: 0.6, share: 0.8 },
+    tube: { bump: (th, arc, g, root, P) => root ? 1 + P.butt * Math.exp(-arc / P.buttH) * Math.pow(0.5 + 0.5 * Math.cos(P.lobes * th + 0.3 * Math.sin(2 * th)), 1.5) + 0.025 * Math.sin(17 * th + arc) : 1 },
+    params(r) {
+      return {
+        iterations: r.int(27, 29), n: r.int(24, 26), bare: r.range(0.42, 0.55), internode: r.range(0.85, 1.0), per: r.int(3, 4), angle: r.range(72, 92), seg: r.range(0.4, 0.5), droop: r.range(0.06, 0.14), upturn: r.range(0.05, 0.12),
+        round: r.range(0.4, 1.0), needleLen: r.range(0.28, 0.4), butt: r.range(0.45, 0.8), buttH: r.range(1.2, 2.0), lobes: r.int(5, 8), realH: r.int(70, 95), needleH: r.range(120, 150),
+      };
+    },
+    show: [['iterations', 'Iterações'], ['n', 'Entrenós do tronco'], ['bare', 'Fração sem galhos'], ['per', 'Galhos por nó'], ['angle', 'Ângulo dos galhos', '°'], ['droop', 'Caimento'], ['upturn', 'Ponta virada para cima'], ['round', 'Arredondamento da copa'], ['butt', 'Sapopemas'], ['lobes', 'Lobos da base'], ['realH', 'Altura real (m)']],
+    build(P) {
+      const bk = Math.floor(P.n * P.bare);
+      return {
+        axiom: `!(1)A(0)`,
+        rules: {
+          A: (p, r) => {
+            const k = p[0]; if (k >= P.n) return `[&(25)B(0.5,0)]/(120)[&(25)B(0.5,0)]/(120)[&(25)B(0.5,0)]N(0.5)`;
+            let o = `F(${n(P.internode * (1 - 0.3 * k / P.n))})`;
+            if (k >= bk) {
+              const u = (k - bk) / (P.n - bk), L = Math.pow(Math.max(1 - Math.pow(u, 1 + P.round * 2), 0), 0.5) * Math.min(1, 0.55 + 3 * u);
+              for (let i = 0; i < P.per; i++) if (r.chance(0.85)) o += `[/(${n(i * 360 / P.per + r.jit(30))})&(${n(P.angle + r.jit(8))})B(${n(0.25 + 0.75 * L)},0)]`;
+            }
+            return o + `/(137.5)A(${k + 1})`;
+          },
+          B: (p, r) => {
+            const l = p[0], j = p[1]; if (l < 0.18) return `N(${n(P.needleLen)})`;
+            const tr = j < 2 ? P.droop : -P.upturn;
+            const side = (sg) => `[${sg}(${n(50 + r.jit(12))})&(${n(r.jit(25))})N(${n(P.needleLen)})F(${n(l * P.seg * 0.5)})N(${n(P.needleLen)})[^(40)N(${n(P.needleLen * 0.8)})][&(40)N(${n(P.needleLen * 0.8)})]F(${n(l * P.seg * 0.3)})N(${n(P.needleLen)})]`;
+            return `~(${n(tr)})N(${n(P.needleLen)})F(${n(l * P.seg)})${side('+')}${side('-')}[^(60)N(${n(P.needleLen)})]B(${n(l * 0.86)},${j + 1})`;
+          },
+        },
+        finalize: { B: () => `N(${n(P.needleLen)})`, A: () => `N(0.5)` },
+        juvenile: { A: (p, r) => { let o = `N(0.5)`; for (let i = 0; i < 9; i++) o += `[/(${n(i * 137.5)})&(${n(30 + i * 7)})N(${n(P.needleLen * (1 + i * 0.12))})]`; return o; } }, juvenileLife: 3,
+        display: [
+          `ω : !(1) A(0)`,
+          `A(k) → F(${n(P.internode)}·(1 − 0.3k/n)) { [ &(${n(P.angle)}°) B(L(u), 0) ] } × ${P.per}? /(137.5°) A(k+1)     (galhos só para k ≥ ${bk}: tronco nu embaixo)`,
+          `L(u) = √(1 − u^${n(1 + P.round * 2)}) · min(1, 0,55 + 3u)    (copa estreita, de cônica a arredondada)`,
+          `B(l, j) → ~(j < 2 ? ${n(P.droop)} : −${n(P.upturn)}) N F(l·${n(P.seg)}) [ +50° N F N ] [ −50° N F N ] B(l·0.86, j+1)   (cai e depois sobe)`,
+          `tubo: sapopemas na base (${P.lobes} lobos, ${n(P.butt)}×), casca sulcada fibrosa`,
+          `escala: árvore de ${P.realH} m · silhueta humana de 1,8 m`,
+        ],
+      };
+    },
+    bark: (P) => [hsl(14, 0.5, 0.33), hsl(P.needleH - 30, 0.25, 0.3)],
+    color(kind, it, P, r) { return hsl(P.needleH + r.jit(6), 0.32 + r.jit(0.06), 0.2 + r.jit(0.04)); },
+    extra({ group, P, sk, rFull, W }) {
+      // altura do tronco em unidades da planta ≈ maior Y; humano proporcional à altura real
+      let H = 0; for (let i = 0; i < sk.N; i++) if (sk.Y[i] > H) H = sk.Y[i];
+      const hm = H * 1.8 / P.realH, fig = humanFigure(hm);
+      fig.position.set(W.rMaxFull * (1.6 + P.butt * 1.4), 0, W.rMaxFull * 1.2); fig.rotation.y = -0.6; group.add(fig);
+      return { points: [new V3(W.rMaxFull * (1.8 + P.butt * 1.4), hm, W.rMaxFull * 1.4)] };
+    },
+  },
+});
+const RARE = ['dragoeiro', 'baoba', 'eucalipto', 'figueira', 'sequoia'];
+const ALL = [...ORDER, ...RARE, ...EXOTIC];
+Object.assign(BARK, {
+  dragoeiro: (P, r) => ({ variant: P.sap ? 'lisa com sangue de dragão' : 'lisa', type: 0, stretch: 1, crack: 0.1, freq: r.range(7, 10), depth: 0.07, fbm: 0.8, lent: 0.08, hi: [1.15, 1.12, 1.1], lo: [0.6, 0.58, 0.56], moss: 0, mossH: 90, mat: 0.35 }),
+  baoba: (P, r) => ({ variant: 'lisa com dobras', type: 0, stretch: 1, crack: 0.1, freq: r.range(3, 4.5), depth: 0.12, fbm: 1, lent: 0.25, hi: [1.12, 1.1, 1.08], lo: [0.62, 0.6, 0.6], moss: 0, mossH: 90, mat: 0.3 }),
+  eucalipto: (P, r) => ({ variant: 'arco-íris (' + P.pattern + ')', type: 0, stretch: 1, crack: 0.1, freq: r.range(3.5, 5), depth: 0.05, fbm: 0.5, lent: 0, hi: [1, 1, 1], lo: [1, 1, 1], moss: 0, mossH: 90, mat: 0.45 }),
+  figueira: (P, r) => ({ variant: 'lisa', type: 0, stretch: 1, crack: 0.1, freq: r.range(8, 11), depth: 0.08, fbm: 0.8, lent: 0.6, hi: [1.12, 1.1, 1.05], lo: [0.6, 0.55, 0.5], moss: r.chance(0.5) ? r.range(0.3, 0.6) : 0, mossH: r.range(75, 100), mat: 0.4 }),
+  sequoia: (P, r) => ({ variant: 'fibrosa sulcada', type: 1, stretch: r.range(0.06, 0.1), crack: r.range(0.2, 0.28), freq: r.range(5, 7), depth: r.range(0.18, 0.26), fbm: 0.9, lent: 0, hi: tintV(r, [1.55, 1.25, 1.05], 0.06), lo: [0.3, 0.2, 0.18], moss: 0, mossH: 90, mat: 0.3 }),
 });
 
 /* =====================================================================
@@ -1415,6 +1735,14 @@ function computeRadii(sk, T, W, s, out) {
     const age = Math.max(0, T - T1[i]);
     const r = Math.max(Math.pow(s[i], invE) * (1 + G * age) * sc + ring * age * Math.pow(s[i] / smax, sh), rmin * Math.min(1, s[i]));
     out[i] = r; if (i > 0 && r > mx) mx = r;
+  }
+  if (W.roots) { // v5: raiz aérea que tocou o chão engrossa como um tronco próprio (não passa a carga pelo galho: fora da regra de Leonardo)
+    const rT = out[1] || out[0];
+    for (const b of W.roots) {
+      const g = Math.min(1, Math.max(0, (T - b.t) / b.d)); if (g <= 0) continue;
+      const rr = rT * b.f * Math.pow(g, 0.8), k = Math.max(b.i - b.a, 1);
+      for (let j = b.a; j <= b.i; j++) if (out[j] > 0) { const v = Math.max(out[j], rr * (0.8 + 0.2 * (j - b.a) / k)); out[j] = v; if (v > mx) mx = v; }
+    }
   }
   return mx;
 }
@@ -1445,7 +1773,8 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     chains++;
     const k = list.length - 1;
     const rel = rFull[list[1]] / rMaxFull;
-    const R = TB && TB.R ? TB.R(rel, P) : rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    let R = TB && TB.R ? TB.R(rel, P) : rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    if (W.lod && !(TB && TB.R)) R = Math.max(3, Math.round(R * 0.6)); // v5: jardim com menos lados (não mexe no consumo do RNG)
     const Sbase = TB && TB.S ? TB.S(rel, P) : rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
     // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
     const J = list[0], l1 = Math.hypot(X[list[1]] - X[J], Y[list[1]] - Y[J], Z[list[1]] - Z[J]);
@@ -1504,7 +1833,11 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
           const x = P.ribs * (th + arc * P.spiral), rib = Math.pow(Math.abs(Math.cos(x / 2)), 1.6);
           const seg = 1 - P.pinch * Math.pow(1 - Math.sin(Math.PI * Math.min(Math.max(g.sf, 0), 1)), 2);
           bump.push(g.cap ? pointK : (1 + P.ribAmp * (rib - 0.6)) * seg);
-        } else bump.push(g.cap ? pointK : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr)));
+        } else {
+          let bv = g.cap ? pointK : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr));
+          if (TB && TB.bump && !g.cap) bv *= TB.bump(th, arc, g, collarParent === -1, P); // v5: garrafa do baobá, sapopemas, base das raízes
+          bump.push(bv);
+        }
         if (sp.fx) fxa.push(tag);
         clr.push(c0.r, c0.g, c0.b);
         bk.push(cs * rF, sn * rF, arc);
@@ -1540,7 +1873,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
   return { geo: g, chains, verts: vtx, tris: idx.length / 3 };
 }
 
-function makeInstanced(kind, items, sp, P, rng, U, night, tags) {
+function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod) {
   const geomKey = kind === 'leaf' ? sp.leafKind : (kind === 'orb' || kind === 'center') ? 'sphere' : kind;
   const geo = (sp.geom && sp.geom(kind, P)) || GEOMS[geomKey]();
   const count = items.length;
@@ -1562,6 +1895,17 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags) {
     items.forEach((it, i) => { fi[i * 2] = it.arc || 0; fi[i * 2 + 1] = tags ? tags[it.node] || 0 : 0; });
     geo.setAttribute('aFxI', new THREE.InstancedBufferAttribute(fi, 2));
   }
+  let count2 = count, mats2 = mats, cols2 = cols;
+  if (lod && (kind === 'leaf' || kind === 'needles') && count > 2500) { // v5: LOD do jardim: metade das folhas, 30% maiores (depois do RNG: mesma seed, mesma planta)
+    count2 = Math.ceil(count / 2); mats2 = new Float32Array(count2 * 16); cols2 = new Float32Array(count2 * 3); const l2 = new Float32Array(count2 * 2);
+    const sk = new THREE.Matrix4(), mm = new THREE.Matrix4();
+    for (let i = 0, j = 0; i < count; i += 2, j++) {
+      mm.fromArray(mats, i * 16); const e = mm.elements; for (const q of [0, 1, 2, 4, 5, 6, 8, 9, 10]) e[q] *= 1.3; mm.toArray(mats2, j * 16);
+      cols2.set(cols.subarray(i * 3, i * 3 + 3), j * 3); l2.set(lives.subarray(i * 2, i * 2 + 2), j * 2);
+    }
+    geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(l2, 2));
+    if (geo.attributes.aFxI) { const f = geo.attributes.aFxI.array, f2 = new Float32Array(count2 * 2); for (let i = 0, j = 0; i < count; i += 2, j++) f2.set(f.subarray(i * 2, i * 2 + 2), j * 2); geo.setAttribute('aFxI', new THREE.InstancedBufferAttribute(f2, 2)); }
+  }
   let mat = sp.instMaterial ? sp.instMaterial(kind, P) : null;
   if (mat) {}
   else if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -1571,9 +1915,9 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags) {
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
   patch(mat, 'inst', U, sp.fx);
-  const mesh = new THREE.InstancedMesh(geo, mat, count);
-  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats, 16);
-  mesh.instanceColor = new THREE.InstancedBufferAttribute(cols, 3);
+  const mesh = new THREE.InstancedMesh(geo, mat, count2);
+  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats2, 16);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(cols2, 3);
   mesh.frustumCulled = false;
   mesh.castShadow = kind !== 'orb'; mesh.receiveShadow = kind !== 'orb';
   if (sp.noShadow && sp.noShadow(kind)) mesh.castShadow = false;
@@ -1581,7 +1925,7 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags) {
   return mesh;
 }
 
-function buildPlant(id, seed) {
+function buildPlant(id, seed, opts = {}) {
   const t0 = performance.now();
   const sp = SPECIES[id];
   const P = sp.params(new Rand(`${seed}::${id}::params`));
@@ -1595,6 +1939,8 @@ function buildPlant(id, seed) {
   const wr = new Rand(`${seed}::${id}::wood`);
   const lam = sp.wood.ring ?? 0.5;
   const W = { leo: sp.wood.leo[0] + wr.f() * (sp.wood.leo[1] - sp.wood.leo[0]), G: sp.wood.G * (0.8 + wr.f() * 0.4), tEnd, scale: 1, rMin: 0, ring: 0, share: sp.wood.share ?? 0.4 };
+  if (opts.lod) W.lod = true;
+  if (sk.boost) W.roots = sk.boost.map(b => ({ a: b.a, i: b.i, t: b.t, d: Math.max(tEnd - b.t, 0.5) * 0.9, f: b.f })); // v5: raízes aéreas
   const sbuf = new Float32Array(sk.N), rFull = new Float32Array(sk.N);
   const unitMax = computeRadii(sk, tEnd, W, sbuf, rFull) || 1;
   W.scale = (1 - lam) * sp.baseWidth / unitMax; W.ring = lam * sp.baseWidth / tEnd; W.rMin = sp.baseWidth * (sp.wood.tip ?? 0.012);
@@ -1640,7 +1986,7 @@ function buildPlant(id, seed) {
   bmesh.customDepthMaterial = depthMat('branch', U, sp.fx);
   group.add(bmesh);
   let nInst = 0;
-  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags)); nInst += inst[k].length; }
+  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags, W.lod)); nInst += inst[k].length; }
   const scale = sp.height / Math.max(rawH, rawW * 0.75);
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, oy, -cz);
@@ -1720,6 +2066,9 @@ const THEMES = {
   deserto: { bg: gradientTex([[0, '#090822'], [0.5, '#35204d'], [0.82, '#b45a6c'], [1, '#f0a368']]), fog: 0x4a2a4a, ground: 0x8a5a3c, soil: 0x6a4028, hemi: [0xffc0b0, 0x402030, 0.85], sun: [0xffb890, 1.5], fill: 0.45, exp: 1.0, bloom: [0.55, 0.45, 0.85], stars: true },
   vazio: { bg: gradientTex([[0, '#000000'], [0.6, '#050918'], [1, '#0e1430']]), fog: 0x070b1a, ground: 0x0a0e1a, soil: 0x05070d, hemi: [0x5868b0, 0x0a0a14, 0.7], sun: [0x8090ff, 1.0], fill: 0.3, exp: 1.05, bloom: [0.75, 0.45, 0.72], stars: true },
   floresta: { bg: gradientTex([[0, '#010403'], [0.6, '#0a1810'], [1, '#1b2a1a']]), fog: 0x0c1810, ground: 0x18220f, soil: 0x120e08, hemi: [0xb0b0c0, 0x100c08, 0.6], sun: [0xc8d0ff, 0.9], fill: 0.3, exp: 1.1, bloom: [0.75, 0.5, 0.72], stars: true },
+  // v5: cenários das raras
+  arido: { bg: gradientTex([[0, '#5d8fc4'], [0.55, '#bcd2dc'], [1, '#e8d8b8']]), fog: 0xe0d6c0, ground: 0x9a8058, soil: 0x7a5e3e, hemi: [0xeef4ff, 0x5a4630, 1.05], sun: [0xfff0d0, 2.9], fill: 0.5, exp: 1.0, bloom: [0.3, 0.4, 0.95] },
+  savana: { bg: gradientTex([[0, '#4d78b8'], [0.5, '#d9b98a'], [0.85, '#f0a060'], [1, '#f4c98c']]), fog: 0xe2c49a, ground: 0x9a8a48, soil: 0x7a5a32, hemi: [0xffe8cc, 0x5a4024, 1.05], sun: [0xffd8a0, 2.8], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.94] },
   jardim: { bg: gradientTex([[0, '#1d2752'], [0.55, '#7d6894'], [1, '#efb487']]), fog: 0xa88f98, ground: 0x4c6640, soil: 0x3a2c22, hemi: [0xdcdcff, 0x3a2a28, 1.0], sun: [0xffd6b0, 2.4], fill: 0.5, exp: 1.0, bloom: [0.5, 0.45, 0.86], stars: true },
 };
 // céu estrelado (só nos cenários com stars)
@@ -1765,14 +2114,14 @@ function applyViewOffset() {
   if (off.x || off.y) camera.setViewOffset(innerWidth, innerHeight, -off.x / 2, off.y / 2, innerWidth, innerHeight); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
-function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12 } = {}) {
+function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12, ty = 0.46 } = {}) {
   applyViewOffset();
   const size = box.getSize(new V3()), center = box.getCenter(new V3());
   const off = panelOffset(), visH = (innerHeight - off.y) / innerHeight;
   const fov = camera.fov * DEG, aspect = (innerWidth - off.x) / innerHeight;
   const halfH = size.y / 2 / visH, halfW = Math.max(size.x, size.z) / 2;
   const dist = Math.max(halfH / Math.tan(fov / 2), halfW / (Math.tan(fov / 2) * aspect)) * pad + size.z * 0.5;
-  const target = center.clone(); target.y = size.y * 0.46;
+  const target = center.clone(); target.y = size.y * ty;
   camera.position.copy(target).addScaledVector(dir.clone().normalize(), dist);
   controls.target.copy(target); controls.update();
   follow = { dist, ty: target.y, h: size.y, z: 1 };
@@ -1788,7 +2137,7 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12 } = {}) {
    ===================================================================== */
 const $ = (id) => document.getElementById(id);
 const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
-for (const [label, ids] of [['Realistas', ORDER], ['Exóticas', EXOTIC]]) {
+for (const [label, ids] of [['Realistas', ORDER], ['Raras', RARE], ['Exóticas', EXOTIC]]) {
   const og = document.createElement('optgroup'); og.label = label;
   for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; og.appendChild(o); }
   ui.species.appendChild(og);
@@ -1849,33 +2198,33 @@ async function generate({ animate = true } = {}) {
       $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`; $('capD').textContent = pl.sp.desc;
       showInfo(pl);
     } else {
-      // v4: duas fileiras: exóticas na frente (mais baixas), realistas atrás
+      // v5: três fileiras: exóticas na frente (mais baixas), realistas no meio, raras (as maiores) atrás; LOD menor nos tubos
       setTheme('jardim'); glowLight.intensity = 0;
-      const gap = 2.2; const built = ALL.map(id => buildPlant(id, seed));
+      const gap = 2.6; const built = ALL.map(id => buildPlant(id, seed, { lod: true }));
       const all = new THREE.Box3();
-      let zRow = 0;
-      for (const ids of [EXOTIC, ORDER]) {
+      let zRow = 0, prevDepth = 0;
+      for (const ids of [EXOTIC, ORDER, RARE]) {
         const row = ids.map(id => built[ALL.indexOf(id)]);
-        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * 0.72; });
+        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * (ids === EXOTIC ? 0.72 : 0.85); });
         const depth = Math.max(...row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z); }));
         const totalW = widths.reduce((a, b) => a + b, 0) + gap * (row.length - 1);
         let x = -totalW / 2;
-        if (ids === ORDER) zRow -= depth * 0.55;
+        if (ids !== EXOTIC) zRow -= (prevDepth + depth) * 0.5 + gap;
         row.forEach((pl, i) => {
           const cx = x + widths[i] / 2; x += widths[i] + gap;
-          const z = zRow - Math.abs(cx) * 0.18;
+          const z = zRow - Math.abs(cx) * 0.12;
           pl.object.position.set(cx, 0, z); scene.add(pl.object);
           const b = pl.box.clone().translate(new V3(cx, 0, z)); all.union(b);
           const el = document.createElement('div'); el.className = 'glabel'; el.textContent = `${pl.sp.emoji} ${pl.sp.name}`;
           el.onclick = () => { ui.species.value = pl.id; setMode('single'); generate(); };
-          $('labels').appendChild(el); labels.push({ el, pos: new V3(cx, -0.2, z + 0.5) });
+          $('labels').appendChild(el); labels.push({ el, pos: ids === EXOTIC ? new V3(cx, -0.2, z + Math.min(depth * 0.3, 2.5)) : new V3(cx, b.max.y + 0.4, z), above: ids !== EXOTIC }); // v5: fileiras de trás com o nome em cima da copa
         });
-        if (ids === EXOTIC) zRow -= depth * 0.55;
+        prevDepth = depth;
       }
       plants.push(...built);
       soil.scale.setScalar(0.001);
-      frame(all, { dir: new V3(0.1, 0.24, 1), pad: 0.96 });
-      $('capT').textContent = '🌿 Jardim: as 10 espécies'; $('capD').textContent = `Mesma seed "${seed}", dez gramáticas diferentes: exóticas na frente, realistas atrás. Clique no nome para abrir a espécie.`;
+      frame(all, { dir: new V3(0.1, 0.68, 1), pad: 0.98, ty: 0.22 }); // v5: alvo mais baixo, espaço para as etiquetas da frente acima da legenda
+      $('capT').textContent = '🌿 Jardim: as 15 espécies'; $('capD').textContent = `Mesma seed "${seed}", quinze gramáticas diferentes: exóticas na frente, realistas no meio, árvores raras atrás. Clique no nome para abrir a espécie.`;
       showInfo(built[ALL.indexOf(ui.species.value)] || built[0]);
     }
     showStats(); writeHash();
@@ -1886,7 +2235,7 @@ async function generate({ animate = true } = {}) {
 
 function startGrowth() { anim = { t0: performance.now(), dur: 7000 }; SHARED.uGrowth.value = 0; }
 function syncSlider() { ui.growth.value = SHARED.uGrowth.value; $('gval').textContent = Math.round(SHARED.uGrowth.value * 100) + '%'; }
-function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 10'; }
+function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 15'; }
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
 
 $('gen').onclick = () => generate();
@@ -1940,10 +2289,20 @@ function loop() {
   }
   controls.update();
   composer.render();
-  for (const l of labels) {
-    tmpV.copy(l.pos).project(camera);
-    l.el.style.left = ((tmpV.x * 0.5 + 0.5) * innerWidth) + 'px'; l.el.style.top = ((-tmpV.y * 0.5 + 0.5) * innerHeight + 8) + 'px';
-    l.el.style.display = tmpV.z < 1 ? 'block' : 'none';
+  if (labels.length) { // v5: projeta e empurra para baixo as etiquetas que se sobrepõem (guloso, por y na tela)
+    const vis = [];
+    for (const l of labels) {
+      tmpV.copy(l.pos).project(camera);
+      l.w = l.w || l.el.offsetWidth || 140; l.h = l.h || l.el.offsetHeight || 26;
+      l.x = (tmpV.x * 0.5 + 0.5) * innerWidth; l.y = (-tmpV.y * 0.5 + 0.5) * innerHeight + (l.above ? -l.h - 4 : 8);
+      l.el.style.display = tmpV.z < 1 ? 'block' : 'none'; if (tmpV.z < 1) vis.push(l);
+    }
+    vis.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < vis.length; i++) for (let j = 0; j < i; j++) {
+      const a = vis[i], b = vis[j];
+      if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y < b.y + b.h + 3 && a.y + a.h > b.y - 3) { a.y = b.y + b.h + 3; j = -1; }
+    }
+    for (const l of vis) { l.el.style.left = l.x + 'px'; l.el.style.top = l.y + 'px'; }
   }
 }
 window.camera = camera; window.controls = controls; window.THREE = THREE; window.__lsys = { buildPlant, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
