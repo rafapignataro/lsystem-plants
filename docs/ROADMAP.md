@@ -11,14 +11,12 @@
 
 ## Visual
 
-- **Casca procedural (shader).** Hoje a casca é cor por vértice + pequenas ondulações. Proposta:
-  - UV do tubo: comprimento de arco ao longo do galho (`v`) e ângulo em volta (`u`), contínuo através do colar;
-  - ruído fBm + Voronoi esticado ao longo do eixo para sulcos e placas;
-  - tipos por espécie e seed: carvalho sulcado, pinheiro em placas, salgueiro e arbusto lisos, samambaia com raque verde lisa;
-  - a seed escolhe a variante, profundidade dos sulcos, escala e paleta;
-  - a idade do nó controla a aparência: jovem = liso e verde, velho = rachado e escuro;
-  - normal perturbada a partir da altura no fragment shader (`onBeforeCompile` no `MeshStandardMaterial`, mantendo sombras);
-  - opcional: musgo nas faces viradas para cima da madeira velha, pela seed.
+- ~~**Casca procedural (shader).**~~ **Feito na v3** (ver [ARQUITETURA](ARQUITETURA.md#9-casca-procedural-v3)). O que ficou de fora:
+  - o relevo é só de normal (bump): a silhueta do galho continua lisa; deslocar vértices exigiria mais anéis/segmentos (ou tesselação);
+  - o UV `v` continua do pai para o filho no colar, mas o ângulo `u` não (cada galho tem seu próprio referencial), então perto da junção os padrões dos dois tubos não se encaixam;
+  - as derivadas de tela (`dFdx`/`dFdy`) usadas no bump são por bloco de 2×2 pixels e podem "escadear" em detalhes finos; o detalhe some ao longe para evitar serrilhado, mas sem filtragem de verdade;
+  - o musgo só olha a normal (faces para cima); não considera umidade, lado norte nem a base do tronco;
+  - o custo extra é no fragment shader (3D Voronoi 27 células + fBm); em celular pode pesar quando o tronco ocupa a tela toda.
 - **Sistemas clássicos do ABOP.** Incluir exemplos de *The Algorithmic Beauty of Plants* (Prusinkiewicz & Lindenmayer) para comparação: bush 3D, árvores de Honda/Aono-Kunii, sistemas com contexto (`<`, `>`).
 - Flores e folhas com mais variedade de forma (lobos do carvalho, folha composta, sépalas).
 

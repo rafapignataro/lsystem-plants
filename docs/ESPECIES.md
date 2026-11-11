@@ -217,3 +217,27 @@ final:  T → O(orbSize·1.3)   A → O(orbSize)
 | madeira | `leo` 2.3–2.6, `G` 0.8, `tip` 0.015, `ring` 0.4, `share` 0.75 | `baseWidth` 0.5, `bump` 0.05 |
 
 Os orbes usam cor HDR (×1.3–2.4) para acionar o bloom; as folhas têm emissivo da cor do brilho.
+
+---
+
+## Casca procedural (v3)
+
+Definida em `BARK[espécie](P, rng)` com o fluxo `${seed}::${id}::bark` (novo na v3, então a forma e as cores das folhas de cada seed não mudaram). Detalhes do shader em [ARQUITETURA.md](ARQUITETURA.md#9-casca-procedural-v3).
+
+Campos: `type` (0 lisa, 1 sulcada, 2 placas, 3 raque), `stretch` (compressão do eixo: menor = células mais compridas), `crack` (largura da transição fenda → crista), `freq` (células por unidade de mundo), `depth` (profundidade relativa ao raio), `fbm` (quantidade de ruído fino), `lent` (lenticelas), `glow` (brilho das lenticelas), `hi`/`lo` (multiplicadores RGB da cor da casca nas cristas e nas fendas, com ±6–10% pela seed), `moss` (quantidade de musgo, 0 = sem), `mossH` (matiz do musgo), `mat` (fração de `tEnd` para a casca amadurecer).
+
+| Espécie | Variantes (sorteio uniforme) | Escala `freq` | `stretch` | `crack` | `depth` | Musgo |
+|---|---|---|---|---|---|---|
+| Carvalho | sulcada (tipo 1) | 8–11 | 0.12–0.18 | 0.16–0.24 | 0.12–0.2 | 60% das seeds, 0.5–1, matiz 70–105° |
+| | reticulada (tipo 1) | 7–9 | 0.28–0.38 | 0.2–0.3 | | |
+| | escamosa (tipo 2) | 7–9 | 0.28–0.38 | 0.12–0.18 | | |
+| Pinheiro | placas largas (tipo 2) | 3.5–5 | 0.35–0.5 | 0.1–0.15 | 0.12–0.2 | 30%, 0.3–0.7, matiz 60–90° |
+| | escamas (tipo 2) | 7–10 | 0.6–0.8 | 0.12–0.18 | | |
+| Samambaia | raque estriada (tipo 3) | 18–26 | 1 | n/a | 0.05 | não |
+| Arbusto | lisa (tipo 0, `lent` 0.35) / lenticelada (tipo 0, `lent` 1) | 10–14 | 1 | n/a | 0.06–0.1 | não |
+| Salgueiro | lisa (tipo 0, `lent` 0.4) | 6–9 | 1 | 0.1–0.16 | 0.06 | 35%, 0.3–0.6, matiz do brilho |
+| | lenticelas luminosas (tipo 0, `lent` 1, `glow` 2.2) | 6–9 | 1 | | 0.06 | |
+| | fissurada (tipo 1) | 5–7 | 0.15–0.25 | | 0.08–0.12 | |
+
+Paletas: carvalho `hi` ≈ (1.45, 1.38, 1.3), `lo` ≈ (0.3, 0.28, 0.28); pinheiro `hi` = (k, 0.72k, 0.55k) com k = 1.6–2.4 (placas avermelhadas), `lo` = (0.35, 0.32, 0.32); arbusto `hi` ≈ 1.12, `lo` = (0.6, 0.55, 0.5); salgueiro `hi` ≈ (1.2, 1.15, 1.25), `lo` = (0.45, 0.42, 0.5); samambaia `hi` = (1.1, 1.1, 1.05), `lo` = (0.85, 0.85, 0.8).
+

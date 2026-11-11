@@ -6,7 +6,7 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 2. Motor L-System
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
-5. Shaders (idade + vento)
+5. Shaders (idade + vento + casca procedural)
 6. As 5 espécies
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
@@ -35,6 +35,8 @@ a cada quadro: idade ─► computeRadii(T) ─► textura float de raios ─►
 | juvenile | `${seed}::${id}::juvenile` | folhas juvenis dos ápices |
 | turtle | `${seed}::${id}::turtle` | rolagem das folhas, cores por instância, ruído da casca |
 | wood | `${seed}::${id}::wood` | expoente de Leonardo e fator de crescimento secundário |
+| bark | `${seed}::${id}::bark` | casca procedural: variante, escala, profundidade, paleta, musgo (v3) |
+| bark-off | `${seed}::${id}::bark-off` | deslocamento do domínio do ruído da casca (v3) |
 
   O Arbusto usa ainda `Rand('axiom' + petalH)` para montar o axioma dos caules.
 - O "DNA" exibido no painel é `cyrb128(seed + '::' + id)` em hexadecimal (32 primeiros caracteres).
@@ -96,7 +98,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - **Curva**: Catmull-Rom uniforme pelos nós da cadeia. Nas cadeias que saem de um pai, o ponto fantasma antes da junção fica na direção do eixo do pai, então o galho sai tangente e curva para fora (forquilha suave). Nas cadeias da raiz, o ponto fantasma é o reflexo do primeiro nó.
 - **Anéis**: subdivisões por segmento 3, 2 ou 1 conforme a espessura relativa (`r/r_max > 0.12`, `> 0.03`); o primeiro segmento ganha +3 anéis concentrados perto da junção (`f^1.8`). Segmentos radiais: 12 / 9 / 7 / 5 / 4 para `r/r_max > 0.3 / 0.12 / 0.04 / 0.015 / resto`. Um anel de raio zero fecha a ponta.
 - **Referencial sem torção**: tangente por diferença central dos centros dos anéis; normal transportada por projeção (*parallel transport*); binormal = T × N.
-- **Atributos por vértice**: `position` (centro do anel), `normal` (direção radial), `aCp` (centro do anel anterior), `aB` (nascimento do anel e do anterior), `aN` (nó A, nó B, fração), `aCol` (nó pai do colar, comprimento de arco desde a junção), `aBump` (irregularidade), `color`.
+- **Atributos por vértice**: `position` (centro do anel), `normal` (direção radial), `aCp` (centro do anel anterior), `aB` (nascimento do anel e do anterior), `aN` (nó A, nó B, fração), `aCol` (nó pai do colar, comprimento de arco desde a junção), `aBump` (irregularidade), `color`, `aBk` (coordenadas da casca, v3: ver seção 9).
 - Índices `Uint16` ou `Uint32` conforme o número de vértices. Tudo numa malha só, com `castShadow`/`receiveShadow`.
 
 ### Vertex shader dos galhos (`CHUNKS.branch`)
@@ -108,6 +110,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - Posição final: `centro + normal·r·aBump + vento(centro)`.
 - Cor: `mix(corJovem, corDaCasca, smoothstep(0.012, 0.2, r / rMax))`: madeira fina é verde e escurece/vira casca ao engrossar.
 - O mesmo patch é aplicado num `MeshDepthMaterial` (`customDepthMaterial`), então as sombras acompanham crescimento e vento.
+- O vertex shader também passa ao fragment `vBk` (domínio da casca) e `vMt = (maturidade pela idade do nó, raio atual)` (v3).
 
 ## 6. Instâncias: folhas, flores, agulhas, orbes
 
@@ -140,3 +143,46 @@ Seed `lindenmayer`, v2, Chrome headless (SwiftShader) nesta máquina, `buildPlan
 - Recalcular os raios para uma nova idade (`update`): 0,02–0,09 ms por planta (carvalho é o maior).
 - No modo Jardim as 5 são montadas juntas (soma das linhas acima).
 - O FPS medido no headless (~1–2 fps) é limitado pela renderização por software e **não representa uma GPU real**; o FPS em GPU real ainda não foi medido (ver ROADMAP).
+- v3 (casca procedural): no mesmo headless, carvalho em tela cheia passou de ~940 para ~1130 ms por quadro (+20%), e o custo cresce com a área de tronco na tela. A montagem quase não muda (só um atributo a mais).
+
+## 9. Casca procedural (v3)
+
+Tudo no fragment shader do `MeshStandardMaterial` dos galhos, via `onBeforeCompile` (`CHUNKS.branch.frag`), em quatro pontos do shader da Three: `color_fragment` (cor), `roughnessmap_fragment` (rugosidade), `normal_fragment_maps` (relevo) e `emissivemap_fragment` (lenticelas luminosas). O material de profundidade das sombras não muda.
+
+### Coordenadas (UV do tubo)
+
+- Em `buildTubes`, cada vértice ganha `aBk = (cos θ · r_final, sin θ · r_final, arco)`, onde `θ` é o ângulo do vértice no anel, `r_final` é o raio do nó a 100% da idade (interpolado entre os nós A e B) e `arco` é o comprimento ao longo do galho.
+- `(cos θ, sin θ)·r` em vez de `θ`: o domínio é a própria superfície de um cilindro, sem costura em θ = 0/2π, e a distância em volta é em unidades reais (circunferência), o que mantém as células proporcionais em galhos grossos e finos.
+- Usar `r_final` (fixo) e não o raio atual faz o padrão ficar preso à madeira: quando o tronco engrossa, as placas crescem junto, sem o padrão "escorrer".
+- **Continuidade no colar**: `arcNode[nó]` guarda o arco acumulado em cada nó; um galho filho começa com `arco = arcNode[junção]` do pai. O comprimento do colar (`aCol.y`) continua relativo à junção. No colar e na base do tronco o raio é alargado no vertex shader; o domínio é multiplicado pelo mesmo fator (`flare`) para as células não esticarem em volta.
+- No vertex shader: `vBk = (aBk.xy · flare, aBk.z) · uBkFreq`, com `uBkFreq = freq · escala_da_planta`; `freq` está em células por unidade de mundo, então o tamanho do padrão não depende da altura bruta da planta.
+
+### Ruído
+
+- `lsH3`: hash 3D sem textura; `lsN`: value noise 3D trilinear com suavização; `lsF`: fBm de 4 oitavas.
+- `lsVor`: Voronoi 3D (27 células), devolve `F1`, `F2` e um id aleatório da célula. `F2 − F1` é a distância até a borda: perto de 0 é fenda, longe é crista/placa.
+- O eixo do galho é comprimido (`p.z · stretch`, `stretch < 1`) para alongar as células ao longo do galho; um *domain warp* com `lsN` deixa as bordas irregulares.
+- `uSeedOff` (fluxo `bark-off`) desloca o domínio, então cada seed tem um padrão diferente.
+
+### Tipos (`uBk.x`)
+
+| Tipo | Usado em | Altura `h` (0 = fundo da fenda, 1 = topo) |
+|---|---|---|
+| 0 lisa | arbusto, salgueiro (liso / lenticelas luminosas) | fBm suave; **lenticelas**: Voronoi esticado em volta do galho (`p.z · 5`), pontinhos rebaixados em metade das células; podem emitir luz (`uGlowC`) |
+| 1 sulcada | carvalho (sulcada / reticulada), salgueiro (fissurada) | cristas `smoothstep(F2−F1)` com topo levemente achatado, variação por célula, fibras longitudinais (ruído esticado ao longo do eixo); fendas escuras |
+| 2 placas | pinheiro (placas largas / escamas), carvalho (escamosa) | cada célula é uma placa com altura e cor próprias; lascas internas (`fBm` com limiar) simulam camadas descascando; fendas escuras entre placas |
+| 3 raque | samambaia | lisa, com estrias finas ao longo do eixo |
+
+### Idade, cor e relevo
+
+- **Maturidade** `m = clamp((T − nascimento_do_anel) / (tEnd · mat), 0, 1) · smoothstep(0.03, 0.4, r_atual / r_max)`: depende da idade do nó e da espessura. Pontas novas e galhos finos ficam com `m ≈ 0` (lisos, com a cor jovem verde da v2); madeira velha e grossa chega a `m = 1`.
+- **Cor**: base = cor por vértice da v2 (verde jovem → casca, por galho). Madeira madura: `mix(base · lo, base · hi, tint)`, onde `tint` vem da altura e do id da célula, e escurece com a idade (até ×0.82). Resultado final `mix(base, madura, m)`.
+- **Relevo**: altura em unidades de mundo `h · min(depth · r_atual · escala, 0.06) · m`. A profundidade das fendas é proporcional ao raio atual: o tronco fica mais sulcado conforme engrossa. A normal é perturbada pelo método de Mikkelsen (*bump mapping* sem tangentes) com `dFdx/dFdy` da altura e da posição em espaço de vista (`lsPerturb`). A iluminação e as sombras recebidas continuam as do `MeshStandardMaterial`.
+- **Rugosidade**: 0.72 (jovem) → 0.95 (madura), mais áspera nas fendas; musgo = 1.
+- **Musgo** (`uBk2.z`, pela seed): normal em espaço de mundo (`(normal, 0) · viewMatrix`) com `y` acima de ~0.25–0.65 (com ruído), só em madeira com `m > ~0.35`, recortado por um fBm em manchas. Cor própria (matiz da seed; no salgueiro, a cor do brilho) e relevo fofo.
+- **Antisserrilhado**: `fw = |fwidth(vBk)|` (células por pixel). As bordas das fendas alargam com `fw`; a cor volta para a média entre `fw` 0.15–0.55; o relevo some antes, entre 0.1–0.45, porque as derivadas de tela são calculadas em blocos de 2×2 pixels.
+
+### Parâmetros por espécie
+
+Os valores estão em `BARK` (`index.html`) e em [ESPECIES.md](ESPECIES.md#casca-procedural-v3). O painel mostra a variante, a escala, a profundidade e o musgo.
+

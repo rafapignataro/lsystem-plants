@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v2 · POC Three.js</title>
+<title>Jardim L-System v3 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -62,7 +62,7 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v2 · Three.js · L-Systems com seed determinística · tubos contínuos, colar, regra de Leonardo e idade</p>
+  <p class="sub">POC v3 · Three.js · L-Systems com seed determinística · tubos contínuos, regra de Leonardo, idade e casca procedural</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -363,31 +363,129 @@ vec3 lsSway(vec3 p){
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
-attribute vec3 aCp; attribute vec2 aB; attribute vec3 aN; attribute vec2 aCol; attribute float aBump;
+attribute vec3 aCp; attribute vec2 aB; attribute vec3 aN; attribute vec2 aCol; attribute float aBump; attribute vec3 aBk;
+uniform float uBkFreq; uniform float uMatT;
+varying vec3 vBk; varying vec2 vMt;
 float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 1024, ii / 1024), 0).r; }
 ` + SWAY,
     begin: `#include <begin_vertex>
     {
       float T = pow(uGrowth, 0.8) * uTend;
-      vec3 c = position; float r = 0.0;
+      vec3 c = position; float r = 0.0, flare = 1.0;
       if (T >= aB.x) {
         r = mix(lsRad(aN.x), lsRad(aN.y), aN.z);
         if (aCol.x > -1.5) { // colar: alarga a base do galho em direção ao raio do pai
           float rp = aCol.x < -0.5 ? r * 1.8 : lsRad(aCol.x);
           float w = exp(-aCol.y / max(1.5 * rp, 1e-5));
           float rc = clamp(rp * 0.88, r, r * 2.8);
-          r = mix(r, rc, w);
+          float r0 = r; r = mix(r, rc, w); flare = r / max(r0, 1e-6);
         }
       } else { // ponta ainda crescendo: anel colapsa na frente de crescimento
         float t = clamp((T - aB.y) / max(aB.x - aB.y, 1e-5), 0.0, 1.0);
         c = mix(aCp, position, t);
       }
       transformed = c + normal * (r * aBump) + lsSway(c);
+      vBk = vec3(aBk.xy * flare, aBk.z) * uBkFreq; // domínio da casca: (cos θ·r_final, sin θ·r_final, arco), em células
+      vMt = vec2(clamp((T - aB.x) / (uTend * uMatT), 0.0, 1.0), r);
       #ifdef USE_COLOR
         vColor = mix(uYoung, color.rgb, smoothstep(0.012, 0.2, r / uRmax));
       #endif
     }`,
     project: '#include <project_vertex>',
+    frag: {
+      head: /* glsl */`uniform vec4 uBk; uniform vec4 uBk2; uniform vec3 uHi; uniform vec3 uLo; uniform vec3 uMossC; uniform vec3 uGlowC;
+uniform vec3 uSeedOff; uniform float uScale; uniform float uRmax;
+varying vec3 vBk; varying vec2 vMt;
+vec3 lsH3(vec3 p){ p = fract(p * vec3(.1031, .1030, .0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }
+float lsN(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(lsH3(i).x, lsH3(i + vec3(1,0,0)).x, f.x), mix(lsH3(i + vec3(0,1,0)).x, lsH3(i + vec3(1,1,0)).x, f.x), f.y),
+             mix(mix(lsH3(i + vec3(0,0,1)).x, lsH3(i + vec3(1,0,1)).x, f.x), mix(lsH3(i + vec3(0,1,1)).x, lsH3(i + vec3(1,1,1)).x, f.x), f.y), f.z); }
+float lsF(vec3 p){ float a = 0.5, s = 0.0; for (int k = 0; k < 4; k++) { s += a * lsN(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s / 0.9375; }
+vec3 lsVor(vec3 p){ // F1, F2, id da célula
+  vec3 i = floor(p), f = fract(p); float F1 = 9.0, F2 = 9.0, id = 0.0;
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec3 g = vec3(float(x), float(y), float(z)); vec3 o = lsH3(i + g); vec3 d = g + o - f; float q = dot(d, d);
+    if (q < F1) { F2 = F1; F1 = q; id = o.y; } else if (q < F2) F2 = q;
+  }
+  return vec3(sqrt(F1), sqrt(F2), id);
+}
+float lsHt; float lsRough; float lsEmis;
+// tipos: 0 lisa (lenticelas), 1 sulcada (Voronoi esticado), 2 em placas, 3 raque estriada
+vec3 lsBark(vec3 base, vec3 nW){
+  vec3 p = vBk + uSeedOff;
+  float type = uBk.x, fw = length(fwidth(vBk));
+  float detail = 1.0 - smoothstep(0.15, 0.55, fw);           // antialias: some ao longe
+  float aa = fw * 0.9;                                       // alarga as bordas conforme o tamanho do pixel
+  float n1 = lsF(p * 1.7);
+  float h = 0.5, tint = 1.0; lsEmis = 0.0;
+  if (type < 0.5) {            // lisa + lenticelas horizontais
+    h = 0.55 + 0.25 * (n1 - 0.5) * uBk2.x;
+    vec3 l = lsVor(vec3(p.xy * 1.6, p.z * 5.0));
+    float len = (1.0 - smoothstep(0.12, 0.26, l.x)) * step(0.45, l.z) * uBk2.y;
+    h -= 0.25 * len; tint = 1.0 - 0.3 * len; lsEmis = len;
+  } else if (type < 1.5) {     // sulcada: cristas compridas separadas por fendas
+    vec3 q = vec3(p.xy, p.z * uBk.y) + 0.45 * vec3(lsN(p * 0.8), lsN(p * 0.8 + 7.3), 0.0);
+    vec3 v = lsVor(q);
+    float e = v.y - v.x;
+    float ridge = smoothstep(0.02 - aa * 0.3, uBk.z + aa, e);
+    ridge = mix(ridge, sqrt(ridge), 0.5);
+    h = ridge * (0.8 + 0.2 * v.z) + 0.3 * (n1 - 0.5) * uBk2.x * ridge;
+    float fib = lsN(vec3(p.xy * 5.0, p.z * 0.6));
+    h += 0.14 * (fib - 0.5) * ridge;                          // fibras longitudinais
+    tint = mix(0.2, 1.0, ridge) * (0.85 + 0.3 * v.z) * (0.85 + 0.3 * fib);
+  } else if (type < 2.5) {     // placas: células com altura e cor próprias, fendas escuras
+    vec3 q = vec3(p.xy, p.z * uBk.y) + 0.25 * vec3(lsN(p * 1.3), lsN(p * 1.3 + 4.1), 0.0);
+    vec3 v = lsVor(q);
+    float e = v.y - v.x;
+    float plate = smoothstep(-aa * 0.3, uBk.z + aa, e);
+    float flake = lsF(q * 2.2 + v.z * 17.0);
+    float layer = smoothstep(0.38, 0.68, flake) * detail;                // lascas: camadas descascando dentro da placa
+    h = plate * (0.55 + 0.3 * v.z + 0.08 * layer + 0.05 * flake);
+    tint = mix(0.25, 1.0, plate) * (0.85 + 0.25 * layer) * (0.75 + 0.5 * v.z) * (0.9 + 0.2 * flake);
+  } else {                     // raque de samambaia: lisa, estrias ao longo do eixo
+    float st = lsN(vec3(p.xy * 6.0, p.z * 0.25));
+    h = 0.5 + 0.35 * (st - 0.5) + 0.1 * (n1 - 0.5);
+    tint = 0.92 + 0.16 * st;
+  }
+  // maturidade: idade do nó × espessura (pontas finas ficam lisas e verdes)
+  float m = vMt.x * smoothstep(0.03, 0.4, vMt.y / uRmax);
+  h = mix(0.55, h, detail);
+  tint = mix(0.85, tint, detail);
+  vec3 old = mix(base * uLo, base * uHi, clamp(tint, 0.0, 1.6)) * mix(1.0, 0.82, vMt.x);
+  vec3 col = mix(base, old, m);
+  float hh = mix(0.55 + 0.05 * (n1 - 0.5), h, m);
+  lsRough = mix(0.72, 0.95, m) + 0.05 * (1.0 - hh);
+  lsEmis *= m * detail;
+  // musgo nas faces viradas para cima da madeira velha
+  float up = nW.y + 0.55 * (lsF(p * 0.45 + 3.7) - 0.5);
+  float moss = smoothstep(0.25, 0.65, up) * smoothstep(0.35, 0.8, m) * uBk2.z;
+  moss *= smoothstep(0.35, 0.6, lsF(p * 0.9 + 11.0) + 0.25 * moss);
+  float mn = lsN(p * 9.0);
+  col = mix(col, uMossC * (0.75 + 0.5 * mn), moss);
+  hh = mix(hh, 0.75 + 0.25 * mn, moss);
+  lsRough = mix(lsRough, 1.0, moss); lsEmis *= 1.0 - moss;
+  float detailN = 1.0 - smoothstep(0.1, 0.45, fw);          // relevo some antes da cor (evita blocos 2×2 das derivadas)
+  lsHt = hh * min(uBk.w * vMt.y * uScale, 0.06) * m * detailN; // altura em unidades de mundo
+  return col;
+}
+vec3 lsPerturb(vec3 sp, vec3 N, float hW, float fd){
+  vec3 sx = dFdx(sp), sy = dFdy(sp);
+  vec3 R1 = cross(sy, N), R2 = cross(N, sx);
+  float det = dot(sx, R1) * fd;
+  vec3 grad = sign(det) * (dFdx(hW) * R1 + dFdy(hW) * R2);
+  return normalize(abs(det) * N - grad);
+}
+`,
+      color: `#include <color_fragment>
+      { vec3 nW = normalize((vec4(normalize(vNormal), 0.0) * viewMatrix).xyz);
+        diffuseColor.rgb = lsBark(diffuseColor.rgb, nW); }`,
+      rough: `#include <roughnessmap_fragment>
+      roughnessFactor = lsRough;`,
+      normal: `#include <normal_fragment_maps>
+      normal = lsPerturb(-vViewPosition, normal, lsHt, faceDirection);`,
+      emis: `#include <emissivemap_fragment>
+      totalEmissiveRadiance += uGlowC * lsEmis;`,
+    },
   },
   inst: {
     head: `attribute vec2 aLife;\n` + SWAY,
@@ -409,8 +507,13 @@ function patch(mat, kind, U) {
     sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind;
     Object.assign(sh.uniforms, U);
     sh.vertexShader = ch.head + sh.vertexShader.replace('#include <begin_vertex>', ch.begin).replace('#include <project_vertex>', ch.project);
+    if (ch.frag && mat.isMeshStandardMaterial) {
+      const f = ch.frag;
+      sh.fragmentShader = f.head + sh.fragmentShader.replace('#include <color_fragment>', f.color).replace('#include <roughnessmap_fragment>', f.rough)
+        .replace('#include <normal_fragment_maps>', f.normal).replace('#include <emissivemap_fragment>', f.emis);
+    }
   };
-  mat.customProgramCacheKey = () => 'lsys2-' + kind;
+  mat.customProgramCacheKey = () => 'lsys3-' + kind + (mat.isMeshStandardMaterial ? 's' : 'd');
   return mat;
 }
 const depthMat = (kind, U) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, U);
@@ -667,6 +770,42 @@ const SPECIES = {
 };
 const ORDER = ['carvalho', 'pinheiro', 'samambaia', 'arbusto', 'salgueiro'];
 
+/* Casca procedural (v3): tipo, variante, escala, profundidade, paleta e musgo por espécie + seed (fluxo próprio 'bark').
+   type: 0 lisa (lenticelas) · 1 sulcada · 2 placas · 3 raque estriada.  freq = células por unidade de mundo.
+   hi/lo = multiplicadores da cor da casca nas cristas/placas e nas fendas. */
+const tintV = (r, base, j) => base.map(x => x * (1 + r.jit(j)));
+const BARK = {
+  carvalho: (P, r) => {
+    const variant = r.pick(['sulcada', 'reticulada', 'escamosa']);
+    const v = { sulcada: { type: 1, stretch: r.range(0.12, 0.18), crack: r.range(0.16, 0.24), freq: r.range(8, 11) },
+      reticulada: { type: 1, stretch: r.range(0.28, 0.38), crack: r.range(0.2, 0.3), freq: r.range(7, 9) },
+      escamosa: { type: 2, stretch: r.range(0.28, 0.38), crack: r.range(0.12, 0.18), freq: r.range(7, 9) } }[variant];
+    return { variant, ...v, depth: r.range(0.12, 0.2), fbm: r.range(0.6, 1), lent: 0, hi: tintV(r, [1.45, 1.38, 1.3], 0.08), lo: tintV(r, [0.3, 0.28, 0.28], 0.1),
+      moss: r.chance(0.6) ? r.range(0.5, 1) : 0, mossH: r.range(70, 105), mat: 0.4 };
+  },
+  pinheiro: (P, r) => {
+    const variant = r.pick(['placas largas', 'escamas']);
+    const v = variant === 'escamas' ? { stretch: r.range(0.6, 0.8), crack: r.range(0.12, 0.18), freq: r.range(7, 10) } : { stretch: r.range(0.35, 0.5), crack: r.range(0.1, 0.15), freq: r.range(3.5, 5) };
+    const red = r.range(1.6, 2.4);
+    return { variant, type: 2, ...v, depth: r.range(0.12, 0.2), fbm: 0.8, lent: 0, hi: tintV(r, [red, red * 0.72, red * 0.55], 0.06), lo: [0.35, 0.32, 0.32],
+      moss: r.chance(0.3) ? r.range(0.3, 0.7) : 0, mossH: r.range(60, 90), mat: 0.35 };
+  },
+  samambaia: (P, r) => ({ variant: 'raque estriada', type: 3, stretch: 1, crack: 0.1, freq: r.range(18, 26), depth: 0.05, fbm: 0.5, lent: 0,
+    hi: [1.1, 1.1, 1.05], lo: [0.85, 0.85, 0.8], moss: 0, mossH: 90, mat: 0.6 }),
+  arbusto: (P, r) => {
+    const variant = r.pick(['lisa', 'lenticelada']);
+    return { variant, type: 0, stretch: 1, crack: 0.1, freq: r.range(10, 14), depth: r.range(0.06, 0.1), fbm: r.range(0.5, 1), lent: variant === 'lisa' ? 0.35 : 1,
+      hi: tintV(r, [1.15, 1.12, 1.1], 0.06), lo: [0.6, 0.55, 0.5], moss: 0, mossH: 90, mat: 0.45 };
+  },
+  salgueiro: (P, r) => {
+    const variant = r.pick(['lisa', 'lenticelas luminosas', 'fissurada']);
+    const fiss = variant === 'fissurada';
+    return { variant, type: fiss ? 1 : 0, stretch: fiss ? r.range(0.15, 0.25) : 1, crack: r.range(0.1, 0.16), freq: fiss ? r.range(5, 7) : r.range(6, 9),
+      depth: fiss ? r.range(0.08, 0.12) : 0.06, fbm: 0.7, lent: fiss ? 0 : variant === 'lisa' ? 0.4 : 1, glow: variant === 'lenticelas luminosas' ? 2.2 : 0,
+      hi: tintV(r, [1.2, 1.15, 1.25], 0.06), lo: [0.45, 0.42, 0.5], moss: r.chance(0.35) ? r.range(0.3, 0.6) : 0, mossH: P.glowH, mat: 0.4 };
+  },
+};
+
 /* =====================================================================
    7. Montagem: esqueleto -> raios (Leonardo + idade) -> tubos contínuos
    ===================================================================== */
@@ -707,7 +846,8 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     for (const c of k) { const sc = dir(c, db).dot(da) + 0.25 * Math.pow(rFull[c] / (rFull[i] || 1), 2); if (sc > best) { best = sc; bi = c; } }
     main[i] = bi;
   }
-  const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], idx = [];
+  const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], bk = [], idx = [];
+  const arcNode = new Float32Array(N); // comprimento de arco acumulado até cada nó (UV v contínuo pelo colar)
   const [cOld] = sp.bark(P);
   const rMaxFull = W.rMaxFull;
   let vtx = 0, chains = 0;
@@ -732,7 +872,7 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
         let f = s / S; if (j === 1) f = Math.pow(f, 1.8);
         rings.push({
           x: catmull(px(j - 2), px(j - 1), px(j), px(j + 1), f), y: catmull(py(j - 2), py(j - 1), py(j), py(j + 1), f), z: catmull(pz(j - 2), pz(j - 1), pz(j), pz(j + 1), f),
-          b: T0[B] + f * (T1[B] - T0[B]), nA: j === 1 ? B : A, nB: B, f: j === 1 ? 0 : f,
+          b: T0[B] + f * (T1[B] - T0[B]), nA: j === 1 ? B : A, nB: B, f: j === 1 ? 0 : f, end: s === S ? B : -1,
         });
       }
     }
@@ -741,7 +881,7 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
     const M = rings.length;
     const ph1 = rng.f() * 6.28, ph2 = rng.f() * 6.28, amp = sp.bump ?? 0.03;
     const scaleD = 1 / Math.max(rFull[list[1]] * 3, 1e-4);
-    let arc = 0, prevB = rings[0].b;
+    const arc0 = collarParent >= 0 ? arcNode[J] : 0; let arc = arc0, prevB = rings[0].b;
     const c0 = cOld.clone().offsetHSL(rng.jit(0.01), rng.jit(0.04), rng.jit(0.03));
     for (let m = 0; m < M; m++) {
       const g = rings[m], gp = rings[Math.max(m - 1, 0)], gn = rings[Math.min(m + 1, M - 2)];
@@ -754,15 +894,18 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
       Bn.crossVectors(Tn, Nn);
       const nr = rng.f();
       const pr = m > 0 ? rings[m - 1] : g;
+      if (g.end >= 0 && !g.cap) arcNode[g.end] = arc;
+      const rF = rFull[g.nA] * (1 - g.f) + rFull[g.nB] * g.f;
       for (let q = 0; q < R; q++) {
         const th = q / R * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
         const dx = Nn.x * cs + Bn.x * sn, dy = Nn.y * cs + Bn.y * sn, dz = Nn.z * cs + Bn.z * sn;
         pos.push(g.x, g.y, g.z); nor.push(dx, dy, dz); cp.push(pr.x, pr.y, pr.z);
         bb.push(g.b, m > 0 ? prevB : g.b); nn.push(g.nA, g.nB, g.f);
-        col.push(collarParent, arc);
-        const d = arc * scaleD;
+        col.push(collarParent, arc - arc0);
+        const d = (arc - arc0) * scaleD;
         bump.push(g.cap ? 0 : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr)));
         clr.push(c0.r, c0.g, c0.b);
+        bk.push(cs * rF, sn * rF, arc);
       }
       if (m > 0) {
         const a0 = vtx + (m - 1) * R, b0 = vtx + m * R;
@@ -788,6 +931,7 @@ function buildTubes(sk, rFull, sp, P, rng, W) {
   g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 2));
   g.setAttribute('aBump', new THREE.Float32BufferAttribute(bump, 1));
   g.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
+  g.setAttribute('aBk', new THREE.Float32BufferAttribute(bk, 3));
   g.setIndex(vtx > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   g.computeBoundingSphere();
   return { geo: g, chains, verts: vtx, tris: idx.length / 3 };
@@ -858,9 +1002,17 @@ function buildPlant(id, seed) {
   const radTex = new THREE.DataTexture(radData, TW, TH, THREE.RedFormat, THREE.FloatType);
   radTex.minFilter = radTex.magFilter = THREE.NearestFilter; radTex.needsUpdate = true;
   const [, cYoung] = sp.bark(P);
-  const U = { uH: { value: rawH }, uTend: { value: tEnd }, uRad: { value: radTex }, uRmax: { value: rMaxFull }, uYoung: { value: cYoung } };
-  const group = new THREE.Group();
   const night = sp.theme === 'night';
+  const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
+  const so = new Rand(`${seed}::${id}::bark-off`);
+  const U = { uH: { value: rawH }, uTend: { value: tEnd }, uRad: { value: radTex }, uRmax: { value: rMaxFull }, uYoung: { value: cYoung },
+    uBk: { value: new THREE.Vector4(BK.type, BK.stretch, BK.crack, BK.depth) }, uBk2: { value: new THREE.Vector4(BK.fbm, BK.lent, BK.moss, 0) },
+    uHi: { value: new THREE.Vector3(...BK.hi) }, uLo: { value: new THREE.Vector3(...BK.lo) },
+    uMossC: { value: new THREE.Vector3().setFromColor(night ? hsl(BK.mossH, 0.55, 0.32) : hsl(BK.mossH, 0.5, 0.26)) },
+    uGlowC: { value: new THREE.Vector3().setFromColor(P.glowH != null ? hsl(P.glowH, 0.9, 0.55) : new THREE.Color(0)).multiplyScalar(BK.glow || 0) },
+    uSeedOff: { value: new THREE.Vector3(so.range(-500, 500), so.range(-500, 500), so.range(-500, 500)) },
+    uScale: { value: 1 }, uBkFreq: { value: 1 }, uMatT: { value: BK.mat } };
+  const group = new THREE.Group();
   const tTube0 = performance.now();
   const tube = buildTubes(sk, rFull, sp, P, rng, W);
   const tTube = performance.now() - tTube0;
@@ -875,10 +1027,11 @@ function buildPlant(id, seed) {
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, 0, -cz);
   inner.scale.setScalar(scale);
+  U.uScale.value = scale; U.uBkFreq.value = BK.freq * scale; // células por unidade de mundo -> por unidade da planta
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
   const pl = {
-    id, sp, P, def, word, done, W, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0,
+    id, sp, P, def, word, done, W, BK, rFull, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0,
     update(age) {
       if (age === this.lastAge) return;
       const t = performance.now();
@@ -1016,7 +1169,9 @@ function writeHash() {
 function fmtVal(v, unit) { if (typeof v === 'boolean') return v ? 'sim' : 'não'; if (typeof v === 'number') return (Number.isInteger(v) ? v : v.toFixed(unit === '°' ? 1 : 3)) + (unit || ''); return v; }
 function showInfo(pl) {
   const { sp, P, def, W } = pl;
-  const wood = [['Expoente de Leonardo (e)', W.leo.toFixed(2)], ['Crescimento secundário (G)', W.G.toFixed(2)], ['Irregularidade da casca', (sp.bump ?? 0).toFixed(2)]];
+  const BK = pl.BK;
+  const wood = [['Expoente de Leonardo (e)', W.leo.toFixed(2)], ['Crescimento secundário (G)', W.G.toFixed(2)], ['Irregularidade da casca', (sp.bump ?? 0).toFixed(2)],
+    ['Casca', BK.variant], ['Escala da casca', BK.freq.toFixed(1)], ['Profundidade dos sulcos', BK.depth.toFixed(2)], ['Musgo', BK.moss ? BK.moss.toFixed(2) : 'não']];
   $('params').innerHTML = sp.show.map(([k, label, unit]) => `<tr><td>${label}</td><td>${fmtVal(k === 'iterations' ? pl.done : P[k], unit)}</td></tr>`).join('')
     + wood.map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('');
   $('rules').textContent = def.display.join('\n') + `\n\nraio (Leonardo): r(nó)^${W.leo.toFixed(2)} = Σ r(filho)^${W.leo.toFixed(2)}, pontas = r₀\n` +

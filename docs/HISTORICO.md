@@ -2,6 +2,24 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v3: casca procedural (10/11/2026)
+
+Commit: ver o log do repositório (`v3: casca procedural …`).
+
+- **UV do tubo**: cada vértice ganha `aBk = (cos θ·r_final, sin θ·r_final, arco)`; o arco continua do pai para o filho através do colar. Usar `(cos θ, sin θ)` em vez do ângulo evita a costura em θ = 0/2π.
+- **Ruído** no fragment shader: fBm de value noise 3D (4 oitavas) e Voronoi 3D (F1, F2, id da célula), com o eixo do galho esticado para alongar as células.
+- **Tipos de casca** por espécie, com variante sorteada pela seed (fluxo próprio `bark`): carvalho sulcado / reticulado / escamoso; pinheiro em placas largas / escamas (avermelhado, com lascas); arbusto liso / lenticelado; salgueiro liso / lenticelas luminosas (emissivas, com bloom) / fissurado; samambaia com raque lisa e estriada. A seed também define escala, profundidade, largura das fendas, paleta (multiplicadores de cor das cristas e fendas) e quantidade de musgo.
+- **Idade**: a maturidade da casca depende da idade do nó e da espessura atual; pontas novas e galhos finos ficam lisos e verdes, madeira velha fica rachada, mais funda e mais escura.
+- **Relevo**: a altura do padrão vira bump no fragment shader (normal perturbada por derivadas de tela, método de Mikkelsen), via `onBeforeCompile` no `MeshStandardMaterial`; sombras continuam funcionando (o material de profundidade só usa o vertex shader). Rugosidade também varia (fendas e musgo mais ásperos).
+- **Musgo** opcional (pela seed) nas faces viradas para cima da madeira velha.
+- Antisserrilhado simples: bordas das fendas alargam com o tamanho do pixel e o detalhe some ao longe.
+- Painel mostra a variante da casca, escala, profundidade e musgo.
+- Determinismo: a casca usa fluxos novos (`bark`, `bark-off`), então a forma das plantas e as cores de folhas de cada seed continuam iguais às da v2.
+
+## Documentação (10/11/2026)
+
+Commit [`0bd18fb`](https://github.com/rafapignataro/lsystem-plants/commit/0bd18fb197c8186593cb27d99ae003ebad429178), 22:06: README e pasta `docs/` (arquitetura, espécies, histórico, roadmap).
+
 ## v2: tubos contínuos, colar, Leonardo e idade (10/11/2026)
 
 Commit [`250622a`](https://github.com/rafapignataro/lsystem-plants/commit/250622a6f40f571dff9037d8fbb7f7aa1c5bbe53), 21:07.

@@ -37,6 +37,7 @@ O botão **🔗 Copiar link** gera o link da planta atual.
 - Motor L-System com regras paramétricas, estocásticas e condicionais, passo final de "decomposição" (pontas → folhas/flores) e regras juvenis.
 - PRNG determinística (`cyrb128` → `sfc32`) com fluxos separados por finalidade: mesma seed + espécie = mesma planta.
 - Esqueleto de nós → galhos como **tubos contínuos** (Catmull-Rom + *parallel transport*), **colar** nas junções, **regra de Leonardo** para os raios.
+- **Casca procedural** no shader (v3): sulcada, em placas, lisa com lenticelas ou estriada, com variante, escala, profundidade, paleta e musgo definidos pela seed; madeira jovem lisa e verde, madeira velha rachada e mais escura.
 - **Idade da planta** (slider): muda → árvore, com crescimento das pontas, engrossamento secundário da madeira, folhas juvenis e floração na maturidade.
 - Folhas, pétalas, agulhas e orbes instanciados; vento no shader; sombras, bloom, neblina, céu em gradiente; tema noturno no salgueiro.
 - Modo **Jardim** (as 5 espécies com a mesma seed), câmera que acompanha o crescimento, painel com parâmetros derivados da seed, regras e palavra gerada.
