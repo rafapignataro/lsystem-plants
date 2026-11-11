@@ -4,7 +4,7 @@ Datas no horário de Brasília (UTC−3).
 
 ## v5: 5 árvores raras (11/11/2026)
 
-Commit COMMIT_V5.
+Commit [`ea5a6d6`](https://github.com/rafapignataro/lsystem-plants/commit/ea5a6d62bcd93f5e4a1257fd11c8968b3cf4dd79), 02:17.
 
 - **5 espécies novas**, no grupo "Raras" do seletor (agora Realistas / Raras / Exóticas): 🐉 Dragoeiro de Socotra, 🪵 Baobá, 🌈 Eucalipto Arco-Íris, 🌳 Figueira-de-Bengala, 🌲 Sequoia Gigante (ver [ESPECIES](ESPECIES.md#as-5-árvores-raras-v5)).
 - **Motor**: `tube.bump` (perfil do tronco: garrafa, sapopemas, alargamento), símbolo `W` (raiz aérea que desce até o chão e engrossa como tronco secundário, fora da regra de Leonardo), símbolo `Y` (fruto pendente), folhas `strap`, `euca`, `banyan` e geometria `fruit`.
