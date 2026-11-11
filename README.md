@@ -1,27 +1,49 @@
-# 🌱 Jardim L-System — POC
+# 🌱 Jardim L-System
 
-POC em **Three.js** que gera plantas 3D com **sistemas de Lindenmayer (L-Systems)**. Cada *seed* (texto) gera uma planta única e determinística: mesma seed + mesma espécie = mesma planta.
+Plantas 3D geradas por **sistemas de Lindenmayer (L-Systems)** em **Three.js**, com uma *seed* (texto) que define cada planta de forma única e determinística.
 
-## Espécies
-- 🌳 **Carvalho Ancestral**: ramificação simpodial estocástica (2 ou 3 ramos) com alongamento dos entrenós.
-- 🌲 **Pinheiro Boreal**: monopodial, um verticilo de galhos por iteração, formando o cone.
-- 🌿 **Samambaia Espiral**: roseta de frondes com brotação atrasada, pinas e báculos enrolados.
-- 🌺 **Arbusto Florido**: multicaule estocástico; paleta, nº de pétalas e abertura vêm da seed.
-- ✨ **Salgueiro Lumínico**: espécie fantástica com gavinhas pendentes e orbes bioluminescentes.
+**Página ao vivo:** https://rafapignataro.github.io/lsystem-plants/
 
-## Novidades da v2
-- **Galhos como tubos contínuos**: a tartaruga grava um esqueleto de nós (posição, pai, nascimento); cada galho vira um tubo único seguindo uma curva Catmull-Rom, com anéis orientados por *parallel transport* (sem torção nem costuras).
-- **Colar nas junções**: o galho filho nasce dentro do pai e sua base se alarga em direção ao raio do pai, afinando rápido até o raio próprio; a curva sai tangente ao eixo do pai (forquilha suave). Raiz com leve alargamento (sapopema).
-- **Regra de Leonardo**: raios calculados de baixo para cima, `r^e = Σ r_filhos^e` (e ≈ 2,0–2,8 por espécie, com variação pela seed).
-- **Idade da planta**: o slider é a idade (100% = idade limite). Cada módulo do L-System guarda o tempo em que nasceu (iteração + ordem no sucessor); em cada idade só existem os nós já nascidos (a ponta cresce), Leonardo usa só as pontas existentes e o crescimento secundário (anéis) engrossa a madeira velha. A planta começa como muda, com folhas juvenis no ápice, e vira árvore; flores abrem na maturidade.
-- Raios recalculados na CPU (≈0,2 ms por quadro no carvalho) e enviados ao shader numa textura float; a geometria é montada uma vez só.
-- Pequenas irregularidades de casca pela seed; opção "Câmera segue" acompanha o tamanho da planta durante o crescimento.
+## Visão
 
-## Como funciona
-- Motor L-System genérico: regras paramétricas, estocásticas e condicionais + passo final de decomposição.
-- Tartaruga 3D (`F f + - & ^ \ / | [ ] ! ~` + `L` folha, `K` flor, `O` orbe, `N` agulhas).
-- PRNG determinística `cyrb128 → sfc32` a partir da seed.
-- Galhos mesclados em uma única malha, folhas/pétalas instanciadas, animação de crescimento e vento via shader.
-- Link compartilhável: `#especie=carvalho&seed=minha-seed` (ou `especie=jardim` para ver as 5).
+A ideia original (do Rafael, anos atrás) era usar o formalismo do biólogo Aristid Lindenmayer para gerar plantas e transformá-las em **NFTs**: cada pessoa recebe uma *seed*, e a seed altera as partes do sistema (probabilidades das regras, ângulos, proporções, cores, idade…), de modo que cada pessoa tenha uma planta totalmente diferente, mas sempre reproduzível a partir da mesma seed.
 
-Arquivo único: `index.html` (Three.js via CDN). Basta abrir no navegador.
+Este repositório é a POC dessa ideia: 5 espécies, um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo e animação de crescimento da muda até a planta adulta.
+
+## Como rodar
+
+É um único arquivo, `index.html`, sem build. O Three.js (r170) é carregado do jsDelivr via *importmap*, então precisa de internet.
+
+- Abra `index.html` direto no navegador, **ou**
+- sirva a pasta: `python3 -m http.server 8000` e acesse `http://localhost:8000/`.
+
+## Parâmetros de URL
+
+| Parâmetro | Onde | Exemplo | Efeito |
+|---|---|---|---|
+| `especie` | hash | `#especie=carvalho` | `carvalho`, `pinheiro`, `samambaia`, `arbusto`, `salgueiro` ou `jardim` (as 5 lado a lado) |
+| `seed` | hash | `#especie=pinheiro&seed=rafael` | seed (qualquer texto) |
+| `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1) |
+| `nogrow` | query | `?nogrow` | abre sem animação de crescimento, em 100% |
+| `norotate` | query | `?norotate` | desliga a auto-rotação |
+
+Exemplo: `https://rafapignataro.github.io/lsystem-plants/?age=0.5#especie=carvalho&seed=lindenmayer`
+
+O botão **🔗 Copiar link** gera o link da planta atual.
+
+## Funcionalidades
+
+- 5 espécies: 🌳 Carvalho Ancestral, 🌲 Pinheiro Boreal, 🌿 Samambaia Espiral, 🌺 Arbusto Florido, ✨ Salgueiro Lumínico.
+- Motor L-System com regras paramétricas, estocásticas e condicionais, passo final de "decomposição" (pontas → folhas/flores) e regras juvenis.
+- PRNG determinística (`cyrb128` → `sfc32`) com fluxos separados por finalidade: mesma seed + espécie = mesma planta.
+- Esqueleto de nós → galhos como **tubos contínuos** (Catmull-Rom + *parallel transport*), **colar** nas junções, **regra de Leonardo** para os raios.
+- **Idade da planta** (slider): muda → árvore, com crescimento das pontas, engrossamento secundário da madeira, folhas juvenis e floração na maturidade.
+- Folhas, pétalas, agulhas e orbes instanciados; vento no shader; sombras, bloom, neblina, céu em gradiente; tema noturno no salgueiro.
+- Modo **Jardim** (as 5 espécies com a mesma seed), câmera que acompanha o crescimento, painel com parâmetros derivados da seed, regras e palavra gerada.
+
+## Documentação
+
+- [docs/ARQUITETURA.md](docs/ARQUITETURA.md): como tudo funciona por dentro.
+- [docs/ESPECIES.md](docs/ESPECIES.md): as 5 espécies, regras e parâmetros da seed.
+- [docs/HISTORICO.md](docs/HISTORICO.md): histórico de versões.
+- [docs/ROADMAP.md](docs/ROADMAP.md): limitações conhecidas e próximos passos.
