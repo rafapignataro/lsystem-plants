@@ -1,6 +1,6 @@
-# As 15 espécies
+# As 19 espécies
 
-5 realistas (v1–v3), 5 exóticas (v4) e 5 árvores raras (v5, no fim deste arquivo).
+5 realistas (v1–v3), 5 exóticas (v4), 5 árvores raras (v5) e 4 bonsais (v6, no fim deste arquivo).
 
 Cada espécie é um objeto em `SPECIES` (`index.html`, seção 6) com:
 
@@ -515,3 +515,114 @@ juvenil: A → tufo de agulhas em cone
 | `round` | 0.4–1.0 |
 | `butt` / `buttH` / `lobes` | 0.45–0.8 / 1.2–2.0 / 5–8 |
 | `realH` | 70–95 m |
+
+---
+
+# Os 4 bonsais (v6)
+
+Árvores **em miniatura e formadas por anos de poda**, cada uma num vaso. Diferente das outras espécies, a forma não sai de uma regra "natural" de crescimento: o axioma já desenha o **estilo** (a curva do tronco, os andares, a hélice), como um bonsaísta faria com arame, e as regras só ramificam os galhos até virarem **almofadas de folhagem**. Fluxos de RNG próprios (`seed::<id>::…`), então as 15 espécies anteriores não mudam. Os ganchos novos estão em [ARQUITETURA §12](ARQUITETURA.md#12-bonsais-v6).
+
+Comum aos quatro:
+
+- **Nebari** (raízes de superfície): `nebari(r, k, len, w)` gera `k` cordões `[ /(360°/k·i ± jit) &(90°) F(len) /(±40°) +(±25°) F(len) Q(w) ]` que saem quase na horizontal da base. `Q(w)` dá um peso extra à ponta da raiz na regra de Leonardo, então as raízes ficam grossas e a base do tronco alarga (o raio da base continua sendo `baseWidth`).
+- **Almofada** `Z(rx, ry, n, s)`: `n` folhas/tufos de agulha distribuídos num domo achatado de raio `rx` e altura `ry`, viradas para cima (`padUp`). Cada folha nasce com um atraso aleatório de até 0,7 da vida do módulo, então a almofada "enche" aos poucos. `pad(P, k)` escala raio por `k`, altura por `√k` e número de folhas por `k²`.
+- **`_(k)`** nivela a direção da tartaruga (k = 1: horizontal): é o "arame" que deixa os galhos planos.
+- **Vaso procedural** (`makePot`): superelipse (`n = 2` redondo/oval, `n = 7` retangular de cantos arredondados), com borda, barriga, afunilamento e pés; a terra é um disco com um monte suave e musgo por ruído de valor (cores por vértice). O junípero tem uma mesinha de madeira escura. O vaso se ajusta ao tamanho da copa (`skExtent`).
+- **Idade = anos de formação**: `years` vem da seed; o slider mostra "N de M anos de formação". Aos 25% é uma muda fina com almofadas pequenas (folhas juvenis), aos 100% o tronco engrossou (crescimento secundário) e as almofadas estão cheias.
+- O disco de chão padrão some (o vaso é o chão), e cada bonsai tem um cenário: `preto`, `estudio`, `terracota`, `zen`.
+
+## 🍁 Bonsai de Bordo Japonês (`bordo`)
+
+**Ideia:** *Acer palmatum* em **moyogi** (ereto informal). O tronco é uma sequência de segmentos curvados por `&(curva · cos(2π·ciclos·k/n + φ))`, o que dá um S suave; casca lisa cinza-clara. Os galhos alternam de lado (180° ou 90° ± 28°), saem quase horizontais e ramificam em dicotomias até as almofadas largas de folhas palmadas vermelhas.
+
+```
+ω : nebari × raízes   { &(curva·cos(…)) F(L·(1 − 0.3k/n)) [ /(yaw) &(abertura) ~(queda) B(Lg·(1 − k/2n)) ] } × n   ^(curva/2) B(0.45·Lg)
+B(s) → F(0.8s) [ +(split) B(ratio·s) ] [ −(split) B(ratio·s) ] /(±30°) ^(4°) B(cont·s)     (s < 0.24 → almofada 0.9)
+final: B → Z   ·   juvenil: B → Z pequena
+```
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 15–40 |
+| `segs` / `segLen` | 6–7 · 0.7–0.85 |
+| `curve` / `cycles` | 22–32° · 0.9–1.2 |
+| `roots` / `rootW` | 4–6 · 6–12 |
+| `branchLen` / `bAngle` / `split` | 1.45–1.8 · 72–86° · 30–42° |
+| `ratio` / `cont` | 0.62–0.7 · 0.72–0.8 |
+| `padR` / `padH` / `padN` | 0.44–0.54 · 0.24–0.3 · 22–28 |
+| `lobes` | 5 (65%) ou 7 (35%) |
+| `leafH` (vermelho) | −8 a 4 |
+
+Vaso oval raso quase preto. Cenário `preto` (fundo preto, luz de estúdio).
+
+## 🌲 Bonsai de Pinheiro-Branco (`pinheiro_branco`)
+
+**Ideia:** *Pinus parviflora*. Tronco **maciço e torcido**: cada segmento gira para um plano de curva aleatório (`/(60–130°)`), e um `tube.bump` só no tronco cria sulcos e nós torcidos (`1 + gnarl·(0,55·sin(3θ + 2,1·arco + φ) + 0,45·sin(5θ − 1,4·arco))`, mais forte perto da base). Casca em placas cinza (tipo 2). Galhos nivelados por `_(0.8)` terminam em almofadas horizontais e finas de tufos de agulha. No 2º segmento sai a **cascata**: um galho que vai para fora, nivelado, e cai por gravitropismo para além da borda do vaso.
+
+```
+ω : nebari × raízes   { /(60–130°) &(curva) F } × n   + galhos [ /(180° ± 40°) &(ângulo) _(0.8) ^(4°) B(L) ]
+     no 2º segmento: [ /(+90°) &(80°) _(0.9) F(0.5) ~(queda) C(0) ]     ápice: domo + Z(1.3)
+B(s) → F(0.75s) _(0.5) [ +(split) B(0.55s) ] [ −(split) B(0.55s) ] B(0.72s)     (s < 0.36 → Z)
+C(j) → F(0.55) [ ±50° _(1) D(0.45) ] C(j+1)     (j = cascata → Z(1.1))
+D → F(0.25) Z(0.7)
+```
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 30–80 |
+| `segs` / `segLen` / `bend` | 5–6 · 0.5–0.62 · 18–30° |
+| `gnarl` | 0.1–0.18 |
+| `roots` / `rootW` | 6–8 · 10–20 |
+| `branchLen` / `bAngle` / `split` | 1.25–1.6 · 80–94° · 34–46° |
+| `cascade` / `cascDroop` | 3–4 · 0.18–0.26 |
+| `padR` / `padH` / `padN` | 0.42–0.52 · 0.08–0.11 · 30–38 |
+
+Vaso oval largo e raso, marrom-acinzentado, com bastante musgo. Cenário `estudio` (cinza-claro).
+
+## 🎋 Bonsai de Cipreste Hinoki (`cipreste`)
+
+**Ideia:** *Chamaecyparis obtusa* em **chokkan** (ereto formal). Tronco reto e afinando (13–16 segmentos quase sem desvio). A parte de baixo (`bare`) não tem galhos; acima, cada segmento recebe um galho nivelado que **alterna de lado** (180° ± 22°, com um passo extra de 70° a cada 4) e **encurta até o topo** (`0.3 + Lmax·(1 − u)^0.9`), formando a silhueta triangular em andares. As folhas são escamas serrilhadas (`hinoki`) em almofadas densas.
+
+**Shari:** uma faixa de madeira morta branca na frente da parte baixa do tronco, pelo shader de madeira morta (`LS_DEAD`): cobre `shari` da volta, sobe até `shariH` da altura e pode girar levemente (`shariTwist`).
+
+```
+ω : nebari × 5   { F(L·(1 − 0.3k/n)) [ /(lado += 180° ± 22°) &(ângulo) _(0.85) B(0.3 + Lmax·(1 − u)^0.9) ] } × n   F(0.25) Z(0.9)
+B(s) → F(0.6s) _(0.6) [ +(split) B(0.5s) ] [ −(split) B(0.5s) ] B(0.68s)     (s < 0.34 → Z(0.75 + s))
+```
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 20–50 |
+| `segs` / `segLen` | 13–16 · 0.42–0.5 |
+| `bare` | 0.16–0.24 |
+| `Lmax` / `bAngle` / `split` | 1.3–1.7 · 86–98° · 32–42° |
+| `padR` / `padH` / `padN` | 0.44–0.54 · 0.3–0.38 · 40–48 |
+| `shari` / `shariH` / `shariTwist` | 10–16% da volta · 30–45% da altura · 0–0.12 rad/unid. |
+
+Vaso redondo e fundo de terracota com musgo. Cenário `terracota` (fundo marrom-avermelhado, luz dramática).
+
+## 🌀 Bonsai de Junípero (`junipero`)
+
+**Ideia:** *Juniperus* de montanha. O tronco é uma **hélice**: giro constante `/(roll)` + curva `&(bend)` em cada segmento; um `tube.bump` no tronco acrescenta caneluras torcidas. A maior parte da volta é **madeira morta** (shari) branca/prateada, numa faixa que gira em espiral junto com o tronco; o que sobra é a **veia viva** fina, marrom-avermelhada. Os galhos só saem da metade de cima e têm tropismo (`$`) para um ponto ao lado, então a copa densa verde-escura **inclina** para um lado. 2–3 **jin** (galhos mortos, `J`) saem nus e inteiros brancos.
+
+```
+ω : nebari × 5   { /(roll) &(bend) F } × n    (k = 2: $(0.05·lean))
+     k ≥ 0.45n: [ J /(yaw + 60°) &(55°) F F F ] (jin, k par)   [ /(yaw += 120° ± 50°) &(55°) $(0.12·lean) B(L) ]
+     ápice: $(0.1·lean) F(0.3) B(0.6) Z(1.2)
+B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s)     (s < 0.3 → Z)
+```
+
+**Madeira morta (shader):** no ângulo do tubo `θ` e no arco `a`, `sp = θ − torção·a − fase`; a faixa é `cos(sp + ruído) > cos(π·cobertura)`. Só aparece em madeira com raio relativo acima de um mínimo (galhos finos ficam vivos) e com maturidade (a muda não tem madeira morta; ela "aparece" com os anos de formação). Cor osso com veios ao longo da espiral e rachaduras finas, e uma borda escura onde a casca viva enrola.
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 40–120 |
+| `segs` / `segLen` | 8–10 · 0.5–0.6 |
+| `roll` / `bend` | 45–70° · 18–28° |
+| `dead` / `twist` | 58–72% da volta · 0.9–1.6 rad/unid. |
+| `jins` | 2–3 |
+| `lean` | 0.6–1.0 |
+| `branchLen` / `split` | 0.75–0.95 · 34–46° |
+| `padR` / `padH` / `padN` | 0.3–0.38 · 0.2–0.26 · 16–20 |
+
+Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.

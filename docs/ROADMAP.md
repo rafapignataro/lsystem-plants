@@ -39,6 +39,15 @@
 - **Dragoeiro**: o tronco é sempre único (sem a bifurcação baixa de alguns exemplares). Vistas de longe, as manchas de resina se juntam e o tronco parece avermelhado por inteiro. As folhas são fitas planas instanciadas (não há a dobra rígida para cima de cada roseta).
 - **Jardim com 15**: as raras atrás aparecem parcialmente cobertas pelas realistas (baobá e dragoeiro principalmente). Os rótulos não se sobrepõem, mas podem ficar longe da planta quando são empurrados. O contador de instâncias no painel do jardim mostra o total antes do LOD.
 
+## Bonsais (v6)
+
+- **Estilo no axioma**: a forma (curva em S, andares, hélice) é desenhada pelo axioma, não "formada" ao longo do tempo. A animação de idade engrossa e enche a mesma estrutura, mas não mostra poda, arame nem a escolha de galhos de um bonsaísta de verdade.
+- **Almofadas**: são nuvens de instâncias num domo, sem galhinhos visíveis por dentro; de perto, as do pinheiro-branco parecem tufos soltos e as do cipreste podem parecer placas. O bordo tem ~30–38 mil folhas (o mais pesado dos bonsais).
+- **Madeira morta**: é só cor e relevo no shader (a forma do tronco não é escavada nem descascada); no cipreste, o shari pode ficar atrás do tronco dependendo do ângulo da câmera. O jin é um galho reto e curto.
+- **Vaso**: sem furos de drenagem, carimbo ou esmalte; a terra é um disco com cor por vértice (sem pedriscos). A cascata do pinheiro-branco sai do vaso, mas nem sempre desce muito abaixo da borda.
+- **Nebari**: as raízes são cordões radiais simples (sem se fundir numa base de placa contínua).
+- **Jardim com 19**: as exóticas podem esconder parte dos bonsais na fileira da frente em algumas seeds; o rótulo mais baixo pode encostar na legenda.
+
 ## Produto / NFT
 
 - **Exportar**: PNG em alta resolução e glTF/GLB (com os raios "assados" para a idade escolhida), para metadados e arquivos de NFT.

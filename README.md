@@ -8,7 +8,7 @@ Plantas 3D geradas por **sistemas de Lindenmayer (L-Systems)** em **Three.js**, 
 
 A ideia original (do Rafael, anos atrás) era usar o formalismo do biólogo Aristid Lindenmayer para gerar plantas e transformá-las em **NFTs**: cada pessoa recebe uma *seed*, e a seed altera as partes do sistema (probabilidades das regras, ângulos, proporções, cores, idade…), de modo que cada pessoa tenha uma planta totalmente diferente, mas sempre reproduzível a partir da mesma seed.
 
-Este repositório é a POC dessa ideia: 15 espécies (5 realistas, 5 árvores raras e 5 exóticas), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta.
+Este repositório é a POC dessa ideia: 19 espécies (5 realistas, 5 árvores raras, 5 exóticas e 4 bonsais), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta.
 
 ## Como rodar
 
@@ -21,13 +21,13 @@ Este repositório é a POC dessa ideia: 15 espécies (5 realistas, 5 árvores ra
 
 | Parâmetro | Onde | Exemplo | Efeito |
 |---|---|---|---|
-| `especie` | hash | `#especie=carvalho` | realistas: `carvalho`, `pinheiro`, `samambaia`, `arbusto`, `salgueiro`; raras: `dragoeiro`, `baoba`, `eucalipto`, `figueira`, `sequoia`; exóticas: `cristal`, `medusa`, `cacto`, `neural`, `coral`; ou `jardim` (as 15 juntas) |
+| `especie` | hash | `#especie=carvalho` | realistas: `carvalho`, `pinheiro`, `samambaia`, `arbusto`, `salgueiro`; raras: `dragoeiro`, `baoba`, `eucalipto`, `figueira`, `sequoia`; exóticas: `cristal`, `medusa`, `cacto`, `neural`, `coral`; bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`; ou `jardim` (as 19 juntas) |
 | `seed` | hash | `#especie=pinheiro&seed=rafael` | seed (qualquer texto) |
 | `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1) |
 | `nogrow` | query | `?nogrow` | abre sem animação de crescimento, em 100% |
 | `norotate` | query | `?norotate` | desliga a auto-rotação |
 
-Exemplos: `https://rafapignataro.github.io/lsystem-plants/?age=0.5#especie=carvalho&seed=lindenmayer` · `https://rafapignataro.github.io/lsystem-plants/#especie=medusa&seed=rafael` · `https://rafapignataro.github.io/lsystem-plants/#especie=eucalipto&seed=rafael`
+Exemplos: `https://rafapignataro.github.io/lsystem-plants/?age=0.5#especie=carvalho&seed=lindenmayer` · `https://rafapignataro.github.io/lsystem-plants/#especie=medusa&seed=rafael` · `https://rafapignataro.github.io/lsystem-plants/#especie=eucalipto&seed=rafael` · `https://rafapignataro.github.io/lsystem-plants/#especie=junipero&seed=rafael`
 
 O botão **🔗 Copiar link** gera o link da planta atual.
 
@@ -40,6 +40,11 @@ O botão **🔗 Copiar link** gera o link da planta atual.
   - 🌈 **Eucalipto Arco-Íris**: casca nova no shader, com placas verticais que nascem verdes e amadurecem para laranja, roxo, azul e vinho; paleta e padrão pela seed;
   - 🌳 **Figueira-de-Bengala**: raízes aéreas descem dos galhos horizontais e, ao tocar o chão, engrossam e viram troncos secundários;
   - 🌲 **Sequoia Gigante**: tronco nu até muito alto, sapopemas, casca fibrosa sulcada vermelha, copa estreita e uma silhueta humana de 1,8 m para dar a escala.
+- 4 **bonsais** (v6), cada um num vaso procedural com terra e musgo, raízes de superfície (nebari) e folhagem em almofadas; no bonsai, o slider de idade mostra os **anos de formação**:
+  - 🍁 **Bordo Japonês**: estilo moyogi, tronco liso cinza-claro em S, galhos longos e nuvens largas de folhas palmadas vermelhas (5 ou 7 lobos), fundo preto;
+  - 🌲 **Pinheiro-Branco**: tronco maciço, torcido e com casca em placas, nebari exposto, almofadas horizontais de agulhas e um galho em cascata para fora do vaso oval raso;
+  - 🎋 **Cipreste Hinoki**: estilo chokkan (ereto formal), andares que alternam de lado e diminuem até o topo, faixa de madeira morta (shari) na frente, vaso redondo de terracota;
+  - 🌀 **Junípero**: tronco em hélice com grandes faixas de madeira morta branca em espiral e uma veia viva avermelhada, copa inclinada, galhos mortos (jin), vaso retangular sobre uma mesinha.
 - 5 espécies **exóticas** (v4), cada uma com cenário próprio e animação em loop:
   - 💎 **Árvore de Cristal**: fractal determinístico a 60°/90°, prismas facetados de vidro (transmissão, IOR, dispersão), mineral pela seed;
   - 🪼 **Medusa Flutuante**: de cabeça para baixo, sino translúcido que pulsa, tentáculos que ondulam no vertex shader;
@@ -52,11 +57,11 @@ O botão **🔗 Copiar link** gera o link da planta atual.
 - **Casca procedural** no shader (v3): sulcada, em placas, lisa com lenticelas ou estriada, com variante, escala, profundidade, paleta e musgo definidos pela seed; madeira jovem lisa e verde, madeira velha rachada e mais escura.
 - **Idade da planta** (slider): muda → árvore, com crescimento das pontas, engrossamento secundário da madeira, folhas juvenis e floração na maturidade.
 - Folhas, pétalas, agulhas e orbes instanciados; vento no shader; sombras, bloom, neblina, céu em gradiente; tema noturno no salgueiro.
-- Seletor de espécie em três grupos (**Realistas** / **Raras** / **Exóticas**). Modo **Jardim** com as 15 espécies e a mesma seed em três fileiras (exóticas na frente, realistas no meio, raras atrás), com LOD menor e rótulos que não se sobrepõem, câmera que acompanha o crescimento, painel com parâmetros derivados da seed, regras e palavra gerada.
+- Seletor de espécie em quatro grupos (**Realistas** / **Raras** / **Exóticas** / **Bonsais**). Modo **Jardim** com as 19 espécies e a mesma seed em quatro fileiras (bonsais na frente, depois exóticas, realistas e raras), com LOD menor e rótulos que não se sobrepõem, câmera que acompanha o crescimento, painel com parâmetros derivados da seed, regras e palavra gerada.
 
 ## Documentação
 
 - [docs/ARQUITETURA.md](docs/ARQUITETURA.md): como tudo funciona por dentro.
-- [docs/ESPECIES.md](docs/ESPECIES.md): as 15 espécies, regras e parâmetros da seed.
+- [docs/ESPECIES.md](docs/ESPECIES.md): as 19 espécies, regras e parâmetros da seed.
 - [docs/HISTORICO.md](docs/HISTORICO.md): histórico de versões.
 - [docs/ROADMAP.md](docs/ROADMAP.md): limitações conhecidas e próximos passos.

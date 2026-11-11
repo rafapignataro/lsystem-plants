@@ -7,7 +7,7 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
 5. Shaders (idade + vento + casca procedural)
-6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4) · 6c. As 5 árvores raras (v5)
+6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4) · 6c. As 5 árvores raras (v5) · 6d. Os 4 bonsais (v6)
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
 9. UI / estado
@@ -244,3 +244,23 @@ As duas casca-FX usam o modo `frag: 'bark'` da v4 (reusam o shader da v3 e só a
 **LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas 30% maiores. As duas reduções acontecem **depois** de todo o consumo de RNG (o número de anéis não muda, e as cores das folhas são sorteadas antes do corte), então a planta do jardim é a mesma planta, só mais leve. Espécies com lados fixos (`tube.R`, como cristal e cacto) não mudam.
 
 **Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 0,8 fps; dragoeiro 2,8; baobá 3,8; eucalipto 2,3; figueira 1,3; sequoia 2,3. Jardim com as 15 (com LOD): 0,5 fps e 360 mil vértices de tubo, contra 0,3 fps e 414 mil do jardim da v4 com 10 espécies (mesma máquina, mesma sessão). Montagem: dragoeiro ~45 ms, baobá ~15 ms, eucalipto ~80 ms, figueira 130–230 ms (3 mil nós, 14 mil folhas), sequoia ~55–80 ms; o jardim inteiro ~640 ms.
+
+## 12. Bonsais (v6)
+
+Mesma regra das versões anteriores: todo gancho novo é opcional, e sem ele o caminho de código não muda. As 15 espécies anteriores continuam **idênticas** (hash completo de palavra, esqueleto, raios, casca e instâncias para 15 espécies × 5 seeds, e screenshot pixel a pixel das 5 realistas e das 5 raras contra a v5).
+
+| Novidade | Onde | Como |
+|---|---|---|
+| `Z(rx, ry, n, s)` almofada | tartaruga | `n` instâncias do tipo `sp.padKind` (padrão `leaf`) num domo achatado em volta da posição atual; orientação para cima por `sp.padUp`; vida com atraso aleatório de até 0,7 por folha. |
+| `Q(w)` peso na ponta | tartaruga + `computeRadii` | grava `[nó, w]` em `sk.tipw`; em `computeRadii`, a carga da ponta é multiplicada por `w`. Usado nas raízes do nebari para que fiquem grossas sem mudar o raio da base. |
+| `J` jin | tartaruga + `tags(sk)` | marca os nós seguintes como `sk.jin`; o `tags` do junípero passa isso para o atributo `aFx.w`, e o shader pinta o galho inteiro como madeira morta. |
+| `_(k)` nivelar | tartaruga | tira de `H` a componente vertical (k = 1: horizontal) e recompõe `L`/`U` com `U` para cima. É o "arame" do bonsai. |
+| Vaso | `potGeo`, `soilGeo`, `makePot` | loft de superelipse (raio `a × b`, expoente `n`, borda, barriga, afunilamento, pé); terra com monte e musgo por ruído de valor (3 oitavas, eixos girados, sem padrão xadrez) em cores por vértice; mesinha opcional. O topo da terra fica em `y = 0`. |
+| `ex.floor` | `buildPlant` | `extra()` pode devolver `floor` (cota do fundo do vaso/mesa); a planta é deslocada para que esse ponto fique no chão, e o vaso entra no bounding box (`points`). |
+| Madeira morta | shader da casca, `LS_DEAD` (definido para `LS_FX_CIPRESTE` e `LS_FX_JUNIPERO`) | faixa em espiral no ângulo do tubo: `uFx = (cobertura, torção, arco máximo, fase)`, `uFx2 = (raio relativo mínimo, —, freq. dos veios, borda)`. Jin por `vFx.w`. Só em madeira madura (`vMt.x`). Ver ESPECIES. |
+| Anos de formação | `syncSlider` | espécies com `years: true` mostram "N de M anos de formação" no slider (só no modo de uma espécie). |
+| Folhas novas | `GEOMS` | `palm` (5 lobos), `palm7` (7 lobos), `hinoki` (escama serrilhada). |
+| Cenários | `THEMES` | `preto`, `estudio`, `terracota`, `zen`. O disco de chão some para bonsais (o vaso faz o papel). |
+| Jardim | `ROWS` | 4 fileiras: bonsais na frente (rótulos embaixo), depois exóticas, realistas e raras. |
+
+**Desempenho (headless SwiftShader, só relativo; seed padrão):** pinheiro-branco 1,5 fps, cipreste 1,0, junípero 2,0. Montagem: bordo ~150 ms (o mais pesado: ~30–38 mil folhas palmadas), pinheiro-branco ~50 ms, cipreste ~55–75 ms, junípero ~40 ms. Jardim com as 19 (com LOD): ~0,3 fps, ~390 mil vértices de tubo, montagem ~1 s.

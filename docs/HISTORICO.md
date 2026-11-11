@@ -2,6 +2,20 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v6: 4 bonsais (11/11/2026)
+
+Commit COMMIT_V6.
+
+- **4 espécies novas**, no grupo "Bonsais" do seletor (agora Realistas / Raras / Exóticas / Bonsais): 🍁 Bordo Japonês, 🌲 Pinheiro-Branco, 🎋 Cipreste Hinoki, 🌀 Junípero (ver [ESPECIES](ESPECIES.md#os-4-bonsais-v6)), inspiradas em 4 fotos de referência do Rafael.
+- **Vaso procedural** (superelipse: oval, redondo ou retangular) com terra, monte e musgo, e mesinha de madeira no junípero. O vaso se ajusta ao tamanho da copa e define o chão da planta.
+- **Motor**: almofadas de folhagem `Z`, raízes de superfície (nebari) com peso `Q` na regra de Leonardo, nivelamento `_` (galhos "aramados" na horizontal), jin `J`, folhas `palm`/`palm7`/`hinoki`.
+- **Casca**: shader de madeira morta (`LS_DEAD`): shari em espiral no junípero e em faixa reta no cipreste, jin, veios e borda de casca viva.
+- **Idade = anos de formação**: o slider mostra os anos (sorteados pela seed) e a madeira morta só aparece com a maturidade.
+- **Cenários**: `preto`, `estudio`, `terracota`, `zen`.
+- **Jardim com as 19** em quatro fileiras (bonsais na frente).
+- **Compatibilidade**: as 15 espécies anteriores continuam idênticas à v5 para a mesma seed (hash completo 15 × 5 seeds, e pixel a pixel das realistas e raras). Os bonsais são determinísticos entre recarregamentos.
+- Screenshots: `screenshots/v6/` (no workspace do POC, fora do repositório).
+
 ## v5: 5 árvores raras (11/11/2026)
 
 Commit [`ea5a6d6`](https://github.com/rafapignataro/lsystem-plants/commit/ea5a6d62bcd93f5e4a1257fd11c8968b3cf4dd79), 02:17.
