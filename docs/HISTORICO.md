@@ -4,7 +4,7 @@ Datas no horário de Brasília (UTC−3).
 
 ## v6: 4 bonsais (11/11/2026)
 
-Commit COMMIT_V6.
+Commit [`2e7f3bb`](https://github.com/rafapignataro/lsystem-plants/commit/2e7f3bb0f9bcf67c61053c8f1de0e2f8253d31bd), 11:31.
 
 - **4 espécies novas**, no grupo "Bonsais" do seletor (agora Realistas / Raras / Exóticas / Bonsais): 🍁 Bordo Japonês, 🌲 Pinheiro-Branco, 🎋 Cipreste Hinoki, 🌀 Junípero (ver [ESPECIES](ESPECIES.md#os-4-bonsais-v6)), inspiradas em 4 fotos de referência do Rafael.
 - **Vaso procedural** (superelipse: oval, redondo ou retangular) com terra, monte e musgo, e mesinha de madeira no junípero. O vaso se ajusta ao tamanho da copa e define o chão da planta.
