@@ -2,7 +2,15 @@
 
 Datas no horário de Brasília (UTC−3).
 
-## v8: motor (junções, ambiente, genoma, folhagem) (12/11/2026)
+## v8: motor (revisão) (12/11/2026)
+
+- Visual padrão de novo alinhado à v7: genes só mudam a planta quando o usuário cruza, muta ou edita um controle. Gravidade e fototropismo começam em zero. A sombra simulada volta a cair na vertical até o sol sair do padrão.
+- Junções nas forquilhas grossas (inclui o carvalho), sem a malha que furava o junípero. Shari/jin entalhados no tubo.
+- Jardim montado em Web Workers (4): cerca de 2 s de CPU de esqueleto no headless, UI livre durante a simulação.
+- Raízes desviam de pedras e do vaso. LOD por distância (metade / quarto das folhas, depois impostor).
+- Painel de genoma: dois pais, filho, sliders com nomes em português, mutação.
+
+## v8: motor (primeira passagem) (12/11/2026)
 
 - **Junções**: malha de união nas forquilhas + escavação geométrica do shari nos bonsais (complementa o shader).
 - **Ambiente**: vento direcional (shader + simulação), sol direcional (sombras na grade), fototropismo, gravidade no esqueleto; controles no painel.

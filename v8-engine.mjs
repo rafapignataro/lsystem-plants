@@ -54,34 +54,52 @@ export function crossGenomes(a, b, mutation, Rand) {
   const child = {};
   for (const gene of GENE_CATALOG) {
     const va = a[gene.key] ?? gene.def, vb = b[gene.key] ?? gene.def;
-    let v = va + (vb - va) * (0.35 + 0.3 * r.f());
-    if (r.chance(0.12)) v += r.jit((gene.max - gene.min) * 0.08);
+    let v = r.chance(0.5) ? va : vb;
+    v = v * 0.62 + (r.chance(0.5) ? va : vb) * 0.38;
+    if (r.chance(0.28)) v = r.chance(0.5) ? gene.min + (gene.max - gene.min) * 0.08 : gene.max - (gene.max - gene.min) * 0.08;
+    else if (r.chance(0.18)) v += r.jit((gene.max - gene.min) * 0.12);
     child[gene.key] = Math.min(gene.max, Math.max(gene.min, v));
   }
   return child;
 }
 
-/** Aplica genes ao objeto P (antes de build) e a BK / wood */
-export function applyGenomeToPlant(P, BK, W, genome, sp) {
-  if (!genome) return;
-  if (P.angle != null) P.angle *= genome.ramificacao ?? 1;
+export function childSeed(a, b) {
+  let h = 2166136261;
+  const s = `${a}×${b}`;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return `cruz-${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Genes só mudam a planta quando `apply` é verdadeiro (edição, cruzamento ou hash &genoma=).
+ * Sem isso a seed continua com o visual da v7 — o painel ainda mostra o DNA.
+ */
+export function applyGenomeToPlant(P, BK, W, genome, sp, apply = false) {
+  if (P) P._genome = genome || null;
+  if (!genome || !apply) {
+    if (W) { W._lambdaMul = 1; W._windAsym = 0; }
+    return;
+  }
+  const vig = genome.vigor ?? 1;
+  const ram = genome.ramificacao ?? 1;
+  if (P.angle != null) P.angle *= ram;
+  if (P.bAngle != null) P.bAngle *= ram;
+  if (P.twigAngle != null) P.twigAngle *= ram;
   if (P.elong != null) P.elong = 1 + (P.elong - 1) * (genome.alongamento ?? 1);
-  if (P.elong == null && genome.alongamento) P._elongMul = genome.alongamento;
-  if (P.iterations != null) P.iterations = Math.round(P.iterations * (genome.densidade ?? 1));
-  if (P.gravity != null) P.gravity *= (genome.vigor ?? 1) * 0.5;
   if (P.leafH != null) P.leafH += genome.cor ?? 0;
-  if (P.leafSize != null) P.leafSize *= genome.vigor ?? 1;
+  if (P.needleH != null) P.needleH += (genome.cor ?? 0) * 0.6;
+  if (P.leafSize != null) P.leafSize *= 0.82 + 0.36 * vig;
+  if (P.leafS != null) P.leafS = Math.min(1, P.leafS * (0.85 + 0.3 * (genome.densidade ?? 1)));
+  if (P.gravity != null) P.gravity *= 0.75 + 0.5 * vig;
   if (BK) {
     BK.depth *= genome.casca ?? 1;
-    if (BK.moss != null) BK.moss *= genome.musgo ?? 1;
+    if (BK.moss != null) BK.moss = Math.max(0, BK.moss * (genome.musgo ?? 1));
   }
   if (W) {
-    W.G *= genome.vigor ?? 1;
+    W.G *= 0.85 + 0.3 * vig;
     W._lambdaMul = genome.dominancia ?? 1;
-    W._windAsym = genome.vento ?? 0.35;
+    W._windAsym = genome.vento ?? 0;
   }
-  P._genome = genome;
-  if (sp && sp.simLambdaMul) sp.simLambdaMul = genome.dominancia ?? 1;
 }
 
 export function genomeTableRows(genome) {
@@ -92,37 +110,84 @@ function fmtGene(v, unit) {
   return (+v).toFixed(unit === '°' ? 1 : 2) + unit;
 }
 
-/* —— gravidade: curvatura de galhos longos —— */
+/* —— gravidade: só galhos grossos e horizontais; pontas finas não caem —— */
 export function applyGravitySag(sk, strength = 1) {
-  if (!strength || sk.N < 2) return;
+  if (!strength || strength < 0.02 || sk.N < 2) return;
   const { N, X, Y, Z, PAR } = sk;
   const load = new Float64Array(N);
   const horiz = new Float64Array(N);
-  for (let i = N - 1; i >= 0; i--) {
+  const kids = new Int32Array(N);
+  for (let i = N - 1; i >= 1; i--) {
     const p = PAR[i];
     if (p < 0) continue;
-    const dx = X[i] - X[p], dy = Y[i] - Y[p], dz = Z[i] - Z[p], L = Math.hypot(dx, dy, dz) || 1e-6;
+    kids[p]++;
+    const dx = X[i] - X[p], dy = Y[i] - Y[p], dz = Z[i] - Z[p];
+    const L = Math.hypot(dx, dy, dz) || 1e-6;
     horiz[i] = Math.sqrt(dx * dx + dz * dz) / L;
-    load[i] = L * (0.4 + horiz[i]);
-    if (p >= 0) load[p] += load[i];
+    load[i] = L * (0.35 + horiz[i]);
+    load[p] += load[i];
   }
   const maxL = load[0] || 1;
   for (let i = 1; i < N; i++) {
+    if (horiz[i] < 0.55) continue;
+    if (kids[i] < 2 && load[i] < maxL * 0.08) continue;
     const w = (load[i] / maxL) * strength * horiz[i];
-    if (w < 0.02) continue;
+    if (w < 0.04) continue;
     const p = PAR[i];
-    const sag = w * w * 0.35 * Math.min(load[i], 3);
-    X[i] -= sag * 0.15 * (X[i] - X[p]);
+    const sag = Math.min(0.35, w * w * 0.12);
     Y[i] -= sag;
-    Z[i] -= sag * 0.15 * (Z[i] - Z[p]);
+    const pull = sag * 0.04;
+    X[i] -= pull * (X[i] - X[p]);
+    Z[i] -= pull * (Z[i] - Z[p]);
   }
 }
 
-/* —— folhagem: agrupa folhas/agulhas do mesmo nó em cachos —— */
+/** Raízes de superfície e nós rasteiros desviam de pedras e ficam dentro do vaso. */
+export function deflectRoots(sk, stones = [], pot = null) {
+  const { N, X, Y, Z, PAR } = sk;
+  const isRoot = new Uint8Array(N);
+  const mark = (i) => {
+    let j = i, guard = 0;
+    while (j > 0 && guard++ < 24) {
+      isRoot[j] = 1;
+      j = PAR[j];
+      if (Y[j] > 0.42) break;
+    }
+  };
+  if (sk.tipw) for (const pair of sk.tipw) mark(pair[0]);
+  if (sk.boost) for (const b of sk.boost) if (b.i != null) mark(b.i);
+  for (let i = 1; i < N; i++) if (Y[i] < 0.06 && Y[PAR[i]] < 0.2) isRoot[i] = 1;
+  for (let i = 1; i < N; i++) {
+    if (!isRoot[i] || i === 0) continue;
+    for (const s of stones) {
+      const dx = X[i] - s.x, dz = Z[i] - s.z;
+      const d = Math.hypot(dx, dz) || 1e-4;
+      const lim = s.r + 0.03;
+      if (d < lim) {
+        X[i] = s.x + (dx / d) * lim;
+        Z[i] = s.z + (dz / d) * lim;
+      }
+    }
+    if (pot) {
+      const nx = X[i] / pot.a, nz = Z[i] / pot.b;
+      const e = nx * nx + nz * nz;
+      if (e > 0.9) {
+        const k = Math.sqrt(0.86 / e);
+        X[i] *= k;
+        Z[i] *= k;
+      }
+    }
+  }
+}
+
+/**
+ * Cachos só no LOD distante: junta folhas do mesmo nó sem aumentar a área
+ * (escala ≈ s, não √n). No close-up a folhagem original fica intacta.
+ */
 export function clusterFoliage(inst, kinds = ['leaf', 'needles']) {
   for (const kind of kinds) {
     const items = inst[kind];
-    if (!items || items.length < 80) continue;
+    if (!items || items.length < 400) continue;
     const byNode = new Map();
     for (const it of items) {
       const k = it.node ?? -1;
@@ -131,17 +196,19 @@ export function clusterFoliage(inst, kinds = ['leaf', 'needles']) {
     }
     const out = [];
     for (const [, group] of byNode) {
-      if (group.length < 3) { out.push(...group); continue; }
-      const n = Math.ceil(group.length / 4);
-      for (let b = 0; b < group.length; b += n) {
-        const slice = group.slice(b, b + n);
+      if (group.length < 6) { out.push(...group); continue; }
+      const step = 4;
+      for (let b = 0; b < group.length; b += step) {
+        const slice = group.slice(b, b + step);
         let px = 0, py = 0, pz = 0, sx = 0;
-        const y = slice[0].y.clone(), z = slice[0].z.clone();
+        const y = slice[0].y.clone ? slice[0].y.clone() : { ...slice[0].y };
+        const z = slice[0].z.clone ? slice[0].z.clone() : { ...slice[0].z };
         for (const it of slice) { px += it.p.x; py += it.p.y; pz += it.p.z; sx += it.s; }
         const m = slice.length;
         out.push({
-          p: { x: px / m, y: py / m, z: pz / m, isVector3: false },
-          y, z, s: (sx / m) * Math.sqrt(m) * 0.85,
+          p: { x: px / m, y: py / m, z: pz / m },
+          y, z,
+          s: (sx / m) * (1 + 0.08 * (m - 1)),
           life: slice[0].life, node: slice[0].node, cluster: m,
         });
       }
@@ -151,117 +218,73 @@ export function clusterFoliage(inst, kinds = ['leaf', 'needles']) {
   return inst;
 }
 
-/* —— Junções: esfera de blend + capuzes cilíndricos curtos (malha explícita) —— */
-
-function forkJointSpecs(sk, rFull) {
-  const { N, X, Y, Z, PAR } = sk;
-  const kids = Array.from({ length: N }, () => []);
-  for (let i = 1; i < N; i++) kids[PAR[i]].push(i);
-  const main = new Int32Array(N).fill(-1);
+/* —— Junções grossas (tronco e galhos de andaime) + lascas de jin —— */
+function thickForks(sk, rFull, limit) {
+  const { N, PAR } = sk;
+  const kids = Array.from({ length: N }, () => 0);
+  for (let i = 1; i < N; i++) kids[PAR[i]]++;
+  let rMax = 0;
+  for (let i = 0; i < N; i++) if (rFull[i] > rMax) rMax = rFull[i];
+  const forks = [];
   for (let i = 0; i < N; i++) {
-    const k = kids[i]; if (!k.length) continue;
-    const dx = X[i] - X[PAR[i]], dy = Y[i] - Y[PAR[i]], dz = Z[i] - Z[PAR[i]];
-    const L = Math.hypot(dx, dy, dz) || 1; const d0 = [dx / L, dy / L, dz / L];
-    let best = -9, bi = -1;
-    for (const c of k) {
-      const cx = X[c] - X[i], cy = Y[c] - Y[i], cz = Z[c] - Z[i];
-      const Lc = Math.hypot(cx, cy, cz) || 1;
-      const sc = (cx * d0[0] + cy * d0[1] + cz * d0[2]) / Lc + 0.2 * (rFull[c] / (rFull[i] || 1)) ** 2;
-      if (sc > best) { best = sc; bi = c; }
-    }
-    main[i] = bi;
+    if (kids[i] < 2) continue;
+    if (rFull[i] < Math.max(0.04, rMax * 0.07)) continue;
+    forks.push(i);
   }
-  const specs = [];
-  for (let i = 0; i < N; i++) {
-    const br = kids[i].filter(c => c !== main[i]);
-    if (!br.length || rFull[i] < 0.008) continue;
-    const arms = [];
-    const addArm = (c) => {
-      if (c < 0) return;
-      const dx = X[c] - X[i], dy = Y[c] - Y[i], dz = Z[c] - Z[i];
-      const len = Math.hypot(dx, dy, dz) || 1;
-      arms.push({ dir: [dx / len, dy / len, dz / len], len: Math.min(len, rFull[i] * 4), r: rFull[c] });
-    };
-    addArm(main[i]); for (const c of br) addArm(c);
-  const pi = PAR[i];
-  if (pi >= 0) {
-    const dx = X[i] - X[pi], dy = Y[i] - Y[pi], dz = Z[i] - Z[pi];
-    const len = Math.hypot(dx, dy, dz) || 1;
-    arms.unshift({ dir: [dx / len, dy / len, dz / len], len: Math.min(len, rFull[i] * 3), r: rFull[pi], parent: true });
-  }
-    specs.push({ center: [X[i], Y[i], Z[i]], r: rFull[i] * 1.02, arms, node: i, y: Y[i] });
-  }
-  return specs.sort((a, b) => b.r - a.r).slice(0, Math.min(100, specs.length));
+  forks.sort((i, j) => rFull[j] - rFull[i]);
+  return forks.slice(0, limit);
 }
 
-/** Malha união suave: esfera + capuzes; shari escavado como fenda no perfil angular */
-export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
-  const specs = forkJointSpecs(sk, rFull);
-  const seg = opts.seg ?? 10, pos = [], nor = [], idx = [];
-  let base = 0;
-  const pushTri = (a, b, c) => { idx.push(base, base + 1, base + 2); base += 3; pos.push(...a, ...b, ...c); };
-  const normal = (a, b, c) => {
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[1] - a[1];
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
-    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const L = Math.hypot(nx, ny, nz) || 1;
-    for (let k = pos.length - 9; k < pos.length; k += 3) nor.push(nx / L, ny / L, nz / L);
-  };
-  const carve = (px, py, pz, spec) => {
-    if (!deadCfg || py > spec.center[1] + deadCfg.trunkH * deadCfg.shariH) return true;
-    const th = Math.atan2(pz - spec.center[2], px - spec.center[0]) - deadCfg.twist * (py - spec.center[1]) - (deadCfg.phase ?? 0);
-    const inBand = Math.cos(th) > Math.cos(Math.PI * deadCfg.shari);
-    return !inBand;
-  };
-  for (const spec of specs) {
-    const [cx, cy, cz] = spec.center, R = spec.r;
-    for (let lat = 0; lat < seg; lat++) for (let lon = 0; lon < seg; lon++) {
-      const u0 = lon / seg * Math.PI * 2, u1 = (lon + 1) / seg * Math.PI * 2;
-      const v0 = (lat / seg - 0.5) * Math.PI, v1 = ((lat + 1) / seg - 0.5) * Math.PI;
-      const sph = (u, v) => {
-        const cr = Math.cos(v) * R * 1.08, y = Math.sin(v) * R * 1.05 + cy;
-        return [cx + Math.cos(u) * cr, y, cz + Math.sin(u) * cr];
-      };
-      const p00 = sph(u0, v0), p10 = sph(u1, v0), p01 = sph(u0, v1), p11 = sph(u1, v1);
-      if (carve(p00[0], p00[1], p00[2], spec) && carve(p10[0], p10[1], p10[2], spec) && carve(p01[0], p01[1], p01[2], spec))
-        { pushTri(p00, p10, p01); pushTri(p10, p11, p01); normal(p00, p10, p01); normal(p10, p11, p01); }
-    }
-    for (const arm of spec.arms) {
-      const len = arm.len * 0.55, r0 = arm.parent ? spec.r * 0.95 : spec.r * 0.92, r1 = arm.r * 0.9;
-      const [dx, dy, dz] = arm.dir;
-      const ux = Math.abs(dx) < 0.9 ? 0 : 1, uy = Math.abs(dx) < 0.9 ? 1 : 0, uz = 0;
-      let px = dy * uz - dz * uy, py = dz * ux - dx * uz, pz = dx * uy - dy * ux;
-      let Lp = Math.hypot(px, py, pz) || 1; px /= Lp; py /= Lp; pz /= Lp;
-      const qx = dy * pz - dz * py, qy = dz * px - dx * pz, qz = dx * py - dy * px;
-      for (let ri = 0; ri < seg; ri++) for (let si = 0; si < 6; si++) {
-        const t0 = ri / seg, t1 = (ri + 1) / seg;
-        const rad0 = r0 * (1 - t0) + r1 * t0, rad1 = r0 * (1 - t1) + r1 * t1;
-        const o0 = t0 * len, o1 = t1 * len;
-        const ring = (t, rad, off) => {
-          const pts = [];
-          for (let k = 0; k < 6; k++) {
-            const ang = k / 6 * Math.PI * 2;
-            const lx = Math.cos(ang) * rad, ly = Math.sin(ang) * rad;
-            pts.push([
-              cx + dx * off + px * lx + qx * ly,
-              cy + dy * off + py * lx + qy * ly,
-              cz + dz * off + pz * lx + qz * ly,
-            ]);
-          }
-          return pts;
-        };
-        const a = ring(t0, rad0, o0), b = ring(t1, rad1, o1);
-        for (let k = 0; k < 6; k++) {
-          const k1 = (k + 1) % 6;
-          pushTri(a[k], b[k], a[k1]); pushTri(b[k], b[k1], a[k1]);
-          normal(a[k], b[k], a[k1]); normal(b[k], b[k1], a[k1]);
-        }
-      }
+function pushSphere(pos, nor, idx, cx, cy, cz, R, seg) {
+  const grid = [];
+  for (let lat = 0; lat <= seg; lat++) {
+    const v = (lat / seg) * Math.PI;
+    for (let lon = 0; lon < seg; lon++) {
+      const u = (lon / seg) * Math.PI * 2;
+      const nx = Math.sin(v) * Math.cos(u), ny = Math.cos(v), nz = Math.sin(v) * Math.sin(u);
+      grid.push([cx + nx * R, cy + ny * R, cz + nz * R, nx, ny, nz]);
     }
   }
-  if (!pos.length) return null;
-  while (nor.length < pos.length) nor.push(0, 1, 0);
-  return { pos: new Float32Array(pos), nor: new Float32Array(nor), idx };
+  let base = pos.length / 3;
+  const stride = seg;
+  for (let lat = 0; lat < seg; lat++) for (let lon = 0; lon < seg; lon++) {
+    const a = lat * stride + lon, b = lat * stride + (lon + 1) % seg;
+    const c = (lat + 1) * stride + lon, d = (lat + 1) * stride + (lon + 1) % seg;
+    for (const tri of [[a, c, b], [b, c, d]]) {
+      idx.push(base, base + 1, base + 2);
+      for (const q of tri) {
+        pos.push(grid[q][0], grid[q][1], grid[q][2]);
+        nor.push(grid[q][3], grid[q][4], grid[q][5]);
+      }
+      base += 3;
+    }
+  }
+}
+
+/** Esferas só nas forquilhas grossas (inclui o carvalho). Jin: cones lascados, malha à parte. */
+export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
+  const forks = thickForks(sk, rFull, opts.limit ?? 40);
+  const pos = [], nor = [], idx = [];
+  for (const i of forks) pushSphere(pos, nor, idx, sk.X[i], sk.Y[i], sk.Z[i], rFull[i] * 0.58, 5);
+  const jpos = [], jnor = [], jidx = [];
+  if (sk.jin) {
+    for (const i of sk.jin) {
+      const p = sk.PAR[i];
+      if (p < 0) continue;
+      const dx = sk.X[i] - sk.X[p], dy = sk.Y[i] - sk.Y[p], dz = sk.Z[i] - sk.Z[p];
+      const L = Math.hypot(dx, dy, dz) || 1;
+      const len = Math.min(L * 0.85, Math.max(rFull[i] || 0.02, 0.02) * 7);
+      const ux = dx / L, uy = dy / L, uz = dz / L;
+      const r0 = Math.max(rFull[p] || 0.02, 0.015) * 0.42;
+      pushSphere(jpos, jnor, jidx, sk.X[p] + ux * len * 0.35, sk.Y[p] + uy * len * 0.35, sk.Z[p] + uz * len * 0.35, r0, 4);
+      pushSphere(jpos, jnor, jidx, sk.X[p] + ux * len * 0.75, sk.Y[p] + uy * len * 0.75, sk.Z[p] + uz * len * 0.75, r0 * 0.45, 4);
+    }
+  }
+  const pack = (P, N, I) => (P.length ? { pos: new Float32Array(P), nor: new Float32Array(N), idx: I } : null);
+  const joints = pack(pos, nor, idx);
+  const jin = pack(jpos, jnor, jidx);
+  if (!joints && !jin) return null;
+  return { joints, jin };
 }
 
 /** Sombra ao longo do sol (não só para baixo) */
@@ -303,8 +326,9 @@ export function lightGradientAt(grid, gn, g0, vs, x, y, z, sunDir) {
   ];
 }
 
+/** Direção do sol da v7: (0.8, 1.6, 0.6). Gravidade e fototropismo começam em 0 para o visual padrão coincidir com a v7. */
 export const ENV_DEFAULT = {
-  windAz: 55, windEl: 8, windStr: 1, sunAz: 130, sunEl: 42, gravity: 1, phototropism: 0.35,
+  windAz: 55, windEl: 8, windStr: 1, sunAz: 53, sunEl: 58, gravity: 0, phototropism: 0, growPhysics: false,
 };
 
 export function envSunDir(env) {

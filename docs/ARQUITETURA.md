@@ -268,32 +268,9 @@ Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc
 
 ## 14. Motor v8 (engine)
 
-Módulo auxiliar `v8-engine.mjs` (importado em `index.html`):
+A montagem pesada (L-System ou simulação) roda em `plant-worker.mjs` (`buildSkeletonPackage` em `lsystem-core.mjs`). A thread principal só monta malhas Three.js. O jardim usa 4 workers em paralelo.
 
-### 14.1 Junções contínuas
+Por padrão os genes são **mostrados** e não aplicados, a gravidade e o fototropismo começam em 0 e a sombra da simulação continua vertical — o visual padrão acompanha a v7. Cruzar, mutar ou mover um gene passa a aplicar o genoma (`&genoma=` no hash).
 
-- `buildJointMeshes` gera malha extra nas forquilhas (esfera de união + capuzes cilíndricos curtos), mesma materialização dos tubos.
-- Limitado às **100** junções mais grossas e desativado se `sk.N ≥ 4000` (carvalho clássico mantém só tubos + colar).
-- Nos bonsais **cipreste/junípero**, faces dentro da faixa **shari** são omitidas (escavação geométrica complementar ao shader `LS_DEAD`).
-- `joint-worker.mjs` permite malhar junções num Worker (opcional; a montagem principal ainda é síncrona).
-
-### 14.2 Ambiente
-
-- Estado `ENV`: azimute/elevação do **vento** e do **sol**, intensidade do vento, **gravidade** (sag no esqueleto) e **fototropismo**.
-- Uniforms `uWindDir` / `uWindStr` no shader de balanço (`lsSway`).
-- Sombra na simulação: propagação na direção do sol + componente vertical; gemas a barlavento recebem menos luz; crescimento enviesado para o vento e para o gradiente de luz.
-- `applyGravitySag`: flexão pós-tartaruga em galhos horizontais pesados.
-- Painel **Ambiente (v8)** expõe os controles; a luz direcional da cena segue `ENV`.
-
-### 14.3 Folhagem
-
-- `clusterFoliage`: folhas/agulhas do mesmo nó viram **cachos** (menos draw calls, escala √n).
-- LOD do jardim: redução ½ ou ¼ com cachos maiores (`lodScale`).
-
-### 14.4 Genoma
-
-- Nove genes legíveis derivados da seed (`::genome-v8`): vigor, ramificação, densidade, alongamento, casca, musgo, matiz, dominância apical, assimetria ao vento.
-- Hash opcional `&genoma=vigor:1.1,ramificacao:0.95,...` (formatos antigos sem `genoma` continuam válidos).
-- **Cruzamento** de duas seeds no painel; mutação leve; export **PNG** (`preserveDrawingBuffer`) e **glTF** (`GLTFExporter`).
-- Determinismo: genes + seed + espécie + `ENV` fixo ⇒ mesma planta.
+Junções: esferas só nas forquilhas grossas (tronco e andaime, inclusive o carvalho), com material simples de casca. Shari e jin entalham o raio do tubo (`aBump`) e o jin ganha lascas claras. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. Folhagem distante reduz instâncias e, mais longe, troca por um impostor.
 

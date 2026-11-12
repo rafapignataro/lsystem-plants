@@ -4,9 +4,9 @@
 
 Os itens 1 (colonização do espaço + luz) e 2 (simulação de crescimento ano a ano) foram feitos na v7 ([ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7)). Ficaram anotados para depois:
 
-3. ~~**Superfície única nas junções.**~~ **v8 (parcial)**: malha de união nas forquilhas (até 100 junções, espécies grandes só tubo+colar) + faixa shari escavada na geometria; jin ainda shader. Falta SDF/marching cubes de qualidade em todas as junções e costura perfeita de UV.
-4. ~~**Física e ambiente.**~~ **v8 (parcial)**: vento/sol no painel, sombra direcional na simulação, fototropismo e sag por gravidade; **raízes** desviando do vaso/pedras ainda não.
-5. ~~**Folhagem melhor e mais leve.**~~ **v8 (parcial)**: cachos por nó + LOD no jardim; faltam *impostors* por distância e Worker na montagem completa (só `joint-worker.mjs` preparado).
+3. ~~**Superfície única nas junções.**~~ **v8**: esferas nas forquilhas grossas (tronco e andaime, sem teto de 4000 nós) + shari/jin entalhados no raio do tubo. Não é um SDF contínuo em toda a copa.
+4. ~~**Física e ambiente.**~~ **v8**: vento, sol, gravidade e fototropismo no painel (desligados no padrão para não mudar a v7). Com eles ligados, a sombra da simulação segue o sol, a copa entorta e os galhos grossos vergam. Raízes desviam de pedras e ficam dentro do vaso.
+5. ~~**Folhagem melhor e mais leve.**~~ **v8**: a simulação inteira vai para Web Workers; no jardim, folhas distantes caem para 1/2, 1/4 e depois um impostor. Cachos grandes no close-up foram retirados porque inchavam a copa.
 6. ~~**Seed como genoma legível.**~~ **v8**: nove genes, painel, cruzamento, mutação, hash `&genoma=`, PNG e glTF.
 
 ## Geometria e madeira
