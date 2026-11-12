@@ -30,6 +30,7 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 | `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1) |
 | `nogrow` | query | `?nogrow` | abre sem animação de crescimento, em 100% |
 | `norotate` | query | `?norotate` | desliga a auto-rotação |
+| `debug` | query | `?debug=rules` | mostra as medidas das regras de desenho da árvore atual (afunilamento, primeiro galho, cruzamentos, galhos em barra, copa, almofadas, espaço negativo) |
 
 Exemplos: `?species=olmo_chines&style=moyogi&seed=x` · `#especie=junipero&estilo=kengai&seed=rafael` · `#especie=jardim&seed=rafael`
 
@@ -71,7 +72,7 @@ No estilo tradicional a gramática é a de hoje, para o desenho de cada espécie
 
 **Determinismo.** A mesma `(seed, espécie, estilo)` gera a mesma árvore. Trocar só o estilo replanta o mesmo indivíduo — o genoma que veio da seed não é sorteado de novo — na arquitetura nova. O estilo entra no genoma e na exportação (`estilo:moyogi` no hash). O cruzamento herda o estilo de um dos pais.
 
-O estágio seguinte encaixa regras de desenho (afunilamento, primeiro galho perto de um terço da altura, alternância, espaço negativo, ápice) em `DESIGN_RULES`. O estágio depois disso encaixa a nota estética em `scoreTree`. Os dois hoje não alteram a árvore.
+As regras clássicas de desenho entram no crescimento e no acabamento de toda combinação de espécie e estilo, com parâmetros em `designOf` (o estilo manda na arquitetura, a espécie afina). São oito: afunilamento contínuo do tronco (cerca de 6:1 a 10:1, a vassoura mais baixa), nebari radial sem raiz apontada para a frente, primeiro galho por volta de um quarto a um terço da altura, alternância em espiral sem galhos em barra nem cruzamentos, ângulo dos galhos (conífera cai e levanta a ponta; folhosa sobe um pouco) com ramificação no plano da almofada, almofadas separadas que diminuem até um ápice de várias nuvens pequenas, copa perto de dois terços da altura nos estilos eretos (na cascata as almofadas encolhem até a ponta) e a exceção da vassoura, que abre o domo perto de um terço. `measureDesign` devolve essas medidas para o estágio seguinte. `scoreTree` continua sem nota. `?debug=rules` imprime os números da árvore atual.
 
 ## Funcionalidades
 

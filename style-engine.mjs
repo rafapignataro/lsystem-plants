@@ -5,8 +5,10 @@
  * dominância apical, floração e vigor. O estilo guarda a linha do tronco,
  * o ápice, a proporção, a silhueta e o desenho das almofadas.
  *
- * Estágio 2 encaixa regras de desenho em DESIGN_RULES (applyDesignRules).
- * Estágio 3 encaixa a nota estética em scoreTree. Os dois hoje são identidade.
+ * Estágio 2: regras clássicas de desenho (DESIGN_RULES, designOf, shapeDesign,
+ * enforceDesignRadii, measureDesign). Cada regra é um número que o estilo
+ * (rules) e a espécie (design) podem afinar. A mesma (seed, espécie, estilo)
+ * continua determinística. Estágio 3 lê measureDesign e preenche scoreTree.
  */
 const DEG = Math.PI / 180;
 const n = (x) => +(+x).toFixed(3);
@@ -30,6 +32,7 @@ export const STYLES = {
     crown: 'triangle',
     pads: 'tiers',
     keepsLowTrunk: false,
+    rules: { taperRatio: 7.6, crownRatio: 0.66, firstBranch: 0.3, droop: 12, lift: 8, branchThin: 0.55 },
   },
   moyogi: {
     id: 'moyogi',
@@ -42,6 +45,7 @@ export const STYLES = {
     crown: 'irregular',
     pads: 'outside-bends',
     keepsLowTrunk: false,
+    rules: { taperRatio: 8, crownRatio: 0.74, firstBranch: 0.27, droop: 18, lift: 12, branchThin: 0.56 },
   },
   shakan: {
     id: 'shakan',
@@ -54,6 +58,7 @@ export const STYLES = {
     crown: 'slant',
     pads: 'counterweight',
     keepsLowTrunk: false,
+    rules: { taperRatio: 7.2, crownRatio: 0.8, firstBranch: 0.24, droop: 16, lift: 10, branchThin: 0.55 },
   },
   kengai: {
     id: 'kengai',
@@ -66,6 +71,7 @@ export const STYLES = {
     crown: 'cascade',
     pads: 'cascade-outside',
     keepsLowTrunk: true,
+    rules: { taperRatio: 9, crownRatio: 0.5, firstBranch: 0.16, droop: 20, lift: 10, cascade: true, branchThin: 0.5 },
   },
   han_kengai: {
     id: 'han_kengai',
@@ -78,6 +84,7 @@ export const STYLES = {
     crown: 'semi-cascade',
     pads: 'cascade-outside',
     keepsLowTrunk: true,
+    rules: { taperRatio: 8.4, crownRatio: 0.58, firstBranch: 0.18, droop: 16, lift: 10, cascade: true, branchThin: 0.52 },
   },
   hokidachi: {
     id: 'hokidachi',
@@ -90,16 +97,68 @@ export const STYLES = {
     crown: 'broom',
     pads: 'dome-fan',
     keepsLowTrunk: false,
+    rules: { taperRatio: 5.8, taperMin: 3.6, taperMax: 6.8, crownRatio: 1.08, firstBranch: 0.33, broom: true, alternate: false, splitAt: 0.33, branchThin: 0.66, flare: 1.55, collar: 0.22 },
   },
 };
 
-/** Regras de desenho do estágio 2. Cada função recebe o axioma e o contexto e pode devolver outra string. */
-export const DESIGN_RULES = [];
+const RULE_BASE = {
+  taperRatio: 8, taperMin: 6, taperMax: 10, flare: 1.42,
+  firstBranch: 0.28, firstMin: 0.22, firstMax: 0.36,
+  branchThin: 0.56, crownRatio: 0.72,
+  droop: 16, lift: 12, alternate: true, broom: false, cascade: false,
+  splitAt: 0.33, padScale: 1, collar: 0.52, visualBump: 1,
+  barGap: 0.045, frontBan: 0.34,
+};
+
+/**
+ * Parâmetros efetivos. O estilo traz a arquitetura; a espécie (design) afina
+ * biologia (flare, queda dos galhos, escala das almofadas). Vassoura e cascata
+ * não herdam a proporção de copa dos outros estilos.
+ */
+export function designOf(styleId, speciesId, speciesRules) {
+  const style = (STYLES[styleId] && STYLES[styleId].rules) || {};
+  const species = speciesRules || {};
+  const d = { ...RULE_BASE, ...style, ...species, styleId, speciesId };
+  if (style.broom) {
+    d.broom = true;
+    d.alternate = false;
+    d.cascade = false;
+    d.taperRatio = style.taperRatio;
+    d.taperMin = style.taperMin ?? 3.6;
+    d.taperMax = style.taperMax ?? 6.8;
+    d.crownRatio = style.crownRatio;
+    d.collar = style.collar ?? 0.22;
+    d.splitAt = style.splitAt ?? 0.33;
+    d.branchThin = style.branchThin ?? 0.66;
+  }
+  if (style.cascade) {
+    d.cascade = true;
+    d.broom = false;
+    d.crownRatio = style.crownRatio;
+    d.taperRatio = style.taperRatio ?? d.taperRatio;
+  }
+  d.conifer = speciesId === 'pinheiro_branco' || speciesId === 'pinheiro_negro' || speciesId === 'cipreste' || speciesId === 'junipero';
+  return d;
+}
+
+/** Regras nomeadas. `axiom` é opcional; o desenho de verdade está em shapeDesign e enforceDesignRadii. */
+export const DESIGN_RULES = [
+  { id: 'taper', param: 'taperRatio' },
+  { id: 'nebari', param: 'flare' },
+  { id: 'firstBranch', param: 'firstBranch' },
+  { id: 'branchOrder', param: 'branchThin' },
+  { id: 'movement', param: 'droop' },
+  { id: 'pads', param: 'padScale' },
+  { id: 'proportion', param: 'crownRatio' },
+  { id: 'broom', param: 'splitAt' },
+];
 
 export function applyDesignRules(axiom, ctx) {
   let out = axiom;
   for (const rule of DESIGN_RULES) {
-    const next = rule(out, ctx);
+    const fn = typeof rule === 'function' ? rule : rule.axiom;
+    if (!fn) continue;
+    const next = fn(out, ctx);
     if (typeof next === 'string' && next) out = next;
   }
   return out;
@@ -192,19 +251,63 @@ function bioOf(id, P) {
   return { unit, segs, branchLen, bAngle, level, conifer };
 }
 
-function emitBranch(id, P, yaw, ang, len, level, bag) {
-  let extra = '';
-  if (id === 'ficus' && bag.aerial > 0) {
-    const drops = bag.aerial >= 2 && len > (P.branchLen || 0.5) * 0.7 ? 2 : 1;
-    for (let d = 0; d < drops && bag.aerial > 0; d++) {
-      extra += `F(${n(0.22 + d * 0.04)})W(${n(0.16)},${n(0.05 + d * 0.1)},${n(d === 0 ? 0.14 : 0.08)})`;
-      bag.aerial--;
-    }
+function reachFor(design, bio, u) {
+  const H = Math.max(bio.unit * Math.max(6, bio.segs || 6), 0.7);
+  const half = (design?.crownRatio || 0.72) * H * 0.52;
+  const len = half * (0.42 + 0.75 * Math.pow(Math.max(0, 1 - u), 0.8));
+  const cap = Math.max(bio.branchLen || 0, bio.unit * (design?.speciesId === 'azaleia' ? 3.4 : 2.6));
+  return Math.max(bio.unit * 0.85, Math.min(len, cap * (0.55 + 0.5 * (1 - u))));
+}
+
+/** Nuvem baixa: domo em cima, mais rasa embaixo. Várias pequenas no ápice, nunca um bloco só. */
+function cloudPad(P, sc, id) {
+  const s = Math.max(0.2, sc);
+  const cut = id === 'ficus' ? 0.4 : id === 'azaleia' ? 0.8 : id === 'bordo' ? 0.78 : 1;
+  const pr = (P.padR || 0.28) * cut;
+  const r = pr * s * 0.82;
+  const h = Math.min((P.padH || r * 0.4) * Math.sqrt(s) * 0.8, r * 0.5);
+  const k = Math.max(4, Math.round((P.padN || 14) * s * s * 0.5));
+  let out = `Z(${n(r)},${n(Math.max(h, r * 0.22))},${k},${n(P.leafS || 0.12)})`;
+  if (id === 'azaleia') {
+    out += `E(${n((P.flR || 0.16) * s * 0.48)},${n((P.flH || 0.09) * Math.sqrt(s) * 0.7)},${Math.max(3, Math.round((P.flN || 8) * s * 0.5))},${n(P.flowerSize || 0.03)})`;
   }
-  const safe = Math.max(0.08, len);
-  const lead = Math.min(0.08, safe * 0.18);
-  // dois passos curtos saem do tronco; o _(level) no fim deixa o galho longo na horizontal, sem mergulhar no vaso
-  return `[/(${n(yaw)})&(14)F(${n(lead)})&(22)F(${n(lead)})_(${n(level)})${extra}B(${n(safe)})]`;
+  return out;
+}
+
+function apexCrown(P, id) {
+  const yaws = [28, 150, 265, 205];
+  let s = '';
+  for (let i = 0; i < 4; i++) s += `[/(${n(yaws[i])})&(18)F(${n(0.045 + 0.01 * i)})${cloudPad(P, 0.36 - i * 0.045, id)}]`;
+  return s;
+}
+
+/** Conífera: desce e levanta na ponta. Folhosa: sobe um pouco. Almofadas no plano do galho, com vão entre elas. */
+function layeredBranch(id, P, yaw, len, sc, design, low) {
+  const conifer = !!(design && design.conifer);
+  const pitch = conifer ? (low ? 102 + (design.droop || 16) * 0.25 : 78) : (low ? 70 : 58);
+  const level = conifer ? (low ? 0.28 : 0.5) : 0.22;
+  const up = conifer ? (low ? (design.lift || 12) : (design.lift || 12) * 0.6) : (design.lift || 10) * 0.4;
+  const gap = Math.max(0.09, len * 0.34);
+  const p1 = cloudPad(P, sc, id);
+  const p2 = cloudPad(P, sc * 0.62, id);
+  const p3 = cloudPad(P, sc * 0.42, id);
+  return `[/(${n(yaw)})&(${n(pitch)})_(${n(level)})F(${n(gap)})${p1}[+(31)_(0.92)F(${n(Math.max(0.08, len * 0.28))})${p2}][-(27)_(0.92)F(${n(Math.max(0.07, len * 0.24))})${p2}]F(${n(gap * 0.8)})^(${n(up)})${p3}]`;
+}
+
+function deciduousBranch(id, P, yaw, len, design, low, bag) {
+  const pitch = low ? 78 : 64;
+  let extra = '';
+  if (id === 'ficus' && bag && bag.aerial > 0) {
+    extra = `F(0.2)W(0.16,0.06,0.12)`;
+    bag.aerial--;
+  }
+  const safe = Math.max(0.12, len);
+  return `[/(${n(yaw)})&(${n(pitch)})_(0.32)F(${n(Math.min(0.1, safe * 0.22))})${extra}B(${n(safe)})]`;
+}
+
+function placeBranch(id, P, yaw, len, sc, design, low, bag) {
+  if (design && (design.conifer || id === 'azaleia')) return layeredBranch(id, P, yaw, len, sc, design, low);
+  return deciduousBranch(id, P, yaw, len, design, low, bag);
 }
 
 function emitJin(yaw) {
@@ -229,153 +332,155 @@ function yawOffFront(yaw, low) {
   return y;
 }
 
-function trunkChokkan(id, P, bio, r, bag) {
-  const segs = Math.max(bio.conifer ? 9 : 6, Math.min(14, bio.segs < 6 ? 7 : bio.segs));
-  const bare = Math.max(1, Math.floor(segs * 0.33));
-  const yaws = [92, 268, 8, 112, 248, 348];
-  let ax = `^(${n(2.4)})`;
+function trunkChokkan(id, P, bio, r, bag, design) {
+  const segs = Math.max(bio.conifer ? 8 : 6, Math.min(12, bio.segs < 6 ? 7 : bio.segs));
+  const bare = Math.max(2, Math.round(segs * (design?.firstBranch || 0.3)));
+  const yaws = [96, 270, 8, 118, 246, 350];
+  let ax = `^(${n(1.6)})`;
+  let placed = 0;
   for (let k = 0; k < segs; k++) {
-    const len = bio.unit * (1 - 0.34 * k / segs);
-    ax += `&(${n(r.jit(0.8))})/(${n(r.jit(1.2))})F(${n(len)})`;
+    const len = bio.unit * (1 - 0.38 * k / segs);
+    ax += `&(${n(r.jit(0.5))})/(${n(r.jit(0.8))})F(${n(len)})`;
     if (k < bare) continue;
     const u = (k - bare) / Math.max(1, segs - bare - 0.2);
-    const low = k / segs < 0.34;
-    const yaw = yawOffFront(yaws[(k - bare) % yaws.length] + r.jit(8), low);
-    const bl = bio.branchLen * (0.22 + 0.78 * Math.pow(Math.max(0, 1 - u), 0.85));
-    const ang = bio.bAngle * (0.96 - 0.18 * u);
-    ax += emitBranch(id, P, yaw, ang, bl, bio.level, bag);
-    if (id === 'junipero' && bag.jin > 0 && (k - bare) % 2 === 0 && k > bare) {
+    const low = u < 0.34;
+    const yaw = yawOffFront(yaws[placed % yaws.length] + r.jit(6), low);
+    const bl = reachFor(design, bio, u);
+    ax += placeBranch(id, P, yaw, bl, 0.95 - u * 0.45, design, low, bag);
+    if (id === 'junipero' && bag.jin > 0 && placed % 2 === 1) {
       bag.jin--;
-      ax += emitJin(yaw + 46);
+      ax += emitJin(yaw + 42);
     }
+    placed++;
   }
-  ax += `^(${n(3.5)})F(${n(bio.unit * 0.32)})B(${n(bio.branchLen * 0.2)})`;
+  ax += `^(${n(4)})F(${n(bio.unit * 0.22)})` + apexCrown(P, id);
   return ax;
 }
 
-function trunkMoyogi(id, P, bio, r, bag) {
-  const seg = Math.max(bio.unit * (bio.conifer ? 0.9 : 1.2), 0.24);
+function trunkMoyogi(id, P, bio, r, bag, design) {
+  const seg = Math.max(bio.unit * (bio.conifer ? 0.78 : 0.95), id === 'azaleia' ? 0.11 : 0.2);
   const sign = r.chance(0.5) ? 1 : -1;
-  // três dobras que diminuem: o tronco cruza a vertical e o ápice volta para cima da base
-  const bends = [sign * (32 + r.f() * 6), -sign * (21 + r.f() * 4), sign * (11 + r.f() * 3)];
-  let ax = `^(${n(2.6)})`;
+  const bends = [sign * (26 + r.f() * 5), -sign * (17 + r.f() * 4), sign * (8 + r.f() * 3)];
+  // primeiro, costas (profundidade), lado oposto, mais curto perto do ápice. Fora da curva.
+  const plan = [
+    { u: 0, yaw: sign > 0 ? 98 : 262, low: true },
+    { u: 0.34, yaw: 6, low: true },
+    { u: 0.62, yaw: sign > 0 ? 252 : 108, low: false },
+    { u: 0.84, yaw: sign > 0 ? 72 : 288, low: false },
+  ];
+  let ax = `^(${n(2.2)})`;
   let heading = 0;
-  bends.forEach((target, b) => {
-    for (let s = 0; s < 2; s++) {
-      const aim = heading + (target - heading) * (s === 0 ? 0.45 : 1);
-      const turn = aim - heading;
-      heading = aim;
-      ax += `+(${n(turn)})^(${n(0.4)})F(${n(seg * (1 - 0.07 * (b * 2 + s)))})`;
-      if (s !== 1) continue;
-      // o galho nasce do lado de fora da curva, quase na horizontal
-      const outside = heading >= 0 ? 96 : 264;
-      const bl = Math.min(bio.branchLen * (0.78 - 0.16 * b), seg * (3.4 - 0.55 * b));
-      ax += emitBranch(id, P, yawOffFront(outside + r.jit(8), b === 0), bio.bAngle * (b === 2 ? 0.7 : 0.88), Math.max(seg * 1.1, bl), bio.level * (b === 0 ? 0.85 : 1), bag);
-      if (id === 'junipero' && bag.jin > 0 && b === 1) {
-        bag.jin--;
-        ax += emitJin(outside + 40);
-      }
+  let pi = 0;
+  const steps = 6;
+  for (let s = 0; s < steps; s++) {
+    const b = Math.min(bends.length - 1, Math.floor(s / 2));
+    const target = bends[b];
+    const aim = heading + (target - heading) * (s % 2 === 0 ? 0.48 : 1);
+    const turn = aim - heading;
+    heading = aim;
+    ax += `+(${n(turn)})^(${n(0.5)})F(${n(seg * (1 - 0.07 * s))})`;
+    const t = (s + 1) / steps;
+    if (s < 1 || pi >= plan.length || t < 0.2 + plan[pi].u * 0.62) continue;
+    const p = plan[pi++];
+    const outside = heading >= 0 ? 96 : 264;
+    const yaw = yawOffFront((p.u === 0 ? outside : p.yaw) + r.jit(5), p.low);
+    const bl = reachFor(design, bio, p.u) * (p.u === 0 ? 1.05 : 0.9);
+    ax += placeBranch(id, P, yaw, bl, 0.92 - p.u * 0.4, design, p.low, bag);
+    if (id === 'junipero' && bag.jin > 0 && pi === 2) {
+      bag.jin--;
+      ax += emitJin(yaw + 38);
     }
-  });
-  ax += `^(${n(4)})+(${n(-heading * 0.35)})B(${n(Math.min(bio.branchLen * 0.32, seg * 1.1))})`;
+  }
+  ax += `^(${n(4)})+(${n(-heading * 0.35)})` + apexCrown(P, id);
   return ax;
 }
 
-function trunkShakan(id, P, bio, r, bag) {
+function trunkShakan(id, P, bio, r, bag, design) {
   const dir = r.chance(0.5) ? 1 : -1;
-  const slant = 33 + r.f() * 10;
+  const slant = 34 + r.f() * 8;
   const segs = Math.max(5, Math.min(8, bio.segs > 11 ? 7 : Math.max(bio.segs, 5)));
-  let ax = `+(${n(dir * slant * 0.72)})^(${n(4.5)})`;
-  const bare = Math.max(1, Math.floor(segs * 0.2));
+  let ax = `+(${n(dir * slant * 0.7)})^(${n(3.2)})`;
+  const bare = Math.max(1, Math.floor(segs * (design?.firstBranch || 0.26)));
+  let placed = 0;
   for (let k = 0; k < segs; k++) {
-    const straighten = k > segs * 0.65 ? -dir * slant * 0.1 : dir * r.range(-0.6, 1.4);
-    ax += `+(${n(straighten)})^(${n(0.55)})F(${n(bio.unit * (1 - 0.2 * k / segs))})`;
+    const straighten = k > segs * 0.7 ? -dir * slant * 0.12 : dir * r.range(-0.4, 0.8);
+    ax += `+(${n(straighten)})^(${n(0.4)})F(${n(bio.unit * (1 - 0.28 * k / segs))})`;
     if (k < bare) continue;
-    const u = k / segs;
-    const opposite = dir > 0 ? 90 : 270;
-    const same = dir > 0 ? 270 : 90;
-    const back = (k - bare) % 3 === 2;
-    const yaw = yawOffFront(back ? 8 : ((k - bare) % 2 === 0 ? opposite : same) + r.jit(10), u < 0.34);
-    const lenMul = (!back && yawOffFront(opposite, false) === yaw) || Math.abs((((yaw % 360) + 360) % 360) - opposite) < 24 ? 1.18 : 0.74;
-    const bl = bio.branchLen * lenMul * (1.02 - 0.55 * u);
-    ax += emitBranch(id, P, yaw, bio.bAngle * (back ? 0.8 : 0.96), bl, bio.level, bag);
+    const u = (k - bare) / Math.max(1, segs - bare);
+    const opposite = dir > 0 ? 92 : 268;
+    const same = dir > 0 ? 268 : 92;
+    const back = placed % 3 === 2;
+    const yaw = yawOffFront(back ? 8 : (placed % 2 === 0 ? opposite : same) + r.jit(7), u < 0.4);
+    const counter = !back && Math.abs(((((yaw % 360) + 360) % 360) - opposite)) < 28;
+    const bl = reachFor(design, bio, u) * (counter && placed === 0 ? 1.25 : back ? 0.62 : 0.82);
+    ax += placeBranch(id, P, yaw, bl, (counter ? 1 : 0.8) - u * 0.35, design, u < 0.4, bag);
+    placed++;
   }
-  ax += `^(${n(5)})B(${n(bio.branchLen * 0.3)})`;
+  ax += `^(${n(5)})` + apexCrown(P, id);
   return ax;
 }
 
-function trunkCascade(id, P, bio, r, bag, full) {
-  // Mesma receita do pinheiro-negro: sobe pouco, dobra na borda e só então desce.
-  // A escala acompanha o tronco grosso (junípero, pinheiro-branco) sem esticar a queda para o lado.
+function trunkCascade(id, P, bio, r, bag, full, design) {
+  // Sobe pouco, dobra na borda e desce. Cada passo leva uma almofada do lado de fora, menor na ponta.
   const s = Math.max(bio.unit / 0.55, (bag.base || 0.16) / 0.22);
-  const u = 0.55 * s;
+  const u = 0.48 * s;
   const side = r.chance(0.5) ? 1 : -1;
-  const az = (side > 0 ? 62 : 242) + r.f() * 28;
-  const bulk = Math.min(1.25, Math.max(0.72, u * 2.05));
-  let ax = `^(${n(2.2)})/(${n(az)})`;
-  ax += `F(${n(u * (full ? 0.86 : 1.05))})`;
-  ax += `[^(${n(18)})F(${n(u * 0.16)})${cloud(P, 0.55 * bulk)}]`;
-  if (full) {
-    ax += `&(26)F(${n(u * 0.36)})&(24)F(${n(u * 0.36)})`;
-    ax += `&(26)F(${n(u * 0.5)})&(22)F(${n(u * 0.55)})${cloud(P, 1.05 * bulk)}`;
-  } else {
-    ax += `&(70)F(${n(u * 0.95)})${cloud(P, 0.9 * bulk)}`;
-    ax += `&(28)F(${n(u * 0.7)})${cloud(P, 0.72 * bulk)}F(${n(u * 0.65)})${cloud(P, 0.55 * bulk)}`;
-    ax += `&(58)F(${n(u * 0.85)})${cloud(P, 0.42 * bulk)}`;
-  }
-  const steps = full ? 5 : 0;
-  if (full) ax += `~(${n(0.04)})$(${n(0.035)})&(24)F(${n(u * 0.42)})`;
+  const az = (side > 0 ? 68 : 248) + r.f() * 18;
+  let ax = `^(${n(2)})/(${n(az)})`;
+  ax += `F(${n(u * (full ? 0.5 : 0.72))})`;
+  ax += `[^(14)F(${n(u * 0.12)})${cloudPad(P, 0.38, id)}]`;
+  ax += `&(${n(full ? 82 : 70)})F(${n(u * (full ? 0.42 : 0.5))})`;
+  const steps = full ? 5 : 3;
   for (let j = 0; j < steps; j++) {
     const sign = (j % 2 ? -1 : 1) * side;
-    const open = j % 2 === 0;
-    const pitch = open ? -(14 + r.f() * 4) : (28 + r.f() * 5);
-    const step = u * 0.78 * (open ? 0.72 : 1);
-    const sc = Math.max(0.45, 1.05 - j * 0.12) * bulk;
-    ax += `_(0)+(${n(sign * (12 + r.jit(2)))})&(${n(pitch)})F(${n(step * 0.55)})${cloud(P, sc)}F(${n(step * 0.45)})`;
-    ax += `[+(${n(sign * 38)})_(0.9)F(${n(u * 0.14)})${cloud(P, sc * 0.62)}]`;
+    const sc = Math.max(0.3, 0.95 - j * (full ? 0.12 : 0.18));
+    const step = u * (full ? 0.62 : 0.42) * (1 - j * 0.03);
+    const pitch = full ? 12 + r.f() * 3 : 8 + r.f() * 2;
+    ax += `+(${n(sign * (12 + r.jit(2)))})&(${n(pitch)})F(${n(step)})`;
+    ax += `[+(${n(sign * 60)})_(0.94)&(${n(j < 2 ? 16 : 8)})F(${n(0.1 + u * 0.16 * sc)})^(8)${cloudPad(P, sc, id)}]`;
     if (id === 'junipero' && bag.jin > 0 && j === 2) {
       bag.jin--;
-      ax += emitJin(az + sign * 36);
+      ax += emitJin(az + sign * 30);
     }
   }
-  ax += cloud(P, (full ? 0.48 : 0.4) * bulk);
+  ax += `[+(${n(side * 48)})_(0.95)F(${n(u * 0.12)})${cloudPad(P, full ? 0.3 : 0.24, id)}]`;
   const phi = az * DEG;
-  const reach = u * (full ? 2.15 : 1.45);
-  const drop = u * (full ? 4.4 : 1.15);
-  P.attractor = [Math.sin(phi) * reach, full ? -drop : -u * 0.35, -Math.cos(phi) * reach];
+  const reach = u * (full ? 2.05 : 1.35);
+  const drop = u * (full ? 4.2 : 1.05);
+  P.attractor = [Math.sin(phi) * reach, full ? -drop : -u * 0.3, -Math.cos(phi) * reach];
   return ax;
 }
 
 function trunkBroom(id, P, bio, r, bag) {
-  const seg = bio.unit * (id === 'ficus' ? 0.72 : 0.9);
-  const segs = 4;
-  let ax = `^(${n(2)})`;
-  for (let k = 0; k < segs; k++) ax += `&(${n(r.jit(0.45))})F(${n(seg * (1 - 0.03 * k))})`;
+  const seg = bio.unit * (id === 'ficus' ? 0.7 : 0.86);
+  const segs = 3;
+  let ax = `^(${n(1.4)})`;
+  for (let k = 0; k < segs; k++) ax += `&(${n(r.jit(0.3))})F(${n(seg * (1 - 0.04 * k))})`;
   const trunkH = seg * segs;
-  const spokeLen = Math.max(bio.branchLen * (id === 'ficus' ? 2.4 : 1.05), trunkH * 1.05);
-  const lift = P.lift || 0.13;
+  const spokeLen = Math.max(bio.branchLen * (id === 'ficus' ? 2.1 : 0.95), trunkH * 0.95);
+  const lift = (P.lift || 0.12) * 0.85;
   const spoke = (len) => {
-    let o = `~(0)F(${n(Math.min(seg * 0.35, 0.08))})~(${n(-lift)})`;
-    o += `[+(${n(26 + r.jit(5))})B(${n(len * 0.62)})]`;
-    o += `[-(${n(26 + r.jit(5))})B(${n(len * 0.56)})]`;
-    o += `^(${n(7)})B(${n(len * 0.48)})`;
+    let o = `~(0)F(${n(Math.min(seg * 0.28, 0.07))})~(${n(-lift)})`;
+    o += `[+(${n(24 + r.jit(4))})B(${n(len * 0.58)})]`;
+    o += `[-(${n(24 + r.jit(4))})B(${n(len * 0.52)})]`;
+    o += `^(${n(6)})B(${n(len * 0.44)})`;
     return o;
   };
-  const rings = [[5, 60], [4, 38], [3, 18]];
-  let yaw0 = r.f() * 24;
+  const rings = [[5, 58], [4, 36], [3, 16]];
+  let yaw0 = r.f() * 20;
   for (const [count, elev] of rings) {
     for (let i = 0; i < count; i++) {
-      ax += `F(${n(seg * 0.18)})`;
-      let yaw = yaw0 + (i + 0.5) * (360 / count) + r.jit(4);
+      ax += `F(${n(Math.max(seg * 0.32, 0.1))})`;
+      let yaw = yaw0 + (i + 0.5) * (360 / count) + r.jit(3);
       yaw = yawOffFront(yaw, elev > 50);
-      const len = spokeLen * (elev > 50 ? 1 : elev > 30 ? 0.84 : 0.7);
-      ax += `[/(${n(yaw)})&(${n(elev + r.jit(2))})${spoke(len)}]`;
+      const len = spokeLen * (elev > 50 ? 1 : elev > 30 ? 0.82 : 0.66);
+      ax += `[/(${n(yaw)})&(${n(elev + r.jit(1.5))})${spoke(len)}]`;
     }
     yaw0 += 180 / count;
   }
-  ax += spoke(spokeLen * 0.58);
+  ax += `F(${n(seg * 0.2)})` + spoke(spokeLen * 0.5);
   if (id === 'ficus' && bag.aerial > 0) {
-    ax += `[/(70)&(58)F(0.2)W(0.2,0.08,0.14)B(${n(spokeLen * 0.4)})]`;
+    ax += `[/(70)&(58)F(0.18)W(0.18,0.08,0.12)B(${n(spokeLen * 0.36)})]`;
     bag.aerial--;
   }
   return ax;
@@ -417,13 +522,14 @@ export function composeStyled(id, sp, P, styleId, legacy, Rand) {
   const r = new Rnd(`${seed}::${id}::estilo::${styleId}`);
   const bio = bioOf(id, P);
   const bag = { aerial: id === 'ficus' ? (P.aerials || 0) : 0, jin: id === 'junipero' ? (P.jins || 0) : 0, base: sp.baseWidth || 0.16 };
+  const design = designOf(styleId, id, sp.design);
   let body = '';
-  if (styleId === 'chokkan') body = trunkChokkan(id, P, bio, r, bag);
-  else if (styleId === 'shakan') body = trunkShakan(id, P, bio, r, bag);
-  else if (styleId === 'kengai') body = trunkCascade(id, P, bio, r, bag, true);
-  else if (styleId === 'han_kengai') body = trunkCascade(id, P, bio, r, bag, false);
+  if (styleId === 'chokkan') body = trunkChokkan(id, P, bio, r, bag, design);
+  else if (styleId === 'shakan') body = trunkShakan(id, P, bio, r, bag, design);
+  else if (styleId === 'kengai') body = trunkCascade(id, P, bio, r, bag, true, design);
+  else if (styleId === 'han_kengai') body = trunkCascade(id, P, bio, r, bag, false, design);
   else if (styleId === 'hokidachi') body = trunkBroom(id, P, bio, r, bag);
-  else body = trunkMoyogi(id, P, bio, r, bag);
+  else body = trunkMoyogi(id, P, bio, r, bag, design);
   const axiom = applyDesignRules(`!(1)${nebariFor(id, P, r)}${body}`, { id, styleId, P, style });
   const branched = ensureBranchRules(P, base.rules || {}, base.finalize || {}, base.juvenile || {}, bio.level);
   return {
@@ -876,4 +982,360 @@ export function keepTrunkOutOfPot(sk, inst, pot) {
     it.p.x = ox + px * s;
     it.p.z = oz + pz * s;
   }
+}
+
+function treeExtent(sk) {
+  let H = 0.2, minY = 0;
+  for (let i = 0; i < sk.N; i++) {
+    if (sk.Y[i] > H) H = sk.Y[i];
+    if (sk.Y[i] < minY) minY = sk.Y[i];
+  }
+  return { H, minY };
+}
+
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function primariesOf(sk, info, ch) {
+  const out = [];
+  for (const ti of info.trunk) {
+    for (const c of ch[ti]) {
+      if (info.set.has(c)) continue;
+      if (sk.Y[ti] < 0.05 && sk.Y[c] < 0.16) continue;
+      let maxY = sk.Y[c], count = 0;
+      const stack = [c];
+      const seen = new Uint8Array(sk.N);
+      while (stack.length) {
+        const q = stack.pop();
+        if (seen[q]) continue;
+        seen[q] = 1;
+        count++;
+        if (sk.Y[q] > maxY) maxY = sk.Y[q];
+        for (const k of ch[q]) stack.push(k);
+      }
+      if (count < 3 || (maxY < 0.08 && sk.Y[ti] < 0.12)) continue;
+      out.push({
+        c, ti, y: sk.Y[ti], n: count, maxY,
+        yaw: Math.atan2(sk.Z[c] - sk.Z[ti], sk.X[c] - sk.X[ti]),
+      });
+    }
+  }
+  out.sort((a, b) => a.y - b.y);
+  return out;
+}
+
+/** Afasta galhos em barra, galhos da frente no terço de baixo, galhos por dentro da curva e raízes apontadas para a câmera. */
+export function shapeDesign(sk, inst, design) {
+  if (!sk || sk.N < 4 || !design) return;
+  const ch = childrenOf(sk);
+  const info = trunkChain(sk, ch, !!design.cascade);
+  const { H } = treeExtent(sk);
+  if (!design.broom && !design.cascade) {
+    const prim = primariesOf(sk, info, ch);
+    const gap = Math.max(0.03, H * (design.barGap || 0.045));
+    for (let a = 0; a < prim.length; a++) {
+      for (let b = a + 1; b < prim.length; b++) {
+        if (Math.abs(prim[a].y - prim[b].y) > gap) continue;
+        if (Math.abs(angDiff(prim[a].yaw, prim[b].yaw)) < 2.35) continue;
+        const dir = angDiff(prim[b].yaw, prim[a].yaw) >= 0 ? 1 : -1;
+        rotateSubtree(sk, inst, prim[b].c, sk.X[prim[b].ti], sk.Z[prim[b].ti], dir * 1.05, ch);
+        prim[b].yaw += dir * 1.05;
+      }
+    }
+    const yCut = H * (design.frontBan || 0.34);
+    for (const p of prim) {
+      if (p.y > yCut || p.y < H * 0.08) continue;
+      const d = angDiff(p.yaw, Math.PI / 2);
+      if (Math.abs(d) > 0.4) continue;
+      const dir = d >= 0 ? 1 : -1;
+      const delta = dir * 0.7 - d;
+      rotateSubtree(sk, inst, p.c, sk.X[p.ti], sk.Z[p.ti], delta, ch);
+      p.yaw += delta;
+    }
+    const trunk = info.trunk;
+    for (let k = 1; k < trunk.length - 1; k++) {
+      const prev = trunk[k - 1], here = trunk[k], next = trunk[k + 1];
+      const vx1 = sk.X[here] - sk.X[prev], vz1 = sk.Z[here] - sk.Z[prev];
+      const vx2 = sk.X[next] - sk.X[here], vz2 = sk.Z[next] - sk.Z[here];
+      const cross = vx1 * vz2 - vz1 * vx2;
+      if (Math.abs(cross) < 1e-4) continue;
+      const inx = -vz1 * Math.sign(cross), inz = vx1 * Math.sign(cross);
+      const inL = Math.hypot(inx, inz) || 1;
+      for (const c of ch[here]) {
+        if (info.set.has(c)) continue;
+        const dx = sk.X[c] - sk.X[here], dz = sk.Z[c] - sk.Z[here];
+        const h = Math.hypot(dx, dz);
+        if (h < 0.04) continue;
+        if ((dx * inx + dz * inz) / (h * inL) < 0.55) continue;
+        rotateSubtree(sk, inst, c, sk.X[here], sk.Z[here], -Math.sign(cross) * 1.15, ch);
+      }
+    }
+  }
+  for (const c of ch[0] || []) {
+    let maxY = sk.Y[c];
+    const stack = [c];
+    const seen = new Uint8Array(sk.N);
+    while (stack.length) {
+      const i = stack.pop();
+      if (seen[i]) continue;
+      seen[i] = 1;
+      if (sk.Y[i] > maxY) maxY = sk.Y[i];
+      for (const k of ch[i]) stack.push(k);
+    }
+    if (maxY > 0.38) continue;
+    const yaw = Math.atan2(sk.Z[c], sk.X[c]);
+    const d = angDiff(yaw, Math.PI / 2);
+    if (Math.abs(d) > 0.34) continue;
+    const dir = d >= 0 ? 1 : -1;
+    rotateSubtree(sk, inst, c, 0, 0, dir * 0.5 - d, ch);
+  }
+}
+
+function chainLength(sk, trunk) {
+  let L = 0;
+  for (let k = 1; k < trunk.length; k++) {
+    const a = trunk[k - 1], b = trunk[k];
+    L += Math.hypot(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
+  }
+  return L;
+}
+
+function blendBroom(sk, rFull, rTube, design, ch, info) {
+  let best = info.trunk[0], bn = 0;
+  for (const ti of info.trunk) {
+    let nSide = 0;
+    for (const c of ch[ti]) if (!info.set.has(c) && sk.Y[c] > 0.05) nSide++;
+    if (nSide > bn) { bn = nSide; best = ti; }
+  }
+  if (bn < 3) return;
+  const rT = rFull[best] || 0.05;
+  const share = Math.min(design.branchThin || 0.66, Math.pow(1 / bn, 0.45));
+  const r0 = rT * Math.max(0.4, share);
+  for (const ti of info.trunk) {
+    if (Math.abs(sk.Y[ti] - sk.Y[best]) > Math.max(0.22, rT * 2.4)) continue;
+    for (const c of ch[ti]) {
+      if (info.set.has(c)) continue;
+      const chain = [c];
+      let i = c, guard = 0;
+      while (ch[i] && ch[i].length && guard++ < 6) {
+        i = ch[i][0];
+        chain.push(i);
+      }
+      const tip = rFull[chain[chain.length - 1]] || r0 * 0.35;
+      for (let k = 0; k < chain.length; k++) {
+        const t = chain.length === 1 ? 0 : k / (chain.length - 1);
+        const parent = sk.PAR[chain[k]];
+        const cap = (rFull[parent] || rT) * (design.branchThin || 0.66);
+        const target = Math.min(cap, r0 * (1 - t) + Math.min(tip, r0 * 0.85) * t);
+        if (target > rFull[chain[k]]) {
+          rFull[chain[k]] = target;
+          rTube[chain[k]] = Math.max(rTube[chain[k]], target);
+        }
+      }
+    }
+  }
+}
+
+/** Afunila o tronco sem taper invertido, abre o nebari e deixa o galho mais fino que o tronco. */
+export function enforceDesignRadii(sk, rFull, rTube, design) {
+  if (!sk || sk.N < 3 || !rFull || !rTube || !design) return;
+  const ch = childrenOf(sk);
+  const info = trunkChain(sk, ch, !!design.cascade);
+  const trunk = info.trunk;
+  if (trunk.length < 2) return;
+  const { H } = treeExtent(sk);
+  const height = design.cascade ? Math.max(chainLength(sk, trunk), H) : Math.max(H, 0.2);
+  let rBase = 0;
+  for (const i of trunk) {
+    if (sk.Y[i] >= -0.02 && sk.Y[i] <= Math.max(0.06, H * 0.1)) rBase = Math.max(rBase, rFull[i]);
+  }
+  if (rBase < 1e-4) rBase = rFull[trunk[1]] || rFull[trunk[0]] || 0.04;
+  const visual = rBase * (design.visualBump || 1);
+  let k = (height / (2 * design.taperRatio)) / Math.max(visual, 1e-4);
+  k = Math.min(2.8, Math.max(0.08, k));
+  if (Math.abs(k - 1) > 0.035) {
+    for (let i = 0; i < sk.N; i++) { rFull[i] *= k; rTube[i] *= k; }
+  }
+  const flareEnd = Math.min(trunk.length - 1, Math.max(1, Math.round(trunk.length * 0.08)));
+  let prev = rFull[trunk[flareEnd]] || rFull[trunk[0]];
+  for (let t = flareEnd; t < trunk.length; t++) {
+    const i = trunk[t];
+    if (rFull[i] > prev) {
+      rFull[i] = prev;
+      if (rTube[i] > prev) rTube[i] = prev;
+    } else prev = rFull[i];
+  }
+  let above = trunk[flareEnd];
+  for (const i of trunk) if (sk.Y[i] > H * 0.12) { above = i; break; }
+  let baseNode = trunk[0];
+  for (const i of trunk) if (sk.Y[i] >= 0 && sk.Y[i] < Math.max(0.05, H * 0.07)) { baseNode = i; break; }
+  const want = rFull[above] * (design.flare || 1.4);
+  if (rFull[baseNode] < want) {
+    rFull[baseNode] = want;
+    rTube[baseNode] = Math.max(rTube[baseNode], want);
+  }
+  const thin = design.branchThin || 0.56;
+  const maxY = new Float32Array(sk.N);
+  for (let i = 0; i < sk.N; i++) maxY[i] = sk.Y[i];
+  for (let i = sk.N - 1; i >= 1; i--) {
+    const p = sk.PAR[i];
+    if (p >= 0 && maxY[i] > maxY[p]) maxY[p] = maxY[i];
+  }
+  const scaleSub = (i, s) => {
+    const stack = [i];
+    while (stack.length) {
+      const q = stack.pop();
+      rFull[q] *= s;
+      rTube[q] *= s;
+      for (const c of ch[q]) stack.push(c);
+    }
+  };
+  for (const ti of trunk) {
+    for (const c of ch[ti]) {
+      if (info.set.has(c) || maxY[c] < 0.22) continue;
+      const cap = rFull[ti] * thin;
+      if (rFull[c] > cap && rFull[c] > 1e-6) scaleSub(c, cap / rFull[c]);
+      let node = c;
+      for (let step = 0; step < 4 && node >= 0; step++) {
+        const parent = sk.PAR[node];
+        const floor = (rFull[parent] || rFull[ti]) * Math.max(0.16, 0.4 - step * 0.07);
+        if (rFull[node] < floor) {
+          rFull[node] = floor;
+          if (rTube[node] < floor) rTube[node] = floor;
+        }
+        const kids = ch[node];
+        if (!kids || !kids.length) break;
+        node = kids[0];
+      }
+    }
+  }
+  if (design.broom) blendBroom(sk, rFull, rTube, design, ch, info);
+}
+
+function clusterPads(pts, H) {
+  if (!pts || pts.length < 8) return { padCount: 0, negativeSpace: 0 };
+  const cell = Math.max(0.045, H / 26);
+  const occ = new Set();
+  for (const p of pts) occ.add(`${Math.floor(p.x / cell)},${Math.floor(p.y / cell)},${Math.floor(p.z / cell)}`);
+  const seen = new Set();
+  let pads = 0;
+  const neigh = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (const key of occ) {
+    if (seen.has(key)) continue;
+    pads++;
+    const stack = [key];
+    seen.add(key);
+    let guard = 0;
+    while (stack.length && guard++ < 12000) {
+      const cur = stack.pop();
+      const [x, y, z] = cur.split(',').map(Number);
+      for (const d of neigh) {
+        const nk = `${x + d[0]},${y + d[1]},${z + d[2]}`;
+        if (occ.has(nk) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
+      }
+    }
+  }
+  const cols = new Map();
+  for (const key of occ) {
+    const [x, y, z] = key.split(',').map(Number);
+    const ck = `${x},${z}`;
+    let c = cols.get(ck);
+    if (!c) cols.set(ck, c = { min: y, max: y, n: 0 });
+    if (y < c.min) c.min = y;
+    if (y > c.max) c.max = y;
+    c.n++;
+  }
+  let span = 0, filled = 0;
+  for (const c of cols.values()) { span += c.max - c.min + 1; filled += c.n; }
+  return { padCount: pads, negativeSpace: span ? Math.max(0, 1 - filled / span) : 0 };
+}
+
+/** Medidas por regra, para o estágio 3 pontuar e para o modo ?debug=rules. */
+export function measureDesign(sk, radii, inst, design) {
+  const empty = {
+    taperRatio: 0, reverseTaper: 0, firstBranchRatio: 0, crossings: 0, barBranches: 0,
+    crownRatio: 0, padCount: 0, negativeSpace: 0,
+  };
+  if (!sk || sk.N < 3 || !radii) return empty;
+  const ch = childrenOf(sk);
+  const drops = !!(design && design.cascade);
+  const info = trunkChain(sk, ch, drops);
+  const { H } = treeExtent(sk);
+  let rBase = 0;
+  for (const i of info.trunk) {
+    if (sk.Y[i] >= 0 && sk.Y[i] <= Math.max(0.06, H * 0.1) && radii[i] > rBase) rBase = radii[i];
+  }
+  if (!(rBase > 0)) rBase = radii[info.trunk[1]] || radii[1] || 0.02;
+  const height = drops ? Math.max(chainLength(sk, info.trunk), H) : H;
+  const taperRatio = height / Math.max(2 * rBase * (design?.visualBump || 1), 1e-4);
+  let reverseTaper = 0, prev = -1;
+  for (const i of info.trunk) {
+    if (sk.Y[i] < 0.05) continue;
+    if (prev >= 0 && radii[i] > prev * 1.08) reverseTaper++;
+    prev = radii[i];
+  }
+  const prim = primariesOf(sk, info, ch);
+  let firstY = prim.length ? prim[0].y : H;
+  for (const p of prim) if (p.n > 8 && p.y < firstY) firstY = p.y;
+  const gap = Math.max(0.03, H * 0.04);
+  let barBranches = 0;
+  if (!design?.broom) {
+    for (let a = 0; a < prim.length; a++) for (let b = a + 1; b < prim.length; b++) {
+      if (Math.abs(prim[a].y - prim[b].y) > gap) continue;
+      if (Math.abs(angDiff(prim[a].yaw, prim[b].yaw)) > 2.5) barBranches++;
+    }
+  }
+  const samples = prim.map((p) => {
+    const pts = [];
+    let i = p.c, guard = 0, prevI = p.ti;
+    while (i >= 0 && guard++ < 10) {
+      pts.push([sk.X[i], sk.Y[i], sk.Z[i]]);
+      const kids = ch[i];
+      if (!kids || !kids.length) break;
+      let best = kids[0], bd = -1;
+      for (const k of kids) {
+        const d = Math.hypot(sk.X[k] - sk.X[prevI], sk.Z[k] - sk.Z[prevI]);
+        if (d > bd) { bd = d; best = k; }
+      }
+      prevI = i;
+      i = best;
+    }
+    return pts;
+  });
+  let crossings = 0;
+  const lim = Math.max(0.045, H * 0.03);
+  for (let a = 0; a < samples.length; a++) for (let b = a + 1; b < samples.length; b++) {
+    let hit = false;
+    for (let i = 1; i < samples[a].length && !hit; i++) for (let j = 1; j < samples[b].length && !hit; j++) {
+      const A = samples[a][i], B = samples[b][j];
+      if (Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) < lim) hit = true;
+    }
+    if (hit) crossings++;
+  }
+  let fH = 0, fMin = Infinity, fR = 0;
+  const pts = [];
+  if (inst) for (const k of ['leaf', 'needles', 'petal']) for (const it of inst[k] || []) {
+    if (!it.p || (it.p.y < H * 0.12 && !drops)) continue;
+    if (it.p.y > fH) fH = it.p.y;
+    if (it.p.y < fMin) fMin = it.p.y;
+    fR = Math.max(fR, Math.hypot(it.p.x, it.p.z));
+    pts.push(it.p);
+  }
+  const span = drops ? Math.max(0.2, fH - (Number.isFinite(fMin) ? fMin : 0)) : (fH > 0.05 ? fH : H);
+  const href = span;
+  const pads = clusterPads(pts, Math.max(href, 0.2));
+  return {
+    taperRatio: +taperRatio.toFixed(3),
+    reverseTaper,
+    firstBranchRatio: +(H > 0 ? firstY / H : 0).toFixed(3),
+    crossings,
+    barBranches,
+    crownRatio: +(href > 0 ? (fR * 2) / href : 0).toFixed(3),
+    padCount: pads.padCount,
+    negativeSpace: +pads.negativeSpace.toFixed(3),
+  };
 }
