@@ -218,8 +218,8 @@ juvenil: B → Z pequeno, sem flores
 | `years` | 18–45 |
 | `segs` / `segLen` | 4–5 · 0.11–0.14 |
 | `curve` | 22–32° |
-| `branchLen` / `bAngle` / `split` | 0.28–0.38 · 64–76° · 28–40° |
-| `flowerSize` / `open` / `flN` | 0.015–0.021 · 36–44° · 11–14 |
+| `branchLen` / `bAngle` / `split` | 0.16–0.24 · 48–62° · 28–40° |
+| `flowerSize` / `open` / `flN` | 0.028–0.038 · 40–48° · 12–15 |
 | `palette` | rosa, magenta, branco ou mescla |
 | `pot` | redondo ou retangular, barro sem esmalte, com musgo |
 

@@ -337,9 +337,9 @@ export function interpret(word, sp, P, rng, cap) {
         for (let i = 0; i < kk; i++) {
           const a = rng.f() * 6.2832, rad = Math.sqrt(0.2 + 0.8 * rng.f()), top = Math.sqrt(Math.max(1 - rad * rad, 0));
           const pos = new V3(
-            st.pos.x + Math.cos(a) * rad * rx * 0.72 + hx * rx * 0.42,
-            st.pos.y + ry * (0.08 + top * (0.55 + 0.35 * rng.f())) + Math.max(hy, 0) * ry * 0.15,
-            st.pos.z + Math.sin(a) * rad * rx * 0.72 + hz * rx * 0.42);
+            st.pos.x + Math.cos(a) * rad * rx * 0.42 + hx * rx * 0.18,
+            st.pos.y + ry * (0.06 + top * (0.5 + 0.3 * rng.f())) + Math.max(hy, 0) * ry * 0.1,
+            st.pos.z + Math.sin(a) * rad * rx * 0.42 + hz * rx * 0.18);
           const Hh = new V3(Math.cos(a) * rad * 0.8 + hx * 0.5, 0.38 + top * 0.85 + Math.max(hy, 0) * 0.25, Math.sin(a) * rad * 0.8 + hz * 0.5).normalize();
           emitFunnel(add, rng, pos, Hh, s * (0.88 + rng.f() * 0.28), open + rng.jit(4), np, lf, 0.085);
         }
@@ -863,9 +863,9 @@ Object.assign(SPECIES, {
         : { h: r.range(336, 350), s: r.range(0.58, 0.74), l: r.range(0.64, 0.74) };
       return {
         iterations: 5, years: r.int(18, 45), segs: r.int(4, 5), segLen: r.range(0.11, 0.14), curve: r.range(22, 32), cycles: r.range(0.75, 1.05), phase: r.range(0, 6.28), lean: r.range(-5, 5),
-        roots: r.int(5, 7), rootW: r.range(3.4, 5), branchLen: r.range(0.28, 0.38), bAngle: r.range(64, 76), split: r.range(28, 40), ratio: r.range(0.4, 0.48), cont: r.range(0.42, 0.5), lift: r.range(10, 16),
-        padR: r.range(0.2, 0.26), padH: r.range(0.1, 0.14), padN: r.int(14, 18), leafS: r.range(0.032, 0.044), leafH: r.range(122, 136), leafSat: r.range(0.4, 0.55), leafL: r.range(0.045, 0.072),
-        flR: r.range(0.16, 0.22), flH: r.range(0.09, 0.13), flN: r.int(11, 14), flowerSize: r.range(0.015, 0.021), open: r.range(36, 44), petals: 5,
+        roots: r.int(5, 7), rootW: r.range(3.4, 5), branchLen: r.range(0.16, 0.24), bAngle: r.range(48, 62), split: r.range(28, 40), ratio: r.range(0.4, 0.48), cont: r.range(0.42, 0.5), lift: r.range(10, 16),
+        padR: r.range(0.22, 0.28), padH: r.range(0.11, 0.15), padN: r.int(10, 14), leafS: r.range(0.022, 0.03), leafH: r.range(118, 132), leafSat: r.range(0.38, 0.52), leafL: r.range(0.16, 0.24),
+        flR: r.range(0.2, 0.26), flH: r.range(0.12, 0.16), flN: r.int(12, 15), flowerSize: r.range(0.028, 0.038), open: r.range(40, 48), petals: 5,
         palette, petalH: tone.h, petalS: tone.s, petalL: tone.l, pot: r.chance(0.5) ? 'redondo' : 'retangular', bloomAt: 5.7,
       };
     },
@@ -874,7 +874,7 @@ Object.assign(SPECIES, {
       const r = new Rand('azaleia-axioma::' + P.phase);
       const bloom = (sc = 1) => `E(${n(P.flR * sc)},${n(P.flH * Math.sqrt(sc))},${Math.max(2, Math.round(P.flN * sc))},${n(P.flowerSize)})`;
       let roots = '';
-      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(8))})&(${n(90 + r.f() * 4)})F(${n(0.07 * (0.7 + r.f() * 0.4))})Q(${n(P.rootW * (0.4 + r.f() * 0.35))})]`;
+      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(8))})&(${n(96 + r.f() * 4)})F(${n(0.045 * (0.7 + r.f() * 0.35))})Q(${n(P.rootW * (0.45 + r.f() * 0.3))})]`;
       let ax = `!(1)${roots}/(${n(P.lean * 5)})&(${n(P.lean)})`, yaw = r.f() * 360;
       const start = 1;
       for (let k = 0; k < P.segs; k++) {
@@ -883,7 +883,7 @@ Object.assign(SPECIES, {
         if (k >= start) {
           const u = (k - start) / Math.max(P.segs - start, 1);
           const dome = Math.sqrt(Math.max(0.12, 1 - Math.pow((u - 0.42) / 0.58, 2)));
-          const ang = 30 + (P.bAngle - 30) * (1 - u * 0.72);
+          const ang = 22 + (P.bAngle - 22) * (1 - u * 0.55);
           const len = P.branchLen * (0.3 + 0.7 * dome);
           yaw += 52 + r.jit(10);
           ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})~(${n(-0.02)})B(${n(len)})]`;
@@ -897,11 +897,11 @@ Object.assign(SPECIES, {
         rules: {
           B: (p, rr) => {
             const s = p[0];
-            if (s < 0.12) return `F(${n(Math.max(s * 0.28, 0.016))})` + pad(P, 0.9) + bloom(0.95);
-            return `F(${n(s * 0.26)})` + pad(P, 0.5) + `[+(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})]^(${n(P.lift * 0.5)})/(${n(rr.jit(12))})B(${n(s * P.cont)})`;
+            if (s < 0.12) return `F(${n(Math.max(s * 0.22, 0.014))})` + pad(P, 0.48) + bloom(1.15);
+            return `F(${n(s * 0.22)})` + pad(P, 0.32) + `[+(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})]^(${n(P.lift * 0.5)})/(${n(rr.jit(12))})B(${n(s * P.cont)})`;
           },
         },
-        finalize: { B: () => pad(P, 0.7) + bloom(1) },
+        finalize: { B: () => pad(P, 0.42) + bloom(1.2) },
         juvenile: { B: () => pad(P, 0.42) }, juvenileLife: 1.45,
         display: [
           `ω : nebari × ${P.roots}   tronco curto em S { &(${n(P.curve)}°·cos) F [ /(lado ±) &(${n(P.bAngle)}°→mais fechado no topo) ~(−0.04) B ] } × ${P.segs}   ápice B`,
@@ -920,11 +920,18 @@ Object.assign(SPECIES, {
       if (kind === 'petal') return G.azaleaPetal ? G.azaleaPetal() : null;
       return null;
     },
+    noShadow(kind) { return kind === 'petal' || kind === 'center'; },
     instMaterial(kind) {
       const THREE = globalThis.THREE;
       if (!THREE) return null;
-      if (kind === 'leaf') return new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.36, metalness: 0.04 });
-      if (kind === 'petal') { const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.4, metalness: 0 }); m.emissive = new THREE.Color(0xfff6f8); m.emissiveIntensity = 0.1; return m; }
+      if (kind === 'leaf') {
+        const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.82, metalness: 0 });
+        m.emissive = new THREE.Color(0x24381c); m.emissiveIntensity = 0.28; m.shadowSide = THREE.FrontSide; return m;
+      }
+      if (kind === 'petal') {
+        const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.72, metalness: 0 });
+        m.emissive = new THREE.Color(0xfff7f8); m.emissiveIntensity = 0.18; m.shadowSide = THREE.FrontSide; return m;
+      }
       if (kind === 'center') return new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.5, metalness: 0 });
       return null;
     },
@@ -937,12 +944,12 @@ Object.assign(SPECIES, {
       return hsl(pal.h + jh * 2.2, Math.min(1, pal.s + (js - 0.5) * 0.05), Math.min(0.95, pal.l + (jl - 0.5) * 0.04));
     },
     extra({ group, sk, P, rng }) {
-      const { H, R } = skExtent(sk), a = Math.max(R * 0.55, H * 0.22, 0.72);
-      const round = P.pot === 'redondo';
+      const { R } = skExtent(sk);
+      const spread = Math.max(R * 2, 0.4), potW = spread * 2 / 3, round = P.pot === 'redondo', a = potW / 2;
       const pot = globalThis.makePot(group, {
-        a, b: round ? a * 0.96 : a * 0.7, h: round ? a * 0.4 : a * 0.34, n: round ? 2 : 6.5,
-        lip: 0.05, taper: round ? 0.05 : 0.07, foot: 0.08, bulge: round ? 0.04 : 0,
-        color: hsl(18, 0.45, 0.23), rough: 0.95, moss: 0.8, mound: a * 0.05,
+        a, b: round ? a * 0.94 : a * 0.7, h: potW * (round ? 0.2 : 0.16), n: round ? 2 : 6.5,
+        lip: 0.04, taper: round ? 0.04 : 0.06, foot: 0.12, bulge: round ? 0.03 : 0,
+        color: hsl(18, 0.45, 0.23), rough: 0.95, moss: 0.75, mound: a * 0.1,
       }, rng);
       return { floor: pot.floor, points: pot.points };
     },
@@ -1445,7 +1452,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     scaffold: (PP, def) => ({ axiom: def.axiom, rules: def.rules, iters: PP.iterations, seg: 0.22, time: (t) => t * 24 * 0.55 / (PP.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
     cfg: (PP, cl) => ({ shadow: { vox: 0.28, q: 4, b: 1.2, a: 1, C: 4 }, rp: 0.28, dk: 0.07, cone: 1.15, nMax: () => 2, lambda: () => 0.48, len: () => 0.034, xi: () => 0.5, trop: () => 0.03, maxTurn: 0.55,
       phyllo: () => ({ type: 'alt', div: 137.5, angle: 48, p: 0.9 }), maxOrder: 6, maxIdle: 7,
-      leaf: { kind: cl.kind, per: () => 6, pitch: 28, pitchJ: 20, keep: () => 14, size: PP.leafS * 1.3 }, shedT: () => 0.05 }),
+      leaf: { kind: cl.kind, per: () => 3, pitch: 34, pitchJ: 16, keep: () => 6, size: PP.leafS * 0.9 }, shedT: () => 0.05 }),
   })(P, r, sp, ctx);
   const bloom = S.cfg.years * 0.66;
   S.dress = (push, R, rng) => {
@@ -1460,7 +1467,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     const outer = [];
     for (const l of live) {
       const shell = Math.hypot(l.x - cx, l.z - cz) / maxR, top = l.y / Math.max(maxY, 1e-3);
-      if (shell > 0.1 || top > 0.32) outer.push(l);
+      if ((shell > 0.16 || top > 0.38) && top > 0.16) outer.push(l);
     }
     if (!outer.length) return;
     let cy = 0; for (const l of live) cy += l.y; cy /= live.length;
@@ -1472,7 +1479,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
       const rad = vx * vx + vy * vy + vz * vz, b = az + el * AZ;
       if (!bins[b] || bins[b].rad < rad) bins[b] = { l, rad };
     }
-    const gap = Math.max(0.034, P.flowerSize * 1.8);
+    const gap = Math.max(0.02, P.flowerSize * 0.62);
     const gap2 = gap * gap;
     const placed = [];
     const put = (l) => {
@@ -1483,16 +1490,16 @@ SIMS.azaleia = (P, r, sp, ctx) => {
       dir.normalize();
       const side = new V3(-dir.z, 0, dir.x); if (side.lengthSq() < 1e-8) side.set(1, 0, 0); side.normalize();
       const up = new V3().crossVectors(side, dir).normalize();
-      const nFl = 8 + (rng.f() * 3 | 0), rad = 0.028 + rng.f() * 0.016;
+      const nFl = 10 + (rng.f() * 3 | 0), rad = 0.048 + rng.f() * 0.02;
       for (let k = 0; k < nFl; k++) {
         const a = (k / nFl) * 6.2832 + rng.f() * 0.3, u = rng.f(), rr = rad * Math.sqrt(u), lift = rad * (0.25 + 0.85 * Math.sqrt(Math.max(0, 1 - u)));
-        const pos = new V3(l.x, l.y, l.z).addScaledVector(dir, 0.004 + lift * 0.25).addScaledVector(side, Math.cos(a) * rr).addScaledVector(up, Math.sin(a) * rr * 0.72 + lift * 0.15);
-        const face = dir.clone(); face.y += 0.55; face.normalize();
-        emitFunnel(push, rng, pos, face, P.flowerSize * (0.85 + rng.f() * 0.25), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.09);
+        const pos = new V3(l.x, l.y, l.z).addScaledVector(dir, -0.008 + lift * 0.2).addScaledVector(side, Math.cos(a) * rr).addScaledVector(up, Math.sin(a) * rr * 0.7 + lift * 0.35);
+        const face = dir.clone(); face.y += 0.62; face.normalize();
+        emitFunnel(push, rng, pos, face, P.flowerSize * (1.05 + rng.f() * 0.3), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.08);
       }
     };
-    for (const b of bins) if (b && placed.length < 640) put(b.l);
-    for (let i = 0; i < outer.length && placed.length < 640; i++) put(outer[i]);
+    for (const b of bins) if (b && placed.length < 520) put(b.l);
+    for (let i = 0; i < outer.length && placed.length < 520; i++) put(outer[i]);
   };
   return S;
 };
