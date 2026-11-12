@@ -19,7 +19,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero', 'olmo_chines'];
+const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero', 'olmo_chines', 'ficus'];
 const shots = join(root, 'screenshots/v8');
 await mkdir(shots, { recursive: true });
 

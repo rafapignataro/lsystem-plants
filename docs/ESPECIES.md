@@ -167,3 +167,34 @@ B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → 
 Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cenário `estudio`.
 
 **Crescimento simulado (v7):** andaime é o hokidachi inteiro; raminhos curtos enchem a casca do domo e a tesoura corta o que sai dele a cada 3 anos.
+
+## 🪴 Bonsai de Ficus (`ficus`)
+
+**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco é grosso e musculoso, de casca lisa cinza com lenticelas; a curva é a mesma do bordo, `&(curva · cos(2π·ciclos·k/n + φ))`. O nebari não usa o helper compartilhado: são 6–8 dedos de cinco segmentos, quase na horizontal, com peso `Q` para engrossar, saindo de um colo curto (`F(0.04)`, o nó 1, de onde a raiz aérea mede a fração do tronco). Dos galhos baixos descem raízes aéreas `W(seg, atraso, fração)` até o musgo. A copa é um conjunto de almofadas arredondadas de folhas ovais pequenas, verde-escuras e brilhantes.
+
+```
+ω : F(0.04)  nebari × raízes (5 F quase horizontais + Q)   tronco { &(curva·cos(…)) F } × n
+     a partir do 2º segmento, espiral áurea: [ /(137° ± 16°) &(abertura) B(L) ]
+     no primeiro andar, um segundo galho do lado oposto
+     raízes aéreas nos galhos baixos: F W(0.2, atraso, fração do tronco)
+     ápice: F B
+B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.55s) ] ^(16°) B(0.68s)
+       (s < 0.28 → almofada)
+```
+
+`tube.bump` deixa o tronco quase liso (um flare curto na base e um músculo suave) e engrossa o nebari no colo, afinando até a ponta. A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, de esmalte azul-turquesa, com musgo e sem pedras (elas cairiam fora do vaso baixo).
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 12–40 |
+| `segs` / `segLen` | 6–7 · 0.48–0.56 |
+| `curve` / `cycles` | 14–24° · 0.85–1.15 |
+| `roots` / `rootLen` / `rootW` | 6–8 · 1.15–1.42 · 22–32 |
+| `aerials` | 4–5 |
+| `branchLen` / `bAngle` | 0.62–0.84 · 42–54° |
+| `padR` / `padH` / `padN` | 0.56–0.7 · 0.32–0.42 · 72–96 |
+| `flare` / `muscle` | 0.05–0.12 · 0.04–0.08 |
+
+Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
+
+**Crescimento simulado (v7):** Bonsai, com poda a cada 2 anos e o andaime um pouco mais cedo, para a copa já estar enchendo no meio da formação. O estilo (nebari, tronco, raízes aéreas) vem da gramática; as almofadas enchem de raminhos com mais folhas ovais por gema.
