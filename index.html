@@ -821,7 +821,7 @@ function assemblePlant(pkg) {
     group.add(mesh);
   };
   const deadwood = sp.fx === 'junipero' || sp.fx === 'cipreste';
-  const joints = deadwood ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40, rRef: rFull });
+  const joints = deadwood ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40, rRef: rFull, skip: sp.skipJoint });
   if (joints) {
     const barkCol = sp.bark(P)[0];
     addPlain(joints.joints, asColor(barkCol), 0.88, true);
@@ -856,7 +856,7 @@ function assemblePlant(pkg) {
       if (age === this.lastAge) return;
       const t = performance.now();
       const T = Math.pow(age, 0.8) * tEnd;
-      computeRadii(sk, T, W, sbuf, radData); radTex.needsUpdate = true;
+      computeRadii(sk, T, W, sbuf, radData); if (sp.capRoots) sp.capRoots(radData, sk); radTex.needsUpdate = true;
       let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && !(sk.TD && sk.TD[i] <= T) && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
       this.curH = hy * inner.scale.x;
       this.lastAge = age; this.radUpdateMs = performance.now() - t;

@@ -273,7 +273,7 @@ function pushSphere(pos, nor, idx, meta, cx, cy, cz, R, seg, node, ref) {
  */
 export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
   const rRef = opts.rRef || rFull;
-  const forks = thickForks(sk, rFull, opts.limit ?? 40);
+  const forks = thickForks(sk, rFull, opts.limit ?? 40).filter((i) => !(opts.skip && opts.skip(i, sk)));
   const pos = [], nor = [], idx = [], meta = { node: [], cen: [], ref: [] };
   for (const i of forks) pushSphere(pos, nor, idx, meta, sk.X[i], sk.Y[i], sk.Z[i], rFull[i] * 0.58, 5, i, rRef[i] || 0);
   const jpos = [], jnor = [], jidx = [], jmeta = { node: [], cen: [], ref: [] };

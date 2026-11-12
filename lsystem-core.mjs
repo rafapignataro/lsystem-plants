@@ -280,9 +280,19 @@ export function interpret(word, sp, P, rng, cap) {
         const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
         const tb = Math.max(m.t1 ?? 0, T1[st.node]) + (p && p[1] != null ? p[1] : 0.2);
         let par = st.node, x = st.pos.x, z = st.pos.z; const y0 = st.pos.y, a0 = X.length;
+        const olen = Math.hypot(x, z) || 1, ux = x / olen, uz = z / olen;
+        const yLand = Math.min(0.62, y0 * 0.42);
         for (let j = 1; j <= k; j++) {
           x += rng.jit(0.04); z += rng.jit(0.04);
-          X.push(x); Y.push(y0 * (1 - j / k)); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
+          const yLin = y0 * (1 - j / k);
+          let y = yLin;
+          if (yLin < yLand) {
+            const t = 1 - yLin / Math.max(yLand, 1e-4);
+            y = 0.045 * (1 - t);
+            x += ux * 0.32 * t;
+            z += uz * 0.32 * t;
+          }
+          X.push(x); Y.push(y); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
           par = X.length - 1;
         }
         // p[2] opcional: fração do tronco. Sem ele, o sorteio (e o RNG) continua o de antes.
@@ -687,30 +697,51 @@ Object.assign(SPECIES, {
     name: 'Bonsai de Ficus', emoji: '🪴', height: 5.6, theme: 'estudio', leafKind: 'ficus', padUp: 0.84, years: true, float: 0, rootDrop: 1.05, noStones: true,
     leafRough: 0.26, leafCoat: 0.62, leafCoatRough: 0.18,
     desc: 'Ficus retusa (figueira-ginseng) em estilo moyogi (ereto informal): tronco grosso e musculoso, de casca lisa cinza, com nebari forte e raízes aéreas que descem dos galhos baixos até o musgo; copa arredondada em almofadas densas de folhas ovais pequenas, verde-escuras e brilhantes, num vaso oval raso de esmalte azul-turquesa.',
-    baseWidth: 0.34, leafRoll: 14, bump: 0.01, tubeMinSides: 12, potEllipse: { a: 1.95, b: 1.48 }, wood: { leo: [2.2, 2.4], G: 1.35, tip: 0.008, ring: 0.48, share: 0.72 },
+    baseWidth: 0.24, leafRoll: 14, bump: 0.008, tubeMinSides: 22, potEllipse: { a: 1.05, b: 0.78 }, wood: { leo: [2.2, 2.4], G: 1.15, tip: 0.007, ring: 0.42, share: 0.62 },
     tube: {
+      // horiz = |cos θ| é a lateral do tubo (Nn); sin θ é a vertical (Bn). Achatar = alargar os lados e baixar o dorso.
       bump: (th, arc, g, trunk, P) => {
         const y = Math.max(g.y, 0);
-        // nebari: grossa no colar e afinando até a ponta. A aérea chega ao solo com arco longo e não entra aqui.
+        const horiz = Math.pow(Math.abs(Math.cos(th)), 0.5);
         if (!trunk) {
-          if (y < 0.4 && arc < 1.85) {
-            const u = Math.min(1, arc / 1.35);
-            return 1.1 + 1.15 * Math.pow(1 - u, 1.15);
+          if (arc > 1.5) {
+            if (y > 0.055) return 1;
+            const sink = Math.min(1, (0.055 - y) / 0.055);
+            const fade = Math.pow(1 - sink, 0.42);
+            const side = 1.15 + 1.1 * sink;
+            const vert = 1 - 0.86 * sink;
+            return Math.max(0.02, fade * (vert + (side - vert) * horiz));
           }
-          return 1;
+          // O shader alarga o colar até 2.8× e isso virava um cone. O divisor desfaz esse alargamento.
+          const d = Math.max(0, arc - 0.04);
+          const collar = 1 + 1.8 * Math.exp(-d / 0.34);
+          const u = Math.min(1.15, d / 0.68);
+          const dissolve = Math.pow(Math.max(0, 1 - Math.max(0, u - 0.58) / 0.32), 1.4);
+          const vary = 0.55 + 0.7 * Math.abs(Math.sin(g.x * 0.35 + g.z * 0.42 + P.phase));
+          const side = 4.4 * dissolve;
+          const vert = 0.7 * dissolve;
+          return Math.max(0.004, (vert + (side - vert) * horiz) * vary / Math.pow(collar, 0.72));
         }
-        const flare = P.flare * Math.exp(-y / P.flareH);
-        const lobes = 0.94 + 0.06 * Math.cos(P.lobes * th + P.phase);
-        const muscle = Math.sin(2 * th + arc * 1.05 + P.phase) * 0.65 + Math.sin(arc * 1.5 + 1.3) * 0.35;
-        return Math.max(0.9, 1 + flare * lobes + P.muscle * muscle * Math.exp(-y / 1.6));
+        const foot = Math.exp(-y / Math.max(0.1, P.flareH));
+        const slim = Math.exp(-y / 1.35);
+        const muscle = Math.sin(2 * th + arc * 0.9 + P.phase) * 0.55 + Math.sin(arc * 1.35 + 0.5) * 0.32;
+        return Math.max(0.38, (0.42 + 0.22 * slim) * (1 + P.flare * foot * 1.35) + P.muscle * muscle * Math.exp(-y / 2.1));
       },
+    },
+    skipJoint: (i, sk) => sk.Y[i] < 0.16,
+    capRoots(rad, sk) {
+      const cap = (rad[1] || rad[0] || 0.24) * 0.145;
+      if (!sk.tipw) return;
+      for (const [tip] of sk.tipw) {
+        for (let i = tip; i > 1; i = sk.PAR[i]) if (rad[i] > cap) rad[i] = cap;
+      }
     },
     params(r) {
       return {
-        iterations: 4, years: r.int(12, 40), segs: r.int(6, 7), segLen: r.range(0.48, 0.56), curve: r.range(14, 24), cycles: r.range(0.85, 1.15), phase: r.range(0, 6.28), lean: r.range(-9, 9),
-        roots: r.int(6, 8), rootW: r.range(22, 32), rootLen: r.range(1.15, 1.42), aerials: r.int(4, 5),
-        branchLen: r.range(0.62, 0.84), bAngle: r.range(42, 54), split: r.range(28, 40),
-        flare: r.range(0.05, 0.12), flareH: r.range(0.12, 0.2), lobes: r.int(5, 7), muscle: r.range(0.04, 0.08),
+        iterations: 4, years: r.int(12, 40), segs: r.int(7, 8), segLen: r.range(0.52, 0.6), curve: r.range(30, 46), cycles: r.range(0.85, 1.15), phase: r.range(0, 6.28), lean: r.range(-16, 16),
+        roots: r.int(6, 8), rootW: r.range(5, 9), rootLen: r.range(0.82, 1.02), aerials: r.int(4, 5),
+        branchLen: r.range(0.58, 0.78), bAngle: r.range(40, 52), split: r.range(28, 40),
+        flare: r.range(0.28, 0.46), flareH: r.range(0.1, 0.16), lobes: r.int(5, 7), muscle: r.range(0.04, 0.07),
         padR: r.range(0.56, 0.7), padH: r.range(0.32, 0.42), padN: r.int(72, 96), leafS: r.range(0.105, 0.132),
         leafH: r.range(126, 144), leafSat: r.range(0.62, 0.84), leafL: r.range(0.11, 0.16),
         barkH: r.range(28, 42), barkL: r.range(0.3, 0.38),
@@ -723,15 +754,20 @@ Object.assign(SPECIES, {
       const bare = 1;
       const nebariFicus = () => {
         let o = '';
+        const gap = 26 + r.f() * 24;
+        const span = 360 - gap;
+        const base = r.f() * 360;
         for (let i = 0; i < P.roots; i++) {
-          const L = P.rootLen * (i % 3 === 0 ? 1.1 : 0.72 + r.f() * 0.32);
-          const parts = 5;
-          let seg = `[/(${n(i * 360 / P.roots + r.jit(14))})&(${n(88.5 + r.f() * 1.6)})`;
+          const heavy = r.f();
+          const L = P.rootLen * (0.78 + heavy * 0.28);
+          const parts = 7;
+          const ang = base + (i + 0.5) * span / P.roots + r.jit(9);
+          let seg = `[/(${n(ang)})&(${n(87.5 + r.f() * 2)})`;
           for (let k = 0; k < parts; k++) {
-            if (k) seg += `/(${n(r.jit(12))})+(${n(r.jit(6))})&(${n(r.range(-0.4, 0.6))})`;
-            seg += `F(${n(L / parts * (1 - 0.08 * k))})`;
+            if (k) seg += `&(${n(k < 3 ? r.range(-0.15, 0.4) : r.range(1.7, 2.9))})+(${n((k % 2 ? 1 : -1) * r.range(7, 15))})/(${n(r.jit(5))})`;
+            seg += `F(${n(L / parts * (1 - 0.06 * k))})`;
           }
-          seg += `Q(${n(P.rootW * (0.82 + r.f() * 0.36))})]`;
+          seg += `Q(${n(P.rootW * (0.42 + heavy * 0.95))})]`;
           o += seg;
         }
         return o;
@@ -741,7 +777,7 @@ Object.assign(SPECIES, {
         if (aerialBox.n > 0 && u < 0.42) {
           const nDrop = aerialBox.n >= 2 && u < 0.2 ? 2 : 1;
           for (let d = 0; d < nDrop && aerialBox.n > 0; d++) {
-            const fat = d === 0 ? r.range(0.26, 0.38) : r.range(0.16, 0.24);
+            const fat = d === 0 ? r.range(0.13, 0.22) : r.range(0.08, 0.13);
             br += `F(${n(0.28 + r.f() * 0.08)})W(${n(0.2)},${n(0.04 + d * 0.14 + r.f() * 0.04)},${n(fat)})`;
             aerialBox.n--;
           }
@@ -753,7 +789,8 @@ Object.assign(SPECIES, {
       const aerialBox = { n: P.aerials };
       for (let k = 0; k < P.segs; k++) {
         const bend = P.curve * Math.cos(6.2832 * P.cycles * k / P.segs + P.phase);
-        ax += `&(${n(bend)})F(${n(P.segLen * (1 - 0.16 * k / P.segs))})`;
+        const sway = P.curve * 0.38 * Math.sin(6.2832 * (P.cycles * 0.5) * k / P.segs + P.phase);
+        ax += `+(${n(sway)})&(${n(bend)})/(${n(r.jit(3.5))})F(${n(P.segLen * (1 - 0.34 * k / P.segs))})`;
         if (k < bare) continue;
         const u = (k - bare) / Math.max(P.segs - bare, 1);
         yaw += 137 + r.jit(16);
@@ -775,7 +812,7 @@ Object.assign(SPECIES, {
         finalize: { B: (p) => pad(P, 0.9 + 0.2 * Math.min(p[0], 1.2)) },
         juvenile: { B: () => pad(P, 0.42) }, juvenileLife: 1.3,
         display: [
-          `ω : nebari × ${P.roots} (peso Q ${n(P.rootW)}, dedos no musgo)   tronco moyogi { &(${n(P.curve)}°·cos(2π·${n(P.cycles)}·k/${P.segs})) F } × ${P.segs}`,
+          `ω : nebari × ${P.roots} (peso Q ${n(P.rootW)}, línguas que somem no musgo)   tronco moyogi { &(${n(P.curve)}°·cos) +(balanço) F } × ${P.segs}`,
           `     galhos a partir do 2º segmento, em espiral áurea: [ /(137° ± 16°) &(${n(P.bAngle)}° → mais fechado no topo) B(L) ]`,
           `     raízes aéreas × ${P.aerials}: W(0.2, atraso, fração do tronco) nos galhos baixos — descem até o musgo`,
           `B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.55s) ] ^(16°) B(0.68s)   (s < 0.28 → almofada)`,
@@ -797,9 +834,9 @@ Object.assign(SPECIES, {
         if (sk.Y[i] < 0.35) rootR = Math.max(rootR, d);
         else if (sk.Y[i] > 0.7) crownR = Math.max(crownR, d);
       }
-      const a = Math.max(rootR * 1.28, crownR * 0.72, H * 0.26, 1.28);
+      const a = Math.max(rootR * 1.04, 0.72);
       const pot = makePot(group, {
-        a, b: a * 0.74, h: Math.min(a * 0.16, 0.32), n: 2.15, lip: 0.06, taper: 0.03, bulge: 0.03, foot: 0.08,
+        a, b: a * 0.72, h: Math.min(a * 0.2, 0.22), n: 2.15, lip: 0.05, taper: 0.03, bulge: 0.02, foot: 0.06,
         color: hsl(P.potH, P.potS, P.potL), rough: 0.12, metal: 0.04, glaze: true, clearcoat: 1, clearcoatRough: 0.08,
         moss: 0.88, mound: Math.min(a * 0.04, 0.06),
       }, rng);
