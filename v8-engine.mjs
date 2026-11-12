@@ -235,7 +235,7 @@ function thickForks(sk, rFull, limit) {
   return forks.slice(0, limit);
 }
 
-function pushSphere(pos, nor, idx, cx, cy, cz, R, seg) {
+function pushSphere(pos, nor, idx, meta, cx, cy, cz, R, seg, node, ref) {
   const grid = [];
   for (let lat = 0; lat <= seg; lat++) {
     const v = (lat / seg) * Math.PI;
@@ -255,18 +255,27 @@ function pushSphere(pos, nor, idx, cx, cy, cz, R, seg) {
       for (const q of tri) {
         pos.push(grid[q][0], grid[q][1], grid[q][2]);
         nor.push(grid[q][3], grid[q][4], grid[q][5]);
+        meta.node.push(node);
+        meta.cen.push(cx, cy, cz);
+        meta.ref.push(ref);
       }
       base += 3;
     }
   }
 }
 
-/** Esferas só nas forquilhas grossas (tronco e andaime). Jin: cones lascados, malha à parte. */
+/**
+ * Esferas só nas forquilhas grossas (tronco e andaime). Jin: esferas lascadas, malha à parte.
+ * Cada vértice guarda o nó e o raio aos 100% (opts.rRef; senão o raio usado no tamanho).
+ * O shader da planta escala a esfera por raio_atual/raio_final: some até o galho existir
+ * e em idade 1 volta ao tamanho em que foi construída.
+ */
 export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
+  const rRef = opts.rRef || rFull;
   const forks = thickForks(sk, rFull, opts.limit ?? 40);
-  const pos = [], nor = [], idx = [];
-  for (const i of forks) pushSphere(pos, nor, idx, sk.X[i], sk.Y[i], sk.Z[i], rFull[i] * 0.58, 5);
-  const jpos = [], jnor = [], jidx = [];
+  const pos = [], nor = [], idx = [], meta = { node: [], cen: [], ref: [] };
+  for (const i of forks) pushSphere(pos, nor, idx, meta, sk.X[i], sk.Y[i], sk.Z[i], rFull[i] * 0.58, 5, i, rRef[i] || 0);
+  const jpos = [], jnor = [], jidx = [], jmeta = { node: [], cen: [], ref: [] };
   if (sk.jin) {
     for (const i of sk.jin) {
       const p = sk.PAR[i];
@@ -276,13 +285,17 @@ export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
       const len = Math.min(L * 0.85, Math.max(rFull[i] || 0.02, 0.02) * 7);
       const ux = dx / L, uy = dy / L, uz = dz / L;
       const r0 = Math.max(rFull[p] || 0.02, 0.015) * 0.42;
-      pushSphere(jpos, jnor, jidx, sk.X[p] + ux * len * 0.35, sk.Y[p] + uy * len * 0.35, sk.Z[p] + uz * len * 0.35, r0, 4);
-      pushSphere(jpos, jnor, jidx, sk.X[p] + ux * len * 0.75, sk.Y[p] + uy * len * 0.75, sk.Z[p] + uz * len * 0.75, r0 * 0.45, 4);
+      const ref = rRef[i] || rRef[p] || 0;
+      pushSphere(jpos, jnor, jidx, jmeta, sk.X[p] + ux * len * 0.35, sk.Y[p] + uy * len * 0.35, sk.Z[p] + uz * len * 0.35, r0, 4, i, ref);
+      pushSphere(jpos, jnor, jidx, jmeta, sk.X[p] + ux * len * 0.75, sk.Y[p] + uy * len * 0.75, sk.Z[p] + uz * len * 0.75, r0 * 0.45, 4, i, ref);
     }
   }
-  const pack = (P, N, I) => (P.length ? { pos: new Float32Array(P), nor: new Float32Array(N), idx: I } : null);
-  const joints = pack(pos, nor, idx);
-  const jin = pack(jpos, jnor, jidx);
+  const pack = (P, N, I, M) => (P.length ? {
+    pos: new Float32Array(P), nor: new Float32Array(N), idx: I,
+    node: new Float32Array(M.node), cen: new Float32Array(M.cen), ref: new Float32Array(M.ref),
+  } : null);
+  const joints = pack(pos, nor, idx, meta);
+  const jin = pack(jpos, jnor, jidx, jmeta);
   if (!joints && !jin) return null;
   return { joints, jin };
 }
