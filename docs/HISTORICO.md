@@ -7,7 +7,7 @@ Datas no horário de Brasília (UTC−3).
 - Visual padrão de novo alinhado à v7: genes só mudam a planta quando o usuário cruza, muta ou edita um controle. Gravidade e fototropismo começam em zero. A sombra simulada volta a cair na vertical até o sol sair do padrão.
 - Junções nas forquilhas grossas (inclui o carvalho), sem a malha que furava o junípero. Shari/jin entalhados no tubo.
 - Jardim montado em Web Workers (4): cerca de 2 s de CPU de esqueleto no headless, UI livre durante a simulação.
-- Madeira morta do junípero volta ao veio contínuo do shader da v7 (sem furos geométricos). No jardim a folhagem não rareia na distância do enquadramento; o impostor só entra quando a planta fica minúscula na tela.
+- Madeira morta do junípero e do cipreste: o pontilhado vinha do shader (o mesmo da v7) — seno de ~27 ciclos por volta com ruído, e os picos viravam buracos no relevo. Agora o veio é longo, esticado no eixo do tronco, sem pontos. No jardim a folhagem não rareia na distância do enquadramento; o impostor só entra quando a planta fica minúscula na tela.
 - Raízes desviam de pedras e do vaso. LOD por distância (metade / quarto das folhas, depois impostor).
 - Painel de genoma: dois pais, filho, sliders com nomes em português, mutação.
 

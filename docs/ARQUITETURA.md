@@ -272,5 +272,5 @@ A montagem pesada (L-System ou simulação) roda em `plant-worker.mjs` (`buildSk
 
 Por padrão os genes são **mostrados** e não aplicados, a gravidade e o fototropismo começam em 0 e a sombra da simulação continua vertical — o visual padrão acompanha a v7. Cruzar, mutar ou mover um gene passa a aplicar o genoma (`&genoma=` no hash).
 
-Junções: esferas só nas forquilhas grossas (tronco e andaime, inclusive o carvalho), com material simples de casca. No junípero e no cipreste a madeira morta continua o veio contínuo do shader (`LS_DEAD`), sem furar o tubo. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. No jardim a folhagem fica na densidade da v7 (no máximo 1 em cada 2 folhas, desenhadas maiores); o impostor só entra quando a planta ocupa menos de ~40 px.
+Junções: esferas só nas forquilhas grossas (tronco e andaime, inclusive o carvalho), com material simples de casca. No junípero e no cipreste a madeira morta é um veio longo e contínuo no shader (`LS_DEAD`): a v7 pontilhava a faixa com um seno de alta frequência. Sem furos no tubo. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. No jardim a folhagem fica na densidade da v7 (no máximo 1 em cada 2 folhas, desenhadas maiores); o impostor só entra quando a planta ocupa menos de ~40 px.
 

@@ -452,26 +452,28 @@ vec3 lsBark(vec3 base, vec3 nW){
   }
 #endif
 #ifdef LS_DEAD
-  { // v6: madeira morta do bonsai (shari no tronco, jin nos galhos): faixa em espiral no ângulo do tubo, branca/prateada e com veios
-    // uFx = (cobertura 0–1 da volta, torção rad/unidade de arco, arco máximo, fase) · uFx2 = (raio relativo mínimo, —, freq. dos veios, borda)
+  { // madeira morta: faixa em espiral, prata contínua com veios longos ao longo da torção
+    // uFx = (cobertura 0–1 da volta, torção rad/unidade de arco, arco máximo, fase) · uFx2 = (raio relativo mínimo, —, legado, borda)
+    // O veio antigo (seno ~27 ciclos/volta + ruído num círculo de raio uFx2.z, depois smoothstep nos picos)
+    // virava uma grade de pontos escuros — a v7 tinha o mesmo termo. Aqui o grão é esticado no arco.
     float th = atan(vFx.y, vFx.x), arc = vFx.z;
     float sp = th - uFx.y * arc - uFx.w;
-    float wob = 0.35 * (lsN(vec3(arc * 1.3, cos(sp) * 1.5, sin(sp) * 1.5) + 17.0) - 0.5);
+    float wob = 0.1 * (lsN(vec3(arc * 0.22, sp * 0.25, 17.0)) - 0.5);
     float c = cos(sp + wob);
-    float band = smoothstep(cos(3.14159 * uFx.x) - 0.04, cos(3.14159 * uFx.x) + 0.04, c);
+    float band = smoothstep(cos(3.14159 * uFx.x) - 0.1, cos(3.14159 * uFx.x) + 0.1, c);
     float rel = vMt.y / uRmax;
     float dead = band * (1.0 - smoothstep(uFx.z * 0.85, uFx.z, arc)) * smoothstep(uFx2.x * 0.7, uFx2.x, rel);
     dead = max(dead, step(0.5, vFx.w));                                  // jin: o galho inteiro morto
     dead *= smoothstep(0.05, 0.35, vMt.x);                               // a madeira morta é trabalhada com os anos
-    float grain = lsN(vec3(cos(sp) * uFx2.z, sin(sp) * uFx2.z, arc * 0.6));
-    float vein = 0.5 + 0.5 * sin((sp * 9.0 + 6.0 * grain) * uFx2.z * 0.5);
-    float crack = smoothstep(0.92, 0.99, vein) * detail;
-    vec3 dw = vec3(0.86, 0.84, 0.8) * (0.78 + 0.22 * grain) * (1.0 - 0.45 * crack);
-    float lip = smoothstep(0.0, uFx2.w, band) * (1.0 - smoothstep(uFx2.w, uFx2.w * 2.5, band)) * (1.0 - step(0.5, vFx.w));
+    float fiber = lsN(vec3(sp * 0.4, arc * 0.14, 4.0));                  // manchas longas ao longo do eixo
+    float line = 0.5 + 0.5 * sin(sp * 2.3 + 1.1 * lsN(vec3(arc * 0.2, 1.7, sp * 0.12)));
+    float crease = smoothstep(0.66, 0.28, line);                         // sulco largo, contínuo, sem pico isolado
+    vec3 dw = vec3(0.92, 0.90, 0.86) * (0.94 + 0.08 * fiber) * (1.0 - 0.13 * crease);
+    float lip = smoothstep(0.0, uFx2.w, band) * (1.0 - smoothstep(uFx2.w, uFx2.w * 3.0, band)) * (1.0 - step(0.5, vFx.w));
     col = mix(col, dw, dead);
-    col *= 1.0 - 0.35 * lip * dead;                                       // borda escura onde a casca viva enrola
-    hh = mix(hh, 0.4 + 0.25 * grain - 0.3 * crack, dead) + 0.25 * lip * dead;
-    lsRough = mix(lsRough, 0.75, dead);
+    col *= 1.0 - 0.18 * lip * dead;                                       // borda suave onde a casca viva enrola
+    hh = mix(hh, 0.72 + 0.05 * fiber - 0.045 * crease, dead) + 0.06 * lip * dead;
+    lsRough = mix(lsRough, 0.58, dead);
   }
 #endif
   // musgo nas faces viradas para cima da madeira velha
