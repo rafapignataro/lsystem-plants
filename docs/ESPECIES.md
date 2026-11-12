@@ -144,12 +144,12 @@ Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário 
 
 ## 🍃 Bonsai de Olmo Chinês (`olmo_chines`)
 
-**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — três `F` quase sem `&` nem `/` — e perto de um terço da altura se abre em três anéis curtos (externo, médio, interno) mais um líder. Cada galho sai em leque e, depois de um trecho reto, `~(-lift)` curva para o céu: o tropismo age a cada `F`, então vários segmentos curtos fecham um domo. A ramificação é dicotômica, com um terceiro ramo para cima de vez em quando, e termina em folhas serrilhadas pequenas e uma almofada miúda, arejada o bastante para o desenho dos ramos aparecer na borda.
+**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — quatro `F` quase sem `&` nem `/`, mais alto e com taper — e alarga no solo (nebari). A divisão não é um nó só: cada galho nasce um `F` curto acima do anterior, com colar na casca, em três faixas (externa, média, interna) mais um líder. Depois de um trecho reto, `~(-lift)` curva para o céu e vários segmentos curtos fecham o domo. A ramificação fina é mais densa e termina em folhas serrilhadas pequenas.
 
 ```
-ω : nebari × raízes   tronco reto F × 3
-     anel externo × 8 a &(outerA)   F(0.065)   anel médio × 7 a &(midA)   F(0.05)   anel interno × 5 a &(innerA)   líder
-     galho: ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
+ω : nebari × raízes   tronco reto F × 4
+     F(rise) galho externo × 4 a &(outerA)   F(rise) médio × 3   F(rise) interno × 2   líder
+     galho: F curto (colar) ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
 B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → folhas + Z pequena)
 ```
 
@@ -158,11 +158,12 @@ B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 20–55 |
-| `segLen` | 0.22–0.26 |
-| `spokesA` / `outerA` | 8 · 44–54° |
-| `arm` / `lift` | 1.22–1.42 · 0.20–0.28 |
-| `split` | 22–30° |
-| `padN` / `leafS` | 5–7 · 0.028–0.038 |
+| `segLen` | 0.24–0.28 (4 segmentos) |
+| `spokesA` / `outerA` | 4 · 56–66° |
+| `arm` / `lift` | 1.40–1.58 · 0.11–0.16 |
+| `rise` | 0.058–0.078 (passo entre as saídas) |
+| `split` | 24–32° |
+| `padN` / `leafS` | 10–13 · 0.020–0.028 |
 
 Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cenário `estudio`.
 
@@ -170,10 +171,10 @@ Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cen�
 
 ## 🪴 Bonsai de Ficus (`ficus`)
 
-**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco é grosso e musculoso, de casca lisa cinza com lenticelas; a curva é a mesma do bordo, `&(curva · cos(2π·ciclos·k/n + φ))`. O nebari não usa o helper compartilhado: são 6–8 dedos de cinco segmentos, quase na horizontal, com peso `Q` para engrossar, saindo de um colo curto (`F(0.04)`, o nó 1, de onde a raiz aérea mede a fração do tronco). Dos galhos baixos descem raízes aéreas `W(seg, atraso, fração)` até o musgo. A copa é um conjunto de almofadas arredondadas de folhas ovais pequenas, verde-escuras e brilhantes.
+**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco sobe em S (`&(curva · cos)` e um balanço lateral), largo só no colo e afinando logo acima, com casca lisa cinza e lenticelas. O nebari não usa o helper compartilhado: 6–8 raízes de sete segmentos saem do colo (`F(0.04)`, o nó 1), abrem um vão de um lado, descem até o musgo e o `tube.bump` as achata, varia a espessura e as apaga na ponta. As raízes aéreas `W` descem dos galhos baixos e, no fim, correm um pouco para fora sobre o solo, achatando até sumir. A copa é um conjunto de almofadas de folhas ovais pequenas, verde-escuras e brilhantes.
 
 ```
-ω : F(0.04)  nebari × raízes (5 F quase horizontais + Q)   tronco { &(curva·cos(…)) F } × n
+ω : F(0.04)  nebari × raízes (7 F, pitch desce no fim + Q)   tronco { +(balanço) &(curva·cos) F } × n
      a partir do 2º segmento, espiral áurea: [ /(137° ± 16°) &(abertura) B(L) ]
      no primeiro andar, um segundo galho do lado oposto
      raízes aéreas nos galhos baixos: F W(0.2, atraso, fração do tronco)
@@ -182,18 +183,18 @@ B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.5
        (s < 0.28 → almofada)
 ```
 
-`tube.bump` deixa o tronco quase liso (um flare curto na base e um músculo suave) e engrossa o nebari no colo, afinando até a ponta. A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, de esmalte azul-turquesa, com musgo e sem pedras (elas cairiam fora do vaso baixo).
+A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, pouco maior que o nebari, de esmalte azul-turquesa, com musgo e sem pedras.
 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 12–40 |
-| `segs` / `segLen` | 6–7 · 0.48–0.56 |
-| `curve` / `cycles` | 14–24° · 0.85–1.15 |
-| `roots` / `rootLen` / `rootW` | 6–8 · 1.15–1.42 · 22–32 |
+| `segs` / `segLen` | 7–8 · 0.52–0.60 |
+| `curve` / `cycles` | 30–46° · 0.85–1.15 |
+| `roots` / `rootLen` / `rootW` | 6–8 · 0.82–1.02 · 5–9 |
 | `aerials` | 4–5 |
-| `branchLen` / `bAngle` | 0.62–0.84 · 42–54° |
+| `branchLen` / `bAngle` | 0.58–0.78 · 40–52° |
 | `padR` / `padH` / `padN` | 0.56–0.7 · 0.32–0.42 · 72–96 |
-| `flare` / `muscle` | 0.05–0.12 · 0.04–0.08 |
+| `flare` / `flareH` / `muscle` | 0.28–0.46 · 0.10–0.16 · 0.04–0.07 |
 
 Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
 
