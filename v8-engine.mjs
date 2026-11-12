@@ -156,7 +156,8 @@ export function deflectRoots(sk, stones = [], pot = null) {
   };
   if (sk.tipw) for (const pair of sk.tipw) mark(pair[0]);
   if (sk.boost) for (const b of sk.boost) if (b.i != null) mark(b.i);
-  for (let i = 1; i < N; i++) if (Y[i] < 0.06 && Y[PAR[i]] < 0.2) isRoot[i] = 1;
+  // kengai: o tronco passa de y = 0 de propósito. Sem esta trava, a cascata seria puxada para dentro da elipse do vaso.
+  if (!sk.below) for (let i = 1; i < N; i++) if (Y[i] < 0.06 && Y[PAR[i]] < 0.2) isRoot[i] = 1;
   for (let i = 1; i < N; i++) {
     if (!isRoot[i] || i === 0) continue;
     for (const s of stones) {
