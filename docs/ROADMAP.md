@@ -1,5 +1,14 @@
 # Roadmap: limitações conhecidas e melhorias
 
+## Próximos passos planejados (combinados com o Rafael na v7)
+
+Os itens 1 (colonização do espaço + luz) e 2 (simulação de crescimento ano a ano) foram feitos na v7 ([ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7)). Ficaram anotados para depois:
+
+3. **Superfície única nas junções.** Trocar "tubo + colar" por uma superfície implícita perto das forquilhas (SDF dos segmentos com união suave `smin`, malhada por *marching cubes* / *dual contouring* só numa caixa em volta de cada junção, e costurada nos tubos), para o galho "brotar" do pai sem emenda. Com isso dá para **escavar madeira morta de verdade** (shari/jin com a forma subtraída do tronco, não só cor e relevo no shader).
+4. **Física e ambiente.** Vento dominante que deixa a copa assimétrica (gemas a barlavento crescem menos, galhos tortos para sotavento); **gravidade dobrando galhos longos e pesados** (flexão pela massa acumulada da subárvore, o pinheiro e o carvalho velho "assentam"); **fototropismo** (a direção de crescimento puxa para o lado mais claro da grade de luz, que já existe); **raízes** que crescem por colonização no solo desviando de pedras e do vaso.
+5. **Folhagem melhor e mais leve.** Folhas em **cachos nos raminhos visíveis** (um cartão com várias folhas por ponta, em vez de folhas soltas presas ao eixo); **LOD por distância** (cachos → *impostors* → só volume) para o jardim ficar fluido.
+6. **Seed como genoma legível.** A seed vira um "DNA" com genes nomeados (vigor, ângulo, densidade, cor, dominância apical…), mostrados no painel; **cruzamento** de duas plantas com herança desses genes (e mutação); **exportar glTF** da planta na idade escolhida.
+
 ## Geometria e madeira
 
 - **Superfície unificada.** Hoje cada galho é um tubo separado e o colar só esconde a emenda (o filho entra no pai). Numa junção vista de perto ainda dá para ver duas superfícies se cruzando. Caminhos: SDF dos galhos + *marching cubes* (ou *dual contouring*) com união suave (`smin`); superfícies de convolução (*blobby*/metaballs ao longo dos segmentos); ou malhar a junção como uma "ramificação" de verdade (quad-mesh de bifurcação, estilo SpeedTree).
@@ -20,19 +29,9 @@
 - **Sistemas clássicos do ABOP.** Incluir exemplos de *The Algorithmic Beauty of Plants* (Prusinkiewicz & Lindenmayer) para comparação: bush 3D, árvores de Honda/Aono-Kunii, sistemas com contexto (`<`, `>`).
 - Flores e folhas com mais variedade de forma (lobos do carvalho, folha composta, sépalas).
 
-## Espécies exóticas (v4)
-
-- **Cristal**: os prismas se cruzam nas junções (não há união de sólidos) e todo entrenó ganha ponta, inclusive os internos. A transmissão custa um passe extra de renderização e, no SwiftShader, os minerais claros (cristal de rocha, quartzo rosa) parecem foscos/esbranquiçados; falta testar em GPU real. O cristal "engrossa" com a idade pela regra de Leonardo, o que é uma escolha artística (cristal de verdade não tem crescimento secundário).
-- **Medusa**: a ondulação é só deslocamento de vértice: as normais não são recalculadas (luz aproximada), os tentáculos podem se atravessar e não há física. Os primeiros segmentos ligam o centro do sino à borda (parecem canais radiais vistos de baixo). Transparência sem ordenação por fragmento: babados e sino podem ter erros de ordem de desenho. A opção "Vento" não afeta a medusa. Aparece uma faixa clara horizontal no topo do sino (provavelmente o reflexo especular do sol; não investigado).
-- **Cacto**: o atrator do tropismo é fixo (o periastro), não o planeta em movimento; o crescimento não reage à órbita ao longo do tempo. A flor "abre" por escala + rotação da pétala inteira, não por articulação de pétala. As aréolas são só cor (sem espinhos em 3D). A luz do planeta estoura quando a câmera chega muito perto.
-- **Neural**: o arco dos tubos (medido nos anéis da curva) e o arco das instâncias (medido pela tartaruga) diferem um pouco, então botões e galhos podem piscar levemente fora de sincronia. As raízes não interagem com o chão (só a ponta mais baixa encosta). Algumas seeds passam de 8 mil nós (`orvalho`), com montagem de ~200 ms.
-- **Coral-fungo**: os chapéus ficam no ponto do nó e podem se interpenetrar; a estipe atravessa o centro do chapéu. As lamelas usam material sem luz (`MeshBasic`). As partículas são aditivas, sem ordenação, e ignoram vento e colisão. A variante (mar/floresta) muda cores, curvatura do chapéu, partículas e cenário, mas a gramática é a mesma.
-- **Jardim com 10**: pesado (0,5 fps no headless, contra ~1 fps do carvalho sozinho); os rótulos das duas fileiras se sobrepõem às vezes e a samambaia fica escondida atrás das exóticas. O tema do jardim mudou de `day` para `jardim` (crepúsculo), então as realistas aparecem com outra luz no jardim (sozinhas, continuam idênticas).
-- **Câmera segue** na medusa quase não aproxima (a altura usada é a da borda do sino, que já começa alta).
-
 ## Árvores raras (v5)
 
-- **Sequoia**: os galhos de baixo não caem com a idade. A parte nua do tronco é fixa pela seed (`bare`), então a muda também é um mastro nu com um tufo no topo (uma sequoia jovem de verdade é um cone cheio até o chão). Falta morte de galho (módulo `F` com `die`). A silhueta humana só se vê de perto (é para ser assim, mas no enquadramento padrão ela tem poucos pixels).
+- **Sequoia** (modo clássico): os galhos de baixo não caem com a idade e a muda é um mastro nu com um tufo no topo. **Resolvido no modo simulado (v7)**: a muda é um cone cheio até o chão e os galhos de baixo secam e caem com a idade. A silhueta humana só se vê de perto (é para ser assim, mas no enquadramento padrão ela tem poucos pixels).
 - **Figueira**: as raízes aéreas são retas e verticais (não se enroscam nem se fundem), descem de qualquer altura e engrossam por uma regra fora de Leonardo. Elas não "seguram" o galho (o galho não afina depois da raiz). Folhas grandes em tufos densos escondem o tronco central em algumas seeds. É a mais pesada das raras (~14 mil folhas, ~90 mil vértices).
 - **Baobá**: o perfil de garrafa é um multiplicador do tubo, então o ombro do tronco pode parecer um "gargalo" que encontra galhos mais finos. A casca é lisa e uniforme, sem as cicatrizes e dobras verticais dos baobás velhos. A copa tem poucas folhas em qualquer idade (estação seca permanente).
 - **Eucalipto**: a copa é rala e irregular, às vezes em tufos separados. Aos ~50% de idade a muda perde as folhas juvenis antes dos galhos terem folhas. As placas da casca são planas (não há relevo de casca descolando).
@@ -46,7 +45,20 @@
 - **Madeira morta**: é só cor e relevo no shader (a forma do tronco não é escavada nem descascada); no cipreste, o shari pode ficar atrás do tronco dependendo do ângulo da câmera. O jin é um galho reto e curto.
 - **Vaso**: sem furos de drenagem, carimbo ou esmalte; a terra é um disco com cor por vértice (sem pedriscos). A cascata do pinheiro-branco sai do vaso, mas nem sempre desce muito abaixo da borda.
 - **Nebari**: as raízes são cordões radiais simples (sem se fundir numa base de placa contínua).
-- **Jardim com 19**: as exóticas podem esconder parte dos bonsais na fileira da frente em algumas seeds; o rótulo mais baixo pode encostar na legenda.
+- **Jardim com 14** (v7): o rótulo mais baixo pode encostar na legenda em algumas seeds.
+
+## Crescimento simulado (v7)
+
+- **Calibração por espécie, à mão.** Os parâmetros (envelope, λ, limiar de autopoda, sombra) foram ajustados olhando a seed `rafael`; outras seeds dão plantas plausíveis, mas não foram todas revisadas uma a uma.
+- **Sequoia velha**: a copa final é mais rala que a do modo clássico (poucos verticilos sobrevivem no topo) e a ponta do líder pode aparecer nua. **Sequoia jovem**: a folhagem fica mais densa em cima do que embaixo.
+- **Pinheiro jovem**: os verticilos crescem rápido para os lados e a muda parece um arbusto largo antes de virar cone.
+- **Eucalipto**: o tronco da gramática sobe primeiro e a copa só aparece depois de ~1/3 da vida (a muda é um mastro com poucas folhas); a copa adulta é menor e mais rala que a clássica.
+- **Figueira**: a copa simulada tem muito menos folhas que a clássica (~1,9 mil contra ~12 mil); as raízes aéreas vêm da gramática (não da simulação).
+- **Bonsais**: a poda de formação existe (a cada 2–3 anos corta o que sai do volume da almofada), mas como os raminhos só crescem em direção aos pontos dentro das almofadas, quase não há o que cortar (o contador fica perto de zero). O estilo (tronco, galhos, jin) continua vindo do axioma, não é "formado".
+- **Envelope a partir da planta clássica.** Nas espécies genéricas (todas menos carvalho e sequoia), os pontos de atração saem da nuvem de folhas do L-System clássico da mesma seed; isso garante a silhueta da espécie, mas a simulação não inventa formas fora dela.
+- **Luz simplificada.** Sombra propagada para baixo numa pirâmide (sem direção do sol, sem luz difusa lateral); a luz é `exp(−sombra/C)` em vez da fórmula linear de Palubicki.
+- **Galhos que caem somem** (não ficam tocos nem cicatrizes); os canos deles continuam contando no raio do pai (peso `deadK`).
+- **Custo.** A simulação roda na thread principal (até ~400 ms na primeira montagem do bordo no SwiftShader); o jardim simulado demora mais para montar que o clássico.
 
 ## Produto / NFT
 

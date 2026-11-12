@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v6 · POC Three.js</title>
+<title>Jardim L-System v7 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -27,6 +27,7 @@
   button.primary:hover{filter:brightness(1.08)}
   button.on{outline:2px solid var(--acc)}
   input[type=range]{width:100%;accent-color:var(--acc)}
+  .note{margin:6px 0 0;font-size:12px;color:var(--mut);line-height:1.35}
   .toggles{display:flex;gap:14px;margin-top:10px;font-size:13px;color:var(--mut)}
   .toggles label{display:flex;gap:6px;align-items:center;cursor:pointer}
   #dna{margin-top:10px;font:11px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all}
@@ -62,10 +63,13 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v6 · Three.js · L-Systems com seed determinística · 5 realistas + 5 árvores raras + 5 exóticas + 4 bonsais (bordo, pinheiro-branco, cipreste hinoki, junípero)</p>
+  <p class="sub">POC v7 · Three.js · L-Systems com seed determinística + crescimento simulado (espaço, luz e autopoda) · 5 realistas + 5 árvores raras + 4 bonsais</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
+  <label class="l">Crescimento</label>
+  <div class="row"><button id="gm-sim" class="on" title="Simulação ano a ano: colonização do espaço, luz e autopoda">🌱 Simulado</button><button id="gm-ls" title="A gramática pura, igual à v6">📜 L-System clássico</button></div>
+  <p class="note" id="gmnote"></p>
 
   <label class="l" for="seed">Seed (DNA da planta)</label>
   <input id="seed" type="text" spellcheck="false" autocomplete="off">
@@ -74,7 +78,7 @@
     <button id="gen" class="primary">Gerar</button>
   </div>
   <div class="row">
-    <button id="garden">🌿 Ver todas as 10</button>
+    <button id="garden">🌿 Ver todas as 14</button>
     <button id="share">🔗 Copiar link</button>
   </div>
 
@@ -106,7 +110,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const V3 = THREE.Vector3;
 const DEG = Math.PI / 180;
@@ -223,14 +226,14 @@ const wordToString = (w, max = 600) => {
 /* =====================================================================
    3. Tartaruga 3D (H = heading, L = left, U = up) -> esqueleto de nós
    F f + - & ^ \ / | [ ] ~  +  L (folha)  K (flor)  O (orbe)  N (tufo de agulhas)
-   v4: $ (tropismo para um ponto atrator P.attractor)  P (chapéu/prateleira com lamelas)  X (lasca de cristal)
+   v4: $ (tropismo para um ponto atrator P.attractor)
    v5: W(seg) (raiz aérea: desce na vertical até o chão e vira tronco secundário)  Y(s) (fruto pendente)
    v6: Z(rx, ry, n, s) (almofada de folhagem do bonsai)  Q(w) (peso extra na ponta: raízes do nebari)  J (galho morto: jin)  _(k) (nivela a direção)
    Cada F cria um nó {posição, pai, t0, t1}. Os raios saem depois do esqueleto.
    ===================================================================== */
 const GRAV = new V3(0, -1, 0);
 const UPV = new V3(0, 1, 0);
-function interpret(word, sp, P, rng) {
+function interpret(word, sp, P, rng, cap) {
   const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0], BOOST = [], TIPW = [], JIN = [];
   const inst = {};
   const add = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) { it.node = st.node; it.arc = st.arc; a.push(it); } };
@@ -258,7 +261,7 @@ function interpret(word, sp, P, rng) {
           ax.crossVectors(st.H, GRAV); const mag = ax.length();
           if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.trop * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
         }
-        if (st.att !== 0 && P.attractor) { // v4: tropismo para um ponto (planeta do cacto)
+        if (st.att !== 0 && P.attractor) { // v4: tropismo para um ponto (P.attractor; o junípero usa para inclinar a copa)
           const A = P.attractor; tv.set(A[0] - st.pos.x, A[1] - st.pos.y, A[2] - st.pos.z).normalize();
           ax.crossVectors(st.H, tv); const mag = ax.length();
           if (mag > 1e-6) { ax.multiplyScalar(1 / mag); const ang = st.att * mag; st.H.applyAxisAngle(ax, ang); st.L.applyAxisAngle(ax, ang); st.U.applyAxisAngle(ax, ang); }
@@ -300,12 +303,6 @@ function interpret(word, sp, P, rng) {
       }
       case 'O': add('orb', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.1, life: life(m) }); break;
       case '$': st.att = p ? p[0] : 0; break;
-      case 'P': { // chapéu: virado para cima, inclinado um pouco na direção do ramo
-        const s = p ? p[0] : 0.5, y = st.H.clone().multiplyScalar(sp.capTilt ?? 0.3).add(UPV).normalize();
-        const a = rng.f() * Math.PI * 2, z = new V3(Math.cos(a), 0, Math.sin(a)); z.addScaledVector(y, -z.dot(y)).normalize();
-        const it = { p: st.pos.clone(), y, z, s, life: life(m) };
-        add('cap', it); add('gill', { ...it }); break;
-      }
       case 'W': { // v5: raiz aérea da figueira: cadeia de nós até y = 0, nasce depois do módulo e desce em sp.rootDrop iterações
         if (st.pos.y < 0.8 || X.length + 40 >= MAX_NODES) break;
         const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
@@ -322,6 +319,7 @@ function interpret(word, sp, P, rng) {
       case 'Y': add('fruit', { p: st.pos.clone(), y: UPV.clone(), z: new V3(1, 0, 0).applyAxisAngle(UPV, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
       case 'Z': { // v6: almofada de folhagem (nuvem achatada em forma de domo, folhas viradas para cima)
         const rx = p ? p[0] : 0.5, ry = p && p[1] != null ? p[1] : rx * 0.35, k = p && p[2] != null ? p[2] : 30, s = p && p[3] != null ? p[3] : 0.2;
+        if (cap && cap.syms.Z) { cap.out.push({ node: st.node, c: 'Z', p: m.p, d: [st.H.x, st.H.y, st.H.z] }); break; } // v7: no andaime a almofada vira gema
         const kind = sp.padKind || 'leaf', lf = life(m), up = sp.padUp ?? 0.55;
         for (let i = 0; i < k; i++) {
           const a = rng.f() * 6.2832, r = Math.sqrt(rng.f()), top = Math.sqrt(Math.max(1 - r * r, 0));
@@ -345,8 +343,8 @@ function interpret(word, sp, P, rng) {
         if (st.H.lengthSq() < 1e-6) st.H.set(1, 0, 0);
         st.H.normalize(); st.L.crossVectors(UPV, st.H).normalize(); st.U.crossVectors(st.H, st.L); break;
       }
-      case 'X': add('shard', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone(), s: p ? p[0] : 0.3, life: life(m) }); break;
       case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
+      default: if (cap && cap.syms[m.c]) cap.out.push({ node: st.node, c: m.c, p: m.p, d: [st.H.x, st.H.y, st.H.z] }); // v7: gemas do andaime da simulação
     }
   }
   const N = X.length;
@@ -407,11 +405,6 @@ const GEOMS = {
   petal: () => sheet({ width: 0.34, fold: 0.0, curve: -0.12, cup: 0.25, profile: PROFILES.petal, nu: 7, nv: 3 }),
   needles: () => needleTuft(26),
   sphere: () => new THREE.IcosahedronGeometry(1, 1),
-  // v4
-  shard: () => crystalGeo(6),
-  frill: () => frillGeo(),
-  cap: () => capGeo(0.25),
-  gill: () => gillGeo(0.25, 36),
   // v5
   strap: () => sheet({ width: 0.07, fold: 0.35, curve: 0.06, profile: (u) => Math.min(1, Math.sin(Math.PI * Math.min(u * 0.96 + 0.04, 1)) * 2.5) * (1 - 0.55 * u), nu: 7, nv: 1 }),
   euca: () => sheet({ width: 0.2, fold: 0.04, curve: 0.18, profile: PROFILES.lance, nu: 6, nv: 1 }),
@@ -492,40 +485,6 @@ function fruitGeo() {
   for (let i = 0; i <= 10; i++) { const t = i / 10, a = Math.PI * t; pts.push(new THREE.Vector2(Math.max(Math.sin(a) * 0.17, 0.003), -0.55 - 0.03 - (1 - Math.cos(a)) * 0.26)); }
   const g = new THREE.LatheGeometry(pts, 10); g.computeVertexNormals(); return g;
 }
-// lasca de cristal: prisma facetado com ponta (lathe de poucos lados + flatShading no material)
-function crystalGeo(sides) {
-  const g = new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.2, 0.02), new THREE.Vector2(0.17, 0.72), new THREE.Vector2(0, 1.05)], sides);
-  return g;
-}
-// babado das medusas: fita ondulada
-function frillGeo() {
-  const g = sheet({ width: 0.5, fold: 0, curve: 0.05, profile: PROFILES.lance, nu: 12, nv: 3 });
-  const a = g.attributes.position;
-  for (let i = 0; i < a.count; i++) { const u = a.getY(i), x = a.getX(i); a.setZ(i, a.getZ(i) + 0.09 * Math.sin(u * 26) * Math.abs(x) * 4); }
-  g.computeVertexNormals(); return g;
-}
-// chapéu: domo (dome = altura relativa) com borda virada para baixo; raio 1
-function capGeo(dome) {
-  const pts = [];
-  for (let i = 0; i <= 14; i++) { const t = i / 14, r = Math.sin(t * Math.PI / 2) * 1.0; pts.push(new THREE.Vector2(Math.max(r, 1e-3), dome * Math.cos(t * Math.PI / 2) - 0.07 * Math.pow(t, 6))); }
-  const g = new THREE.LatheGeometry(pts, 40); g.computeVertexNormals(); return g;
-}
-// lamelas radiais embaixo do chapéu
-function gillGeo(dome, n) {
-  const pos = [], idx = [];
-  const yTop = (r) => dome * Math.cos(Math.asin(Math.min(r, 0.999))) - 0.07 * Math.pow(r, 6) - 0.012;
-  for (let k = 0; k < n; k++) {
-    const a = k / n * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), b = pos.length / 3;
-    const r0 = k % 2 ? 0.38 : 0.12, M = 6;
-    for (let j = 0; j <= M; j++) {
-      const r = r0 + (0.95 - r0) * j / M, y = yTop(r), d = 0.13 * Math.sin(Math.PI * (r - r0) / (0.95 - r0)) + 0.01;
-      pos.push(c * r, y, sn * r, c * r, y - d, sn * r);
-    }
-    for (let j = 0; j < M; j++) { const q = b + j * 2; idx.push(q, q + 1, q + 3, q, q + 3, q + 2); }
-  }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
-}
-
 /* =====================================================================
    5. Shaders: idade (crescimento + engrossamento) + vento
    Galhos: cada anel de vértices lê o raio atual dos nós numa textura float
@@ -539,83 +498,14 @@ vec3 lsSway(vec3 p){
   return vec3(sin(uTime*1.3 + p.x*0.35 + p.z*0.2)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25, 0.0, cos(uTime*1.07 + p.z*0.33)*k*0.7);
 }
 `;
-/* v4: efeitos das espécies exóticas. Tudo atrás de #ifdef LS_FX: as 5 espécies realistas compilam o mesmo shader de antes.
-   uFx/uFx2: parâmetros por espécie · uFxP: ponto (planeta do cacto) · uFxC/uFxC2: cores · aFx: etiqueta do galho (axônio = 1)
-   aFxI (instâncias): (distância no esqueleto, etiqueta) */
-const FX_COMMON = /* glsl */`
+/* v4+: efeitos de casca por espécie. Tudo atrás de #ifdef LS_FX: quem não tem fx compila o mesmo shader de antes.
+   uFx/uFx2: parâmetros por espécie · aFx: etiqueta do galho (jin = 1) · vFx = (cos θ, sin θ, arco, etiqueta) */
+const FX_V = `
 #ifdef LS_FX
-uniform vec4 uFx; uniform vec4 uFx2; uniform vec3 uFxP; uniform vec3 uFxC; uniform vec3 uFxC2;
-// pulso neural: o axônio (tag 1) leva o sinal para fora do soma, os dendritos trazem para dentro
-float lsPulse(float d, float tag){
-  float s = tag > 0.5 ? d - uTime * uFx.x : d + uTime * uFx.x;
-  float w = fract(s / uFx.y) - 0.5;
-  float p = exp(-pow(w * uFx.y / uFx.z, 2.0));
-  float w2 = fract(s / (uFx.y * 0.618) + 0.37) - 0.5;
-  return p + 0.55 * exp(-pow(w2 * uFx.y * 0.618 / uFx.z, 2.0));
-}
+attribute float aFx; varying vec4 vFx;
 #endif
 `;
-const FX_V = FX_COMMON + /* glsl */`
-#ifdef LS_FX
-attribute float aFx; attribute vec2 aFxI; varying vec4 vFx; varying float vFxI;
-#ifdef LS_FX_MEDUSA
-// ondulação dos tentáculos: amplitude cresce com a distância ao anel do sino; fase pelo ângulo em volta do eixo
-vec3 lsMedusa(vec3 p, float arc){
-  float a = max(arc - uFx.x, 0.0);
-  float ph = atan(p.z, p.x) * 3.0;
-  float amp = uFx.y * pow(a, 1.25);
-  vec3 radial = vec3(p.x, 0.0, p.z) * uFx.w * 0.1 * exp(-a * 0.5);
-  return vec3(sin(uTime * 1.6 - a * uFx.z + ph) * amp, 0.25 * amp * sin(uTime * 2.1 - a * uFx.z * 1.7 + ph), cos(uTime * 1.25 - a * uFx.z * 0.85 + ph * 1.3) * amp) + radial;
-}
-#endif
-void lsFxInst(inout vec3 t, vec3 ip){
-#ifdef LS_FX_CACTO
-  // flor abre quando o planeta passa perto: escala + pétalas giram para fora
-  float op = 1.0 - smoothstep(uFx2.x, uFx2.y, distance(ip, uFxP));
-  float ang = uFx2.z * (1.0 - op);
-  float c = cos(ang), s = sin(ang);
-  t = vec3(t.x, c * t.y - s * t.z, s * t.y + c * t.z) * mix(0.35, 1.15, op);
-  vFxI = 1.0 + 1.4 * op;
-#endif
-#ifdef LS_FX_NEURAL
-  vFxI = 1.0 + 9.0 * lsPulse(aFxI.x, aFxI.y);
-#endif
-#ifdef LS_FX_MEDUSA
-  vFxI = 1.0 + 1.5 * pow(0.5 + 0.5 * sin(aFxI.x * 1.4 - uTime * 2.6), 6.0);
-#endif
-}
-#endif
-`;
-// fragment dos galhos sem casca (medusa, neural, cacto)
-const FX_F = 'uniform float uTime;\n' + FX_COMMON + /* glsl */`
-varying vec4 vFx;
-vec3 lsFxCol(vec3 base){
-#ifdef LS_FX_CACTO
-  float th = atan(vFx.y, vFx.x); float x = uFx.x * (th + vFx.z * uFx.y);
-  float cr = 0.5 + 0.5 * cos(x);
-  vec3 col = base * mix(0.55, 1.18, pow(cr, 1.5));
-  float ri = floor(x / 6.2831853 + 0.5);
-  float dt = (fract(x / 6.2831853 + 0.5) - 0.5) * 6.2831853 / uFx.x * 2.2;  // ~distância angular ao topo da costela
-  float da = fract(vFx.z * uFx.z + ri * 0.618) - 0.5;
-  float ar = 1.0 - smoothstep(0.1, 0.2, length(vec2(dt * uFx.z * 3.0, da * 1.6)));
-  return mix(col, vec3(0.92, 0.9, 0.8), ar * 0.9);
-#else
-  return base;
-#endif
-}
-vec3 lsFxEmis(vec3 n, vec3 v){
-  float fres = pow(1.0 - abs(dot(n, v)), 2.5);
-#ifdef LS_FX_NEURAL
-  return uFxC * (uFx.w + 1.8 * lsPulse(vFx.z, vFx.w)) + uFxC2 * fres * 0.25;
-#elif defined(LS_FX_MEDUSA)
-  float wave = pow(0.5 + 0.5 * sin(vFx.z * 1.4 - uTime * 2.6), 6.0);
-  return uFxC * (0.18 + 0.9 * fres) + uFxC2 * wave * 0.9;
-#else
-  return uFxC * fres * 0.15;
-#endif
-}
-`;
-const FX = { cristal: { frag: 'none' }, medusa: { frag: 'own' }, neural: { frag: 'own' }, cacto: { frag: 'own' }, coral: { frag: 'bark' }, dragoeiro: { frag: 'bark' }, eucalipto: { frag: 'bark' }, cipreste: { frag: 'bark' }, junipero: { frag: 'bark' } };
+const FX = { dragoeiro: { frag: 'bark' }, eucalipto: { frag: 'bark' }, cipreste: { frag: 'bark' }, junipero: { frag: 'bark' } };
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
@@ -645,9 +535,6 @@ float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 
       vMt = vec2(clamp((T - aB.x) / (uTend * uMatT), 0.0, 1.0), r);
       #ifdef LS_FX
         vFx = vec4(aBk.xy / max(length(aBk.xy), 1e-6), aBk.z, aFx);
-        #ifdef LS_FX_MEDUSA
-          transformed += lsMedusa(c, aBk.z);
-        #endif
       #endif
       #ifdef USE_COLOR
         vColor = mix(uYoung, color.rgb, smoothstep(0.012, 0.2, r / uRmax));
@@ -811,20 +698,11 @@ vec3 lsPerturb(vec3 sp, vec3 N, float hW, float fd){
     head: `attribute vec2 aLife;\n` + SWAY + FX_V,
     begin: `#include <begin_vertex>
     { float T = pow(uGrowth, 0.8) * uTend;
-      transformed *= smoothstep(aLife.x, aLife.x + 0.6, T) * (1.0 - smoothstep(aLife.y, aLife.y + 0.6, T)); }
-    #ifdef LS_FX
-      vFxI = 1.0;
-      #ifdef USE_INSTANCING
-        lsFxInst(transformed, instanceMatrix[3].xyz);
-      #endif
-    #endif`,
+      transformed *= smoothstep(aLife.x, aLife.x + 0.6, T) * (1.0 - smoothstep(aLife.y, aLife.y + 0.6, T)); }`,
     project: `vec4 mvPosition = vec4( transformed, 1.0 );
     #ifdef USE_INSTANCING
       mvPosition = instanceMatrix * mvPosition;
       mvPosition.xyz += lsSway(instanceMatrix[3].xyz);
-      #ifdef LS_FX_MEDUSA
-        mvPosition.xyz += lsMedusa(instanceMatrix[3].xyz, aFxI.x);
-      #endif
     #endif
     mvPosition = modelViewMatrix * mvPosition;
     gl_Position = projectionMatrix * mvPosition;`,
@@ -841,17 +719,12 @@ function patch(mat, kind, U, fx) {
       sh.fragmentShader = f.head + sh.fragmentShader.replace('#include <color_fragment>', f.color).replace('#include <roughnessmap_fragment>', f.rough)
         .replace('#include <normal_fragment_maps>', f.normal).replace('#include <emissivemap_fragment>', f.emis);
     }
-    if (fxc) { // v4: espécies exóticas
-      if (kind === 'branch' && fxc.frag === 'own' && mat.isMeshStandardMaterial) {
-        sh.fragmentShader = FX_F + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = lsFxCol(diffuseColor.rgb);')
-          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += lsFxEmis(normalize(normal), normalize(vViewPosition));');
-      }
-      if (kind === 'inst' && !mat.isMeshDepthMaterial) sh.fragmentShader = 'varying float vFxI;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= vFxI;');
+    if (fxc) { // casca com efeito próprio (dragoeiro, eucalipto, cipreste, junípero)
       const def = `#define LS_FX\n#define LS_FX_${fx.toUpperCase()}\n`;
       sh.vertexShader = def + sh.vertexShader; sh.fragmentShader = def + sh.fragmentShader;
     }
   };
-  mat.customProgramCacheKey = () => 'lsys3-' + kind + (mat.isMeshStandardMaterial ? 's' : 'd') + (fx ? '-' + fx + (mat.isMeshPhysicalMaterial ? 'p' : mat.isMeshBasicMaterial ? 'b' : '') : '');
+  mat.customProgramCacheKey = () => 'lsys3-' + kind + (mat.isMeshStandardMaterial ? 's' : 'd') + (fx ? '-' + fx : '');
   return mat;
 }
 const depthMat = (kind, U, fx) => patch(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), kind, U, fx);
@@ -1145,439 +1018,6 @@ const BARK = {
 };
 
 /* =====================================================================
-   6b. v4: as 5 espécies exóticas
-   Cada uma usa fluxos de RNG próprios (`seed::id::...`), então as realistas não mudam.
-   Ganchos novos (opcionais) por espécie: fx (efeito no shader), tube (opções de tubo), material/instMaterial/geom,
-   float (flutua), tags (etiqueta por nó), extra (objetos extras + tick por quadro), glow (luz pontual), theme(P).
-   ===================================================================== */
-const MINERALS = [
-  { name: 'ametista', h: 278, s: 0.7, l: 0.6, ior: 1.54, tr: 0.88, disp: 1.5, att: 0.9 },
-  { name: 'esmeralda', h: 150, s: 0.8, l: 0.5, ior: 1.58, tr: 0.85, disp: 1.2, att: 0.8 },
-  { name: 'quartzo rosa', h: 345, s: 0.6, l: 0.78, ior: 1.54, tr: 0.8, disp: 1.0, att: 1.4 },
-  { name: 'citrino', h: 40, s: 0.9, l: 0.6, ior: 1.55, tr: 0.88, disp: 1.5, att: 1.0 },
-  { name: 'safira', h: 222, s: 0.85, l: 0.55, ior: 1.77, tr: 0.88, disp: 2.5, att: 0.8 },
-  { name: 'cristal de rocha', h: 200, s: 0.15, l: 0.92, ior: 1.54, tr: 1.0, disp: 5, att: 3 },
-  { name: 'obsidiana arco-íris', h: 265, s: 0.3, l: 0.035, ior: 1.5, tr: 0, disp: 0, att: 1, irid: 0.9 },
-];
-let ENV = null; // mapa de ambiente (RoomEnvironment) só para materiais de cristal; scene.environment continua nulo
-const envMap = () => ENV || (ENV = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture);
-function crystalMat(P, instanced) {
-  const M = P.M, c = hsl(M.h, M.s, M.l);
-  return new THREE.MeshPhysicalMaterial({
-    color: instanced ? 0xffffff : c, roughness: M.tr ? 0.04 : 0.02, metalness: 0, transmission: M.tr, thickness: 2.0, ior: M.ior, dispersion: M.disp,
-    attenuationColor: c, attenuationDistance: M.att * 0.6, flatShading: true, envMap: envMap(), envMapIntensity: M.tr ? 0.9 : 0.55,
-    clearcoat: M.tr ? 0 : 1, clearcoatRoughness: 0.03, iridescence: M.irid || 0.25, iridescenceIOR: 1.8, iridescenceThicknessRange: [200, 600], specularIntensity: M.tr ? 1 : 0.4,
-    emissive: hsl(M.h, M.s, 0.5), emissiveIntensity: M.tr ? 0.05 : 0.02,
-  });
-}
-const glowMat = (c, opacity = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
-// partículas que sobem (esporos/bolhas) ou descem (neve marinha), animadas só no shader
-function particles({ origins, count, rng, spread, rise, speed, size, color, kind }) {
-  const n = Math.min(count, 4000), o = new Float32Array(n * 3), a = new Float32Array(n * 4);
-  for (let i = 0; i < n; i++) {
-    const q = origins[Math.floor(rng.f() * origins.length)];
-    o[i * 3] = q.x + rng.jit(spread * 0.3); o[i * 3 + 1] = q.y + rng.jit(spread * 0.1); o[i * 3 + 2] = q.z + rng.jit(spread * 0.3);
-    a[i * 4] = rng.f(); a[i * 4 + 1] = 0.6 + rng.f() * 0.8; a[i * 4 + 2] = rng.f() * 6.28; a[i * 4 + 3] = 0.5 + rng.f();
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(o, 3)); g.setAttribute('aR', new THREE.Float32BufferAttribute(a, 4));
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: SHARED.uTime, uGrowth: SHARED.uGrowth, uC: { value: color }, uRise: { value: rise }, uSpeed: { value: speed }, uSpread: { value: spread }, uSize: { value: size }, uKind: { value: kind === 'bubble' ? 1 : 0 } },
-    vertexShader: `uniform float uTime, uGrowth, uRise, uSpeed, uSpread, uSize; attribute vec4 aR; varying float vA;
-      void main(){
-        float t = fract(uTime * uSpeed * aR.y / abs(uRise) + aR.x);
-        vec3 p = position + vec3(sin(t * 5.0 + aR.z) * uSpread * (0.3 + t), t * uRise, cos(t * 4.0 + aR.z * 1.7) * uSpread * (0.3 + t));
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        float sc = length(modelMatrix[0].xyz);
-        vA = sin(3.14159 * t) * smoothstep(0.55, 0.95, uGrowth);
-        gl_PointSize = uSize * aR.w * sc * projectionMatrix[1][1] * 400.0 / -mv.z;
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `uniform vec3 uC; uniform float uKind; varying float vA;
-      void main(){
-        vec2 q = gl_PointCoord * 2.0 - 1.0; float d = length(q); if (d > 1.0) discard;
-        float a = uKind > 0.5 ? (smoothstep(0.65, 0.92, d) * (1.0 - smoothstep(0.92, 1.0, d)) + 0.6 * smoothstep(0.35, 0.0, length(q - vec2(-0.35, 0.35)))) : pow(1.0 - d, 2.0);
-        gl_FragColor = vec4(uC * a * vA, 1.0);
-      }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  });
-  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; return pts;
-}
-function plainBark(variant, extra = {}) {
-  return { variant, type: 0, stretch: 1, crack: 0.1, freq: 10, depth: 0, fbm: 0.5, lent: 0, hi: [1, 1, 1], lo: [1, 1, 1], moss: 0, mossH: 90, mat: 0.5, ...extra };
-}
-
-Object.assign(SPECIES, {
-  cristal: {
-    name: 'Árvore de Cristal', emoji: '💎', height: 8, theme: 'gruta', leafKind: 'oak', fx: 'cristal',
-    desc: 'Fractal mineral determinístico (sem regra estocástica): cada ponta se divide em ângulos fixos de 60° (simetria hexagonal) ou 90° (cúbica). Prismas facetados de vidro com refração e dispersão; a seed escolhe o mineral.',
-    baseWidth: 0.6, bump: 0, wood: { leo: [2.0, 2.3], G: 0.5, tip: 0.07, ring: 0.3 },
-    tube: { R: (rel, P) => P.facets, S: () => 1, straight: true, point: (P) => P.point, noCollar: true },
-    params(r) {
-      const M = r.pick(MINERALS), sym = r.chance(0.6) ? 'hexagonal' : 'cúbica';
-      const cluster = r.int(3, 6), shards = r.int(10, 18), list = [];
-      for (let i = 0; i < shards; i++) list.push({ yaw: r.f() * 360, d: r.range(0.5, 2.6), tilt: r.range(20, 70), s: r.range(0.35, 0.9) });
-      return {
-        iterations: 4, sym, mineral: M.name, M, facets: sym === 'hexagonal' ? 6 : r.pick([5, 6]),
-        len: r.range(1.6, 2.2), ratio: sym === 'hexagonal' ? r.range(0.56, 0.66) : r.range(0.45, 0.55), apex: r.range(0.7, 0.85),
-        tilt: sym === 'hexagonal' ? 60 : 90, cluster, sideTilt: r.pick([30, 60]), point: r.range(1.8, 2.8), shards: list,
-      };
-    },
-    show: [['mineral', 'Mineral'], ['sym', 'Simetria'], ['iterations', 'Iterações'], ['facets', 'Faces do prisma'], ['tilt', 'Ângulo de ramificação', '°'], ['ratio', 'Razão dos ramos'], ['apex', 'Razão do ápice'], ['cluster', 'Cristais na base'], ['sideTilt', 'Inclinação lateral', '°']],
-    build(P) {
-      const k = P.sym === 'hexagonal' ? 3 : 4, rot = 360 / k;
-      let axiom = ``; // ramos e lascas vêm antes do A: o que vem depois de um módulo reescrito nasce no fim dele
-      for (let i = 0; i < P.cluster; i++) axiom += `[/(${n(i * 360 / P.cluster + 30)})&(${P.sideTilt})!(0.6)A(${n(0.5)})]`;
-      for (const s of P.shards) axiom += `[/(${n(s.yaw)})&(90)f(${n(s.d)})^(${n(90 - s.tilt)})X(${n(s.s)})]`;
-      axiom += `!(1)A(1)`;
-      return {
-        axiom,
-        rules: {
-          A: (p) => {
-            const s = p[0]; let o = `F(${n(s * P.len)})`;
-            if (s < 0.1) return o;
-            for (let i = 0; i < k; i++) o += `[&(${P.tilt})!(0.62)A(${n(s * P.ratio)})]/(${rot})`;
-            return o + `/(${n(rot / 2)})A(${n(s * P.apex)})`;
-          },
-        },
-        finalize: { A: (p) => `F(${n(p[0] * P.len * 0.6)})` },
-        display: [
-          `ω : { [ /(360/${P.cluster}·i) &(${P.sideTilt}°) A(0.55) ] } × ${P.cluster}  { [ f X ] } × ${P.shards.length}  A(1)   (lascas X na base)`,
-          `A(s) → F(s·${n(P.len)}) { [ &(${P.tilt}°) !(0.62) A(s·${n(P.ratio)}) ] /(${rot}°) } × ${k}  /(${rot / 2}°) A(s·${n(P.apex)})`,
-          `        determinística: ângulos fixos (${P.sym}), nenhuma escolha aleatória nas regras`,
-          `tubo: prisma de ${P.facets} faces, reto de nó a nó, ponta piramidal (${n(P.point)}×raio)`,
-          `material: vidro físico (transmissão ${P.M.tr}, IOR ${P.M.ior}, dispersão ${P.M.disp})`,
-        ],
-      };
-    },
-    bark: (P) => [hsl(P.M.h, P.M.s, P.M.l), hsl(P.M.h, P.M.s, P.M.l)],
-    material: (P) => crystalMat(P, false),
-    instMaterial: (kind, P) => kind === 'shard' ? crystalMat(P, true) : null,
-    geom: (kind, P) => kind === 'shard' ? crystalGeo(P.facets) : null,
-    color(kind, it, P, r) { return hsl(P.M.h + r.jit(10), P.M.s, P.M.l + r.jit(0.06)); },
-  },
-
-  medusa: {
-    name: 'Medusa Flutuante', emoji: '🪼', height: 9, theme: 'abismo', leafKind: 'frill', fx: 'medusa', float: 0.14, leafRoll: 90,
-    desc: 'Planta de cabeça para baixo que boia: um sino translúcido pulsa no topo e os tentáculos L-System pendem e ondulam (o vertex shader desloca cada anel pela distância à raiz no esqueleto).',
-    baseWidth: 0.075, bump: 0, wood: { leo: [2.6, 3.0], G: 1.6, tip: 0.3, ring: 0.05 },
-    noShadow: (kind) => kind === 'orb',
-    params(r) {
-      const pal = r.pick([{ name: 'lunar', h: 195 }, { name: 'rosa abissal', h: 322 }, { name: 'âmbar', h: 34 }, { name: 'violeta', h: 272 }, { name: 'verde ácido', h: 118 }, { name: 'azul elétrico', h: 214 }]);
-      return {
-        iterations: r.int(20, 26), tentacles: r.int(12, 22), rim: r.range(1.5, 2.1), bellH: r.range(0.55, 0.95), seg: r.range(0.3, 0.4), flare: r.range(58, 80),
-        gravity: r.range(0.03, 0.08), curl: r.range(4, 11), arms: r.int(3, 5), armSeg: r.range(0.28, 0.36), beads: r.range(0.08, 0.25), lobes: r.int(8, 16),
-        palette: pal.name, h: pal.h + r.jit(8), h2: pal.h + r.range(30, 70) * (r.chance(0.5) ? 1 : -1), wave: r.range(0.7, 1.3), amp: r.range(0.05, 0.09), pulse: r.range(1.4, 2.2),
-      };
-    },
-    show: [['iterations', 'Iterações (segmentos)'], ['tentacles', 'Tentáculos'], ['arms', 'Braços orais'], ['rim', 'Raio do sino'], ['bellH', 'Altura do sino'], ['flare', 'Abertura dos tentáculos', '°'], ['gravity', 'Gravitropismo'], ['curl', 'Ondulação de crescimento', '°'], ['beads', 'Prob. de nematocisto'], ['palette', 'Paleta'], ['wave', 'Frequência da onda'], ['pulse', 'Ritmo do pulso']],
-    build(P) {
-      const ax = (() => {
-        const r = new Rand('medusa-axiom' + P.h + P.tentacles); let o = '';
-        for (let i = 0; i < P.tentacles; i++) o += `[/(${n(i * 360 / P.tentacles + r.jit(6))})&(90)f(${n(P.rim * (0.92 + r.f() * 0.08))})&(${n(P.flare + r.jit(8))})!(0.55)~(${n(P.gravity)})T(${n(P.seg)})]`;
-        for (let i = 0; i < P.arms; i++) o += `[/(${n(i * 360 / P.arms + 20)})&(${n(166 + r.jit(6))})M(${n(P.armSeg)})]`;
-        return o;
-      })();
-      return {
-        axiom: `!(1)` + ax,
-        rules: {
-          T: [
-            { w: 1, s: (p, r) => { const l = p[0]; return `F(${n(l)})${r.chance(0.5) ? '+' : '-'}(${n(r.f() * P.curl)})${r.chance(P.beads) ? `O(${n(0.045 + r.f() * 0.04)})` : ''}T(${n(l * 0.985)})`; } },
-          ],
-          M: (p, r) => { const l = p[0]; return `F(${n(l)})/(${n(37 + r.jit(10))})[&(75)L(${n(0.5 + r.f() * 0.4)})][^(75)L(${n(0.45 + r.f() * 0.4)})]M(${n(l * 0.97)})`; },
-        },
-        finalize: { T: () => `O(${n(0.09)})`, M: () => `L(0.4)` },
-        display: [
-          `ω : { [ /(360/${P.tentacles}·i) &(90°) f(${n(P.rim)}) &(${n(P.flare)}°) ~(${n(P.gravity)}) T(${n(P.seg)}) ] } × ${P.tentacles}  { [ &(166°) M ] } × ${P.arms}`,
-          `T(l) → F(l) ±(0–${n(P.curl)}°) O? T(l·0.985)     (O com p=${n(P.beads)}: nematocisto luminoso)`,
-          `M(l) → F(l) /(37°) [ &(75°) L ] [ ^(75°) L ] M(l·0.97)   (braço oral com babados)`,
-          `final: T → O (ponta brilhante)`,
-          `animação: desloca(p) = A·d^1.25·sin(ωt − k·d + 3·θ), d = distância no esqueleto além do sino`,
-        ],
-      };
-    },
-    bark: (P) => [hsl(P.h, 0.65, 0.6), hsl(P.h, 0.7, 0.7)],
-    material: (P) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0, transparent: true, opacity: 0.82 }),
-    instMaterial: (kind, P) => kind === 'leaf' ? new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.4, transparent: true, opacity: 0.55, emissive: hsl(P.h2, 0.95, 0.5), emissiveIntensity: 1.1, depthWrite: false }) : null,
-    color(kind, it, P, r) {
-      if (kind === 'orb') return hsl(P.h2 + r.jit(15), 0.95, 0.6).multiplyScalar(1.6 + r.f());
-      return hsl(P.h2 + r.jit(12), 0.85, 0.4 + r.jit(0.08));
-    },
-    glow: (pl) => ({ color: hsl(pl.P.h, 0.9, 0.6), i: 10, y: 0.75 }),
-    extra({ group, P, fxU, rng }) {
-      const R = P.rim * 1.12, H = P.rim * P.bellH;
-      fxU.uFx.value.set(P.rim, P.amp, P.wave, 0); fxU.uFxC.value.setFromColor(hsl(P.h, 0.9, 0.45)).multiplyScalar(0.8); fxU.uFxC2.value.setFromColor(hsl(P.h2, 0.95, 0.6)).multiplyScalar(1.6);
-      // sino: superfície paramétrica com borda recortada em lóbulos
-      const nu = 64, nv = 22, pos = [], uv = [], idx = [];
-      for (let i = 0; i <= nv; i++) {
-        const v = i / nv;
-        for (let j = 0; j <= nu; j++) {
-          const phi = j / nu * Math.PI * 2, lobe = 1 + 0.07 * Math.pow(v, 5) * Math.cos(P.lobes * phi);
-          const r = R * Math.pow(Math.sin(v * Math.PI / 2), 0.85) * lobe, y = H * Math.pow(Math.cos(v * Math.PI / 2), 0.9) - 0.12 * R * Math.pow(v, 8) * (1 + 0.5 * Math.cos(P.lobes * phi));
-          pos.push(Math.cos(phi) * r, y, Math.sin(phi) * r); uv.push(j / nu, v);
-        }
-      }
-      for (let i = 0; i < nv; i++) for (let j = 0; j < nu; j++) { const a = i * (nu + 1) + j, b = a + 1, c = a + nu + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
-      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); bg.setIndex(idx); bg.computeVertexNormals();
-      const bm = new THREE.MeshStandardMaterial({ color: hsl(P.h, 0.6, 0.4), roughness: 0.25, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false, emissive: hsl(P.h, 0.9, 0.42), emissiveIntensity: 0.45 });
-      const canals = Math.max(4, Math.round(P.lobes / 2));
-      bm.onBeforeCompile = (sh) => {
-        sh.uniforms.uTime = SHARED.uTime;
-        sh.vertexShader = 'varying vec2 vUv2;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vUv2 = uv;');
-        sh.fragmentShader = 'uniform float uTime; varying vec2 vUv2;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-          float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.0);
-          float canal = pow(0.5 + 0.5 * cos(vUv2.x * 6.2831853 * ${canals}.0), 30.0) * smoothstep(0.15, 0.6, vUv2.y);
-          float rim = smoothstep(0.86, 1.0, vUv2.y);
-          totalEmissiveRadiance *= 0.12 + 1.3 * fres + 1.2 * canal + 1.6 * rim * (0.6 + 0.4 * sin(uTime * 3.0 + vUv2.x * 40.0));`);
-      };
-      bm.customProgramCacheKey = () => 'medusa-bell';
-      const bell = new THREE.Mesh(bg, bm); bell.renderOrder = 2;
-      // gônadas: 4 arcos luminosos dentro do sino
-      const gon = new THREE.Group(), gm = glowMat(hsl(P.h2, 0.95, 0.55).multiplyScalar(1.1));
-      for (let i = 0; i < 4; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(R * 0.22, R * 0.045, 8, 24, Math.PI * 1.3), gm); t.rotation.set(Math.PI / 2, 0, i * Math.PI / 2); t.position.set(Math.cos(i * Math.PI / 2 + 0.6) * R * 0.33, H * 0.42, Math.sin(i * Math.PI / 2 + 0.6) * R * 0.33); gon.add(t); }
-      const bellG = new THREE.Group(); bellG.add(bell, gon); group.add(bellG);
-      // neve marinha em volta
-      const origins = []; for (let i = 0; i < 60; i++) origins.push(new V3(rng.jit(R * 3.5), rng.range(-P.iterations * P.seg * 1.2, H * 1.5), rng.jit(R * 3.5)));
-      group.add(particles({ origins, count: 900, rng, spread: R * 0.6, rise: -P.iterations * P.seg * 0.8, speed: 0.12, size: 0.018, color: hsl(P.h, 0.4, 0.75), kind: 'snow' }));
-      let base = null;
-      return {
-        points: [new V3(R, H * 1.45, R), new V3(-R, H, -R)],
-        tick(t, age, pl) {
-          if (base === null) base = pl.group.position.y;
-          const k = 0.3 + 0.7 * THREE.MathUtils.smoothstep(age, 0, 0.7);
-          const ph = (t * P.pulse) % (Math.PI * 2), pulse = Math.pow(Math.max(0, Math.sin(ph)), 2);
-          bellG.scale.set(k * (1 - 0.1 * pulse), k * (1 + 0.06 * pulse), k * (1 - 0.1 * pulse));
-          fxU.uFx.value.w = pulse * k;
-          pl.group.position.y = base + Math.sin(t * 0.55) * H * 0.18 + pulse * 0.05 * H;
-        },
-      };
-    },
-  },
-
-  cacto: {
-    name: 'Cacto Gravitacional', emoji: '🌵', height: 9, theme: 'deserto', leafKind: 'oak', fx: 'cacto',
-    desc: 'Cacto de gomos com costelas em espiral de Fibonacci (8, 13 ou 21). Os braços sofrem tropismo em direção a um planetinha em órbita, e as flores só se abrem quando o planeta passa perto.',
-    baseWidth: 0.6, bump: 0, wood: { leo: [3.6, 4.4], G: 0.3, tip: 0.62, ring: 0.12 },
-    tube: { R: (rel, P) => rel > 0.5 ? P.ribs * 4 : P.ribs * 3, S: () => 6, point: () => 0.75, ribs: true },
-    params(r) {
-      const ribs = r.pick([8, 13, 21]), segs = r.int(5, 7), seg = r.range(0.85, 1.1), trunkH = segs * seg;
-      const planet = r.pick([{ name: 'gigante gasoso', h: 28 }, { name: 'anelado', h: 45, ring: true }, { name: 'gelo', h: 195 }, { name: 'lava', h: 8 }, { name: 'violeta anelado', h: 275, ring: true }]);
-      const fl = r.pick([{ name: 'magenta', h: 318 }, { name: 'vermelho', h: 356 }, { name: 'amarelo', h: 48 }, { name: 'branco', h: 50, s: 0.15 }, { name: 'laranja', h: 22 }, { name: 'rosa', h: 335 }]);
-      const a = trunkH * r.range(0.8, 1.05), e = r.range(0.25, 0.45), alpha = r.f() * Math.PI * 2, incl = r.range(12, 32) * DEG, cy = trunkH * r.range(0.6, 0.8);
-      const pD = [Math.cos(alpha), 0, Math.sin(alpha)], qD = [-Math.sin(alpha) * Math.cos(incl), Math.sin(incl), Math.cos(alpha) * Math.cos(incl)];
-      const rp = a * (1 - e);
-      return {
-        iterations: segs + r.int(2, 3), ribs, spiral: r.range(0.05, 0.12) * (r.chance(0.5) ? 1 : -1), ribAmp: ribs === 8 ? 0.28 : ribs === 13 ? 0.2 : 0.13, pinch: r.range(0.08, 0.16),
-        segs, seg, pArm: r.range(0.55, 0.85), armAngle: r.range(72, 88), up: r.range(0.1, 0.18), att: r.range(0.1, 0.2), areole: r.range(2.2, 3.2),
-        petals: r.int(14, 22), open: r.range(58, 76), double: true, flowerSize: r.range(0.5, 0.7), flower: fl.name, flowerH: fl.h + r.jit(6), flowerS: fl.s ?? 0.85,
-        bodyH: r.range(95, 150), bodyL: r.range(0.3, 0.38),
-        planet: planet.name, planetH: planet.h + r.jit(10), ring: !!planet.ring, orbit: { a, e, cy, pD, qD, period: r.range(14, 22), dir: r.chance(0.5) ? 1 : -1 },
-        attractor: [pD[0] * rp, cy, pD[2] * rp], ecc: e,
-      };
-    },
-    show: [['iterations', 'Iterações (gomos)'], ['ribs', 'Costelas (Fibonacci)'], ['spiral', 'Torção da espiral'], ['pArm', 'Prob. de braço'], ['armAngle', 'Ângulo dos braços', '°'], ['up', 'Tropismo para cima'], ['att', 'Atração pelo planeta'], ['ecc', 'Excentricidade da órbita'], ['planet', 'Planeta'], ['flower', 'Cor da flor'], ['petals', 'Pétalas por flor']],
-    build(P) {
-      const crown = (s) => `[&(28)f(0.24)K(${n(s)})]/(120)[&(28)f(0.24)K(${n(s * 0.9)})]/(120)[&(28)f(0.24)K(${n(s * 0.95)})]`;
-      return {
-        axiom: `!(1)C(0)`,
-        rules: {
-          C: (p, r) => {
-            const k = p[0]; let o = `F(${n(P.seg * (0.95 + r.f() * 0.1))})`;
-            if (k >= 1 && k < P.segs - 1 && r.chance(P.pArm)) o += `[/(${n(r.f() * 360)})&(${n(P.armAngle + r.jit(5))})~(${n(-P.up)})$(${n(P.att)})!(0.8)B(1)]`;
-            return o + `/(137.5)` + (k + 1 < P.segs ? `C(${k + 1})` : `Z`);
-          },
-          B: (p, r) => {
-            const l = p[0]; if (l < 0.5) return `Z`;
-            let o = `F(${n(P.seg * 0.8 * l)})`;
-            if (r.chance(0.12)) o += `[+(${n(55 + r.jit(10))})$(${n(P.att)})!(0.85)B(${n(l * 0.7)})]`;
-            return o + `B(${n(l * 0.9)})`;
-          },
-        },
-        finalize: { C: () => crown(P.flowerSize), B: () => crown(P.flowerSize * 0.85), Z: () => crown(P.flowerSize * 0.9) },
-        display: [
-          `ω : !(1) C(0)`,
-          `C(k) → F(${n(P.seg)}) [ /(?) &(${n(P.armAngle)}°) ~(${n(-P.up)}) $(${n(P.att)}) B(1) ]? /(137.5°) C(k+1)   (braço com p=${n(P.pArm)}; k = ${P.segs} → Z)`,
-          `B(l) → F(l·${n(P.seg * 0.8)}) [ +(55°) $ B(l·0.7) ]? B(l·0.9)     (l < 0.5 → Z)`,
-          `$(a) = tropismo para o ponto atrator (periastro da órbita do planeta)`,
-          `final: pontas → coroa de 3 flores K (${P.petals} pétalas)`,
-          `tubo: ${P.ribs} costelas, espiral ${n(P.spiral)} rad/unidade, estrangulamento ${n(P.pinch)} entre gomos`,
-        ],
-      };
-    },
-    bark: (P) => [hsl(P.bodyH, 0.45, P.bodyL), hsl(P.bodyH - 15, 0.5, P.bodyL + 0.12)],
-    material: () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0 }),
-    color(kind, it, P, r) {
-      if (kind === 'petal') return hsl(P.flowerH + r.jit(10), P.flowerS, 0.6 + (it.layer ? 0.1 : 0) + r.jit(0.05));
-      if (kind === 'center') return hsl(52, 0.95, 0.55);
-      return hsl(P.bodyH, 0.5, 0.3);
-    },
-    extra({ group, P, fxU, rng }) {
-      const O = P.orbit, trunkH = P.segs * P.seg, pr = trunkH * 0.09;
-      fxU.uFx.value.set(P.ribs, P.spiral, 1 / P.areole * 2.4, 0); fxU.uFx2.value.set(trunkH * 0.25, trunkH * 0.55, 1.25, 0);
-      // planeta: textura de faixas desenhada num canvas (seedada)
-      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
-      for (let y = 0; y < 128; y++) { const c = hsl(P.planetH + 18 * Math.sin(y * 0.21 + rng.f() * 0.3) + rng.jit(4), 0.75, 0.42 + 0.16 * Math.sin(y * 0.13 + 1) + rng.jit(0.03)); g.fillStyle = '#' + c.getHexString(); g.fillRect(0, y, 256, 1); }
-      for (let i = 0; i < 6; i++) { const c = hsl(P.planetH + 30, 0.9, 0.7); g.fillStyle = '#' + c.getHexString(); g.globalAlpha = 0.35; g.beginPath(); g.ellipse(rng.f() * 256, 20 + rng.f() * 88, 8 + rng.f() * 14, 3 + rng.f() * 4, 0, 0, 7); g.fill(); }
-      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-      const planet = new THREE.Group();
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(pr, 40, 24), new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.8 }));
-      planet.add(ball);
-      if (P.ring) { const ring = new THREE.Mesh(new THREE.RingGeometry(pr * 1.4, pr * 2.1, 64), new THREE.MeshBasicMaterial({ color: hsl(P.planetH + 20, 0.6, 0.7), side: THREE.DoubleSide, transparent: true, opacity: 0.6 })); ring.rotation.x = Math.PI / 2 - 0.4; planet.add(ring); }
-      const light = new THREE.PointLight(hsl(P.planetH, 0.8, 0.65), 7, 0, 1.5); planet.add(light);
-      group.add(planet);
-      const pos = (th, out) => { const r = O.a * (1 - O.e * O.e) / (1 + O.e * Math.cos(th)), c = Math.cos(th) * r, s = Math.sin(th) * r; return out.set(O.pD[0] * c + O.qD[0] * s, O.cy + O.qD[1] * s, O.pD[2] * c + O.qD[2] * s); };
-      const pts = []; for (let i = 0; i <= 160; i++) pts.push(pos(i / 160 * Math.PI * 2, new V3()));
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: hsl(P.planetH, 0.7, 0.7), transparent: true, opacity: 0.35 }));
-      group.add(line);
-      return {
-        points: pts.filter((_, i) => i % 10 === 0).map(p => p.clone().addScalar(0)),
-        tick(t) {
-          // anomalia média → excêntrica (Kepler) para o planeta acelerar no periastro
-          const M = (t / O.period * O.dir) * Math.PI * 2; let E = M; for (let i = 0; i < 5; i++) E = M + O.e * Math.sin(E);
-          const th = 2 * Math.atan2(Math.sqrt(1 + O.e) * Math.sin(E / 2), Math.sqrt(1 - O.e) * Math.cos(E / 2));
-          pos(th, planet.position); ball.rotation.y = t * 0.6; fxU.uFxP.value.copy(planet.position);
-        },
-      };
-    },
-  },
-
-  neural: {
-    name: 'Raiz Neural', emoji: '🧠', height: 10, theme: 'vazio', leafKind: 'oak', fx: 'neural', float: 0,
-    desc: 'Cresce a partir de um soma, como um neurônio: dendritos ramificam para cima e o axônio desce até virar raízes. Pulsos de luz correm pelo esqueleto: chegam ao soma pelos dendritos e saem pelo axônio até as pontas.',
-    baseWidth: 0.16, bump: 0.03, wood: { leo: [2.0, 2.4], G: 0.6, tip: 0.08, ring: 0.3 },
-    params(r) {
-      const pal = r.pick([{ name: 'ciano', h: 188 }, { name: 'violeta', h: 275 }, { name: 'magenta', h: 315 }, { name: 'âmbar', h: 38 }, { name: 'verde sináptico', h: 135 }, { name: 'azul', h: 218 }]);
-      const dend = r.int(5, 8), list = [];
-      for (let i = 0; i < dend; i++) list.push({ yaw: i * 137.5 + r.jit(20), pitch: r.range(12, 80) });
-      return {
-        iterations: 12, dend, list, dAngle: r.range(26, 42), dLen: r.range(0.75, 1.0), decay: r.range(0.8, 0.86), pSplit: r.range(0.55, 0.8),
-        axonSegs: r.int(5, 7), axonLen: r.range(0.75, 0.95), rootAngle: r.range(38, 58), rootGrav: r.range(0.04, 0.12), rootRatio: r.range(0.68, 0.76), ranvier: r.chance(0.6),
-        palette: pal.name, h: pal.h + r.jit(6), speed: r.range(2.2, 3.8), spacing: r.range(5, 9), width: r.range(0.35, 0.55), soma: r.range(0.55, 0.75),
-      };
-    },
-    show: [['iterations', 'Iterações'], ['dend', 'Dendritos primários'], ['dAngle', 'Ângulo dos dendritos', '°'], ['pSplit', 'Prob. de bifurcar'], ['decay', 'Decaimento'], ['axonSegs', 'Segmentos do axônio'], ['rootAngle', 'Ângulo das raízes', '°'], ['ranvier', 'Nós de Ranvier'], ['palette', 'Cor do pulso'], ['speed', 'Velocidade do pulso'], ['spacing', 'Espaçamento dos pulsos']],
-    build(P) {
-      let axiom = `[&(180)!(1)X(${P.axonSegs})]`;
-      for (const d of P.list) axiom += `[/(${n(d.yaw)})&(${n(d.pitch)})!(0.6)D(1)]`;
-      return {
-        axiom,
-        rules: {
-          D: [
-            { w: P.pSplit, s: (p, r) => { const s = p[0]; if (s < 0.22) return `F(${n(s * P.dLen)})O(0.05)`; return `F(${n(s * P.dLen)})~(-0.03)[+(${n(P.dAngle + r.jit(10))})/(${n(r.jit(40))})!(0.75)D(${n(s * P.decay)})][-(${n(P.dAngle + r.jit(10))})/(${n(r.jit(40))})!(0.75)D(${n(s * P.decay)})]`; } },
-            { w: 1 - P.pSplit, s: (p, r) => { const s = p[0]; if (s < 0.22) return `F(${n(s * P.dLen)})O(0.05)`; return `F(${n(s * P.dLen)})/(${n(r.jit(60))})&(${n(r.jit(14))})${r.chance(0.3) ? 'O(0.035)' : ''}D(${n(s * 0.93)})`; } },
-          ],
-          X: (p, r) => p[0] > 0 ? `F(${n(P.axonLen)})${P.ranvier ? 'O(0.07)' : ''}/(${n(r.jit(25))})&(${n(r.jit(5))})X(${p[0] - 1})` : `R(1)`,
-          R: (p, r) => { const s = p[0]; if (s < 0.3) return `F(${n(s * 0.9)})O(0.1)`; let o = `F(${n(s)})~(${n(P.rootGrav)})`; for (let i = 0; i < 3; i++) o += `[&(${n(P.rootAngle + r.jit(8))})!(0.7)R(${n(s * P.rootRatio * (0.9 + r.f() * 0.2))})]/(${n(120 + r.jit(15))})`; return o; },
-        },
-        finalize: { D: () => `O(0.045)`, R: () => `O(0.09)`, X: () => `` },
-        display: [
-          `ω : [ &(180°) X(${P.axonSegs}) ]  { [ /(137.5°·i) &(12–80°) D(1) ] } × ${P.dend}`,
-          `D(s) → p=${n(P.pSplit)} : F(s·${n(P.dLen)}) [ +(${n(P.dAngle)}°) D(s·${n(P.decay)}) ] [ −(${n(P.dAngle)}°) D(s·${n(P.decay)}) ]`,
-          `       p=${n(1 - P.pSplit)} : F /(±60°) &(±14°) O? D(s·0.93)       (s < 0.22 → F O: espinha)`,
-          `X(k) → F(${n(P.axonLen)}) ${P.ranvier ? 'O ' : ''}X(k−1)   |   X(0) → R(1)   (axônio${P.ranvier ? ' com nós de Ranvier' : ''})`,
-          `R(s) → F(s) ~(${n(P.rootGrav)}) { [ &(${n(P.rootAngle)}°) R(s·${n(P.rootRatio)}) ] /(120°) } × 3   (s < 0.3 → botão sináptico O)`,
-          `pulso: brilho = exp(−((d ∓ v·t) mod λ)²/w²), v=${n(P.speed)}, λ=${n(P.spacing)}; axônio sai do soma, dendritos chegam nele`,
-        ],
-      };
-    },
-    tags(sk) { // 1 = subárvore do axônio (o primeiro nó do ramo fica abaixo do soma)
-      const t = new Float32Array(sk.N);
-      for (let i = 1; i < sk.N; i++) t[i] = sk.PAR[i] === 0 ? (sk.Y[i] < -0.3 ? 1 : 0) : t[sk.PAR[i]];
-      return t;
-    },
-    bark: (P) => [hsl(P.h, 0.25, 0.16), hsl(P.h, 0.45, 0.35)],
-    material: () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 }),
-    instMaterial: (kind) => kind === 'orb' ? new THREE.MeshBasicMaterial({ color: 0xffffff }) : null,
-    color(kind, it, P, r) { return hsl(P.h + r.jit(12), 0.9, 0.55).multiplyScalar(0.22 + r.f() * 0.12); },
-    glow: (pl) => ({ color: hsl(pl.P.h, 0.9, 0.6), i: 14, y: pl.oy * pl.object.scale.x / pl.box.max.y }),
-    extra({ group, P, fxU, rng }) {
-      fxU.uFx.value.set(P.speed, P.spacing, P.width, 0.015); fxU.uFxC.value.setFromColor(hsl(P.h, 0.95, 0.55)); fxU.uFxC2.value.setFromColor(hsl(P.h + 30, 0.7, 0.4));
-      const g = new THREE.IcosahedronGeometry(P.soma, 4), a = g.attributes.position, ph = [rng.f() * 6, rng.f() * 6, rng.f() * 6];
-      for (let i = 0; i < a.count; i++) { const x = a.getX(i), y = a.getY(i), z = a.getZ(i), k = 1 + 0.12 * Math.sin(x * 4 + ph[0]) * Math.sin(y * 5 + ph[1]) * Math.sin(z * 4 + ph[2]); a.setXYZ(i, x * k, y * k * 1.12, z * k); }
-      g.computeVertexNormals();
-      const sm = new THREE.MeshStandardMaterial({ color: hsl(P.h, 0.3, 0.2), roughness: 0.4, emissive: hsl(P.h, 0.9, 0.5), emissiveIntensity: 0.4, transparent: true, opacity: 0.88 });
-      const soma = new THREE.Mesh(g, sm); soma.castShadow = true;
-      const nuc = new THREE.Mesh(new THREE.IcosahedronGeometry(P.soma * 0.42, 2), glowMat(hsl(P.h + 20, 0.9, 0.65).multiplyScalar(1.5)));
-      const sg = new THREE.Group(); sg.add(soma, nuc); group.add(sg);
-      // pulso no soma: mesmo trem de pulsos do shader avaliado em d = 0
-      const pulse = (t) => { const s = -t * P.speed, w = ((s / P.spacing) % 1 + 1) % 1 - 0.5, w2 = ((s / (P.spacing * 0.618) + 0.37) % 1 + 1) % 1 - 0.5; return Math.exp(-((w * P.spacing / P.width) ** 2)) + 0.55 * Math.exp(-((w2 * P.spacing * 0.618 / P.width) ** 2)); };
-      return {
-        points: [new V3(P.soma, P.soma, P.soma), new V3(-P.soma, -P.soma, -P.soma)],
-        tick(t, age) { const k = 0.35 + 0.65 * THREE.MathUtils.smoothstep(age, 0, 0.5), p = pulse(t); sg.scale.setScalar(k * (1 + 0.05 * p)); sm.emissiveIntensity = 0.35 + 2.2 * p; },
-      };
-    },
-  },
-
-  coral: {
-    name: 'Coral-Fungo Bioluminescente', emoji: '🍄', height: 7, theme: (P) => P.sea ? 'abismo' : 'floresta', leafKind: 'oak', fx: 'coral', capTilt: 0.35,
-    desc: 'Em vez de folhas, cresce em chapéus empilhados (símbolo novo P) com lamelas que brilham por baixo e partículas subindo. A seed decide: coral do fundo do mar (azulado, com bolhas) ou fungo da floresta (laranja, com esporos).',
-    baseWidth: 0.2, bump: 0.05, wood: { leo: [2.2, 2.6], G: 0.7, tip: 0.07, ring: 0.35 },
-    params(r) {
-      const sea = r.chance(0.5);
-      const pal = sea ? r.pick([{ name: 'turquesa', h: 188, g: 168 }, { name: 'azul profundo', h: 215, g: 180 }, { name: 'violeta', h: 268, g: 190 }, { name: 'rosa coral', h: 330, g: 175 }])
-        : r.pick([{ name: 'laranja', h: 22, g: 95 }, { name: 'âmbar', h: 32, g: 75 }, { name: 'ferrugem', h: 10, g: 48 }, { name: 'dourado', h: 40, g: 110 }]);
-      return {
-        sea, variant: sea ? 'coral do fundo do mar' : 'fungo da floresta', palette: pal.name, capH: pal.h + r.jit(8), glowH: pal.g + r.jit(8),
-        iterations: r.int(6, 7), stems: r.int(2, 4), angle: r.range(28, 45), pBranch: r.range(0.55, 0.8), seg: r.range(0.75, 0.95),
-        cap: r.range(0.5, 0.72), capDecay: r.range(0.8, 0.88), pCap: r.range(0.35, 0.6), dome: sea ? r.range(0.04, 0.1) : r.range(0.22, 0.34), gills: r.int(28, 44),
-      };
-    },
-    show: [['variant', 'Variante'], ['palette', 'Paleta'], ['iterations', 'Iterações'], ['stems', 'Estipes'], ['angle', 'Ângulo de ramificação', '°'], ['pBranch', 'Prob. de ramo'], ['cap', 'Tamanho do chapéu'], ['capDecay', 'Decaimento do chapéu'], ['dome', 'Curvatura do chapéu'], ['gills', 'Lamelas']],
-    build(P) {
-      let axiom = `!(1)F(0.45)`;
-      for (let i = 0; i < P.stems; i++) axiom += `[/(${n(i * 360 / P.stems + 20)})&(${P.stems > 1 ? 16 : 0})!(${P.stems > 1 ? 0.75 : 1})S(1)]`;
-      return {
-        axiom,
-        rules: {
-          S: [
-            { w: P.pBranch, s: (p, r) => { const s = p[0]; return `F(${n(P.seg * s)})${r.chance(P.pCap) ? `P(${n(P.cap * s)})` : ''}[+(${n(P.angle + r.jit(8))})/(${n(r.jit(60))})!(0.7)S(${n(s * 0.82)})]/(137.5)!(0.85)S(${n(s * P.capDecay)})`; } },
-            { w: 1 - P.pBranch, s: (p, r) => { const s = p[0]; return `F(${n(P.seg * s)})${r.chance(P.pCap * 0.7) ? `P(${n(P.cap * s * 0.85)})` : ''}/(137.5)&(${n(r.jit(8))})S(${n(s * P.capDecay)})`; } },
-          ],
-        },
-        finalize: { S: (p) => `F(${n(P.seg * p[0] * 0.4)})P(${n(P.cap * p[0] * 1.05)})` },
-        display: [
-          `ω : !(1) F(0.45) { [ /(360/${P.stems}·i) S(1) ] } × ${P.stems}`,
-          `S(s) → p=${n(P.pBranch)} : F(s·${n(P.seg)}) P(s·${n(P.cap)})? [ +(${n(P.angle)}°) S(s·0.82) ] /(137.5°) S(s·${n(P.capDecay)})   (P com p=${n(P.pCap)})`,
-          `       p=${n(1 - P.pBranch)} : F(s·${n(P.seg)}) P? /(137.5°) S(s·${n(P.capDecay)})`,
-          `P(r) = chapéu (domo ${n(P.dome)}) + ${P.gills} lamelas luminosas por baixo   (símbolo novo da tartaruga)`,
-          `final: S → F P (chapéu do topo)`,
-          `partículas: ${P.sea ? 'bolhas' : 'esporos'} saindo dos chapéus`,
-        ],
-      };
-    },
-    bark: (P) => P.sea ? [hsl(P.capH, 0.35, 0.55), hsl(P.capH, 0.4, 0.62)] : [hsl(P.capH + 10, 0.3, 0.72), hsl(P.capH + 15, 0.35, 0.78)],
-    geom: (kind, P) => kind === 'cap' ? capGeo(P.dome) : kind === 'gill' ? gillGeo(P.dome, P.gills) : null,
-    instMaterial: (kind, P) => kind === 'gill' ? new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
-      : kind === 'cap' ? new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: P.sea ? 0.45 : 0.7, metalness: 0, emissive: hsl(P.glowH, 0.9, 0.5), emissiveIntensity: 0.05 }) : null,
-    color(kind, it, P, r) {
-      if (kind === 'gill') return hsl(P.glowH + r.jit(10), 0.95, 0.55).multiplyScalar(1.5 + r.f() * 0.8);
-      return hsl(P.capH + r.jit(8), P.sea ? 0.65 : 0.9, (P.sea ? 0.42 : 0.4) + r.jit(0.06));
-    },
-    glow: (pl) => ({ color: hsl(pl.P.sea ? pl.P.glowH : pl.P.capH, 0.9, 0.6), i: 8, y: 0.5 }),
-    extra({ group, inst, P, rng }) {
-      const caps = (inst.cap || []).map(c => c.p.clone().addScaledVector(c.y, -0.1));
-      if (!caps.length) return null;
-      const points = []; for (const c of inst.cap) points.push(c.p.clone().addScalar(c.s), c.p.clone().addScalar(-c.s));
-      const H = P.seg * 6;
-      group.add(P.sea
-        ? particles({ origins: caps, count: Math.min(caps.length * 14, 900), rng, spread: 0.35, rise: H * 1.1, speed: 0.55, size: 0.05, color: hsl(P.glowH, 0.5, 0.75), kind: 'bubble' })
-        : particles({ origins: caps, count: Math.min(caps.length * 40, 2500), rng, spread: 0.8, rise: H * 0.9, speed: 0.18, size: 0.022, color: hsl(P.capH + 15, 0.95, 0.6).multiplyScalar(1.5), kind: 'spore' }));
-      return { points };
-    },
-  },
-});
-const EXOTIC = ['cristal', 'medusa', 'cacto', 'neural', 'coral'];
-const ALL_V4 = [...ORDER, ...EXOTIC];
-Object.assign(BARK, {
-  cristal: (P) => plainBark('facetada (' + P.mineral + ')'),
-  medusa: () => plainBark('mesogleia translúcida'),
-  cacto: (P) => plainBark(P.ribs + ' costelas em espiral'),
-  neural: () => plainBark('membrana'),
-  coral: (P, r) => ({ variant: P.sea ? 'calcária porosa' : 'estipe fibrosa', type: 0, stretch: 1, crack: 0.1, freq: r.range(9, 13), depth: 0.08, fbm: 0.8, lent: 1, glow: 1.8,
-    hi: [1.1, 1.1, 1.1], lo: [0.7, 0.7, 0.75], moss: 0, mossH: 90, mat: 0.3 }),
-});
-
-/* =====================================================================
    6c. v5: as 5 espécies raras (árvores reais e incomuns)
    Mesmos ganchos da v4, mais: tube.bump (perfil do tronco), wood.boost (raízes aéreas), símbolos W e Y.
    ===================================================================== */
@@ -1829,7 +1269,7 @@ Object.assign(SPECIES, {
   },
 });
 const RARE = ['dragoeiro', 'baoba', 'eucalipto', 'figueira', 'sequoia'];
-let ALL = [...ORDER, ...RARE, ...EXOTIC];
+let ALL = [...ORDER, ...RARE];
 Object.assign(BARK, {
   dragoeiro: (P, r) => ({ variant: P.sap ? 'lisa com sangue de dragão' : 'lisa', type: 0, stretch: 1, crack: 0.1, freq: r.range(7, 10), depth: 0.07, fbm: 0.8, lent: 0.08, hi: [1.15, 1.12, 1.1], lo: [0.6, 0.58, 0.56], moss: 0, mossH: 90, mat: 0.35 }),
   baoba: (P, r) => ({ variant: 'lisa com dobras', type: 0, stretch: 1, crack: 0.1, freq: r.range(3, 4.5), depth: 0.12, fbm: 1, lent: 0.25, hi: [1.12, 1.1, 1.08], lo: [0.62, 0.6, 0.6], moss: 0, mossH: 90, mat: 0.3 }),
@@ -2063,12 +1503,501 @@ Object.assign(BARK, {
   junipero: (P, r) => ({ variant: 'veia viva fibrosa + madeira morta', type: 1, stretch: r.range(0.05, 0.08), crack: 0.22, freq: r.range(6, 8), depth: 0.14, fbm: 0.8, lent: 0, hi: [1.4, 1.15, 1.05], lo: [0.4, 0.3, 0.28], moss: 0, mossH: 90, mat: 0.3 }),
 });
 
+/* SIM-BEGIN */
+/* =====================================================================
+   7b. v7: crescimento simulado ano a ano
+   Colonização do espaço (Runions et al. 2007) + luz por propagação de sombra numa grade de voxels
+   e alocação de recursos de Borchert-Honda com dominância apical (Palubicki et al. 2009).
+   Cada ano: pontos de atração livres -> gemas (destino: cresce / dorme / flor / morre) -> fluxo de recurso
+   da base para as gemas -> brotos novos (filotaxia e ângulos da espécie) -> folhas só perto das pontas
+   -> galhos sombreados caem (autopoda) -> (bonsai) poda periódica fora das almofadas.
+   Saída: esqueleto com nascimento (T0/T1) e morte (TD) por nó, em anos; o slider só escolhe o ano.
+   ===================================================================== */
+// cada ponto de atração vai para a gema mais próxima (dentro do raio e do cone de percepção dela)
+function simAssign(MX, MY, MZ, MT, yr, L, near, nn, BP, BC, rp2, c2) {
+  for (let q = 0; q < L.length; q++) {
+    const j = L[q]; if (MT[j] > yr) continue; // o envelope cresce com a idade: ponto ainda não disponível
+    const mx = MX[j], my = MY[j], mz = MZ[j];
+    let best = -1, bd = rp2, bx = 0, by = 0, bz = 0;
+    for (let t = 0; t < nn; t++) {
+      const o = near[t] * 6, dx = mx - BP[o], dy = my - BP[o + 1], dz = mz - BP[o + 2], d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= bd) continue;
+      const pr = dx * BP[o + 3] + dy * BP[o + 4] + dz * BP[o + 5];
+      if (pr < 0 || pr * pr < c2 * d2) continue;
+      bd = d2; best = near[t]; bx = dx; by = dy; bz = dz;
+    }
+    if (best >= 0) { const D = Math.sqrt(bd) || 1, o = best * 4; BC[o] += 1; BC[o + 1] += bx / D; BC[o + 2] += by / D; BC[o + 3] += bz / D; }
+  }
+}
+function growSim(C, rng) {
+  const NY = C.years, MAXN = C.maxNodes || 24000;
+  const X = [], Y = [], Z = [], PAR = [], T0 = [], T1 = [], TD = [], ORD = [], AXI = [], SCAF = [];
+  const DX = [], DY = [], DZ = [], kids = [], budsAt = [], leafOf = [];
+  const leaves = [], flowers = [], buds = [], axes = [], roots = [];
+  const UP = [0, 1, 0];
+  const norm = (v) => { const L = Math.hypot(v[0], v[1], v[2]) || 1; v[0] /= L; v[1] /= L; v[2] /= L; return v; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const rot = (v, k, ang) => { const c = Math.cos(ang), s = Math.sin(ang), d = dot(k, v), cr = cross(k, v); return [v[0] * c + cr[0] * s + k[0] * d * (1 - c), v[1] * c + cr[1] * s + k[1] * d * (1 - c), v[2] * c + cr[2] * s + k[2] * d * (1 - c)]; };
+  const perp = (d) => norm(cross(d, Math.abs(d[1]) < 0.95 ? UP : [1, 0, 0]));
+  const newAxis = (ord) => { axes.push({ nodes: [], ptr: 0, ord, side: null, k: 0 }); return axes.length - 1; };
+  function addNode(par, x, y, z, t0, t1, ord, ax, scaf) {
+    const i = X.length; X.push(x); Y.push(y); Z.push(z); PAR.push(par); T0.push(t0); T1.push(t1); TD.push(1e9); ORD.push(ord); AXI.push(ax); SCAF.push(scaf ? 1 : 0);
+    let d = par >= 0 ? norm([x - X[par], y - Y[par], z - Z[par]]) : [0, 1, 0]; DX.push(d[0]); DY.push(d[1]); DZ.push(d[2]);
+    kids.push([]); budsAt.push([]); leafOf.push(null); if (par >= 0) kids[par].push(i);
+    if (ax >= 0) axes[ax].nodes.push(i);
+    return i;
+  }
+  // ---------- pontos de atração (envelope da copa, pela seed) ----------
+  const rp = C.rp, rp2 = rp * rp, dk2 = C.dk * C.dk, cosP = Math.cos(C.cone ?? 1.0), cell = rp;
+  let MX = [], MY = [], MZ = [], MA = [], MT = [];
+  const key = (ix, iy, iz) => ((ix + 1024) * 2048 + (iy + 1024)) * 2048 + (iz + 1024);
+  const mgrid = new Map();
+  let bmin = [1e9, 1e9, 1e9], bmax = [-1e9, -1e9, -1e9];
+  for (let k = 0, tries = 0; k < C.markers && tries < C.markers * 30; tries++) {
+    const p = C.sample(rng); if (!p) continue;
+    const j = MX.length; MX.push(p[0]); MY.push(p[1]); MZ.push(p[2]); MA.push(1); MT.push(C.markerYear ? C.markerYear(p) : 0); k++;
+    const kk = key(Math.floor(p[0] / cell), Math.floor(p[1] / cell), Math.floor(p[2] / cell));
+    let a = mgrid.get(kk); if (!a) mgrid.set(kk, a = []); a.push(j);
+    for (let q = 0; q < 3; q++) { bmin[q] = Math.min(bmin[q], p[q]); bmax[q] = Math.max(bmax[q], p[q]); }
+  }
+  MX = Float64Array.from(MX); MY = Float64Array.from(MY); MZ = Float64Array.from(MZ); MA = Uint8Array.from(MA); MT = Float32Array.from(MT);
+  let mAlive = MX.length;
+  const kill = (x, y, z) => {
+    const ix = Math.floor(x / cell), iy = Math.floor(y / cell), iz = Math.floor(z / cell);
+    const R = Math.ceil(C.dk / cell);
+    for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) for (let c = -R; c <= R; c++) {
+      const L = mgrid.get(key(ix + a, iy + b, iz + c)); if (!L) continue;
+      for (const j of L) if (MA[j]) { const dx = MX[j] - x, dy = MY[j] - y, dz = MZ[j] - z; if (dx * dx + dy * dy + dz * dz < dk2) { MA[j] = 0; mAlive--; } }
+    }
+  };
+  // ---------- luz: grade de sombra (cada nó com folhas sombreia uma pirâmide abaixo dele) ----------
+  const S = C.shadow, vs = S.vox, sb = S.b, sq = S.q, sa = S.a ?? 1, sC = S.C;
+  const g0 = [Math.min(bmin[0], -2) - 2 * vs, -vs, Math.min(bmin[2], -2) - 2 * vs];
+  const gn = [Math.ceil((Math.max(bmax[0], 2) + 2 * vs - g0[0]) / vs) + 1, Math.ceil((Math.max(bmax[1], 2) + 3 * vs - g0[1]) / vs) + 1, Math.ceil((Math.max(bmax[2], 2) + 2 * vs - g0[2]) / vs) + 1];
+  const grid = new Float32Array(gn[0] * gn[1] * gn[2]);
+  // peso por voxel: o "bloqueio" de cada nível (b^-q) é espalhado pela base da pirâmide ((2q+1)² voxels): s ≈ área foliar acima
+  const pw = []; for (let q = 0; q <= sq; q++) pw.push(sa * Math.pow(sb, -q) / ((2 * q + 1) * (2 * q + 1)));
+  const vox = (x, y, z) => [Math.floor((x - g0[0]) / vs), Math.floor((y - g0[1]) / vs), Math.floor((z - g0[2]) / vs)];
+  function shade(i, sign) {
+    const [ix, iy, iz] = vox(X[i], Y[i], Z[i]);
+    for (let q = 1; q <= sq; q++) { // só abaixo do nó: a própria camada não se sombreia
+      const yy = iy - q; if (yy < 0) break; if (yy >= gn[1]) continue;
+      const w = sign * pw[q];
+      for (let a = -q; a <= q; a++) { const xx = ix + a; if (xx < 0 || xx >= gn[0]) continue;
+        for (let c = -q; c <= q; c++) { const zz = iz + c; if (zz < 0 || zz >= gn[2]) continue; grid[(xx * gn[1] + yy) * gn[2] + zz] += w; } }
+    }
+  }
+  const light = (x, y, z) => { const [ix, iy, iz] = vox(x, y, z); let s = 0; if (ix >= 0 && iy >= 0 && iz >= 0 && ix < gn[0] && iy < gn[1] && iz < gn[2]) s = grid[(ix * gn[1] + iy) * gn[2] + iz]; return Math.exp(-Math.max(0, s) / sC); }; // Beer-Lambert simples
+  // ---------- folhas ----------
+  const LF = C.leaf;
+  function addLeaves(i, t) {
+    if (!LF || !LF.per) return;
+    const d = [DX[i], DY[i], DZ[i]], list = [];
+    const k = LF.per(ORD[i], rng);
+    for (let j = 0; j < k; j++) {
+      const f = LF.along ? rng.f() : 1, px = X[PAR[i]] + (X[i] - X[PAR[i]]) * f, py = Y[PAR[i]] + (Y[i] - Y[PAR[i]]) * f, pz = Z[PAR[i]] + (Z[i] - Z[PAR[i]]) * f;
+      const sd = rot(perp(d), d, rng.f() * 6.2832);
+      let ly = LF.needle ? d.slice() : norm(rot(d, norm(cross(d, sd)), (LF.pitch + rng.jit(LF.pitchJ ?? 15)) * Math.PI / 180));
+      if (LF.droop) { ly = norm([ly[0], ly[1] - LF.droop, ly[2]]); }
+      let lz = norm(cross(ly, cross(UP, ly))); if (!isFinite(lz[0]) || Math.hypot(...lz) < 0.5) lz = perp(ly);
+      lz = norm(rot(lz, ly, rng.jit(LF.roll ?? 0.6)));
+      list.push(leaves.length);
+      leaves.push({ x: px, y: py, z: pz, ly, lz, s: LF.size * (0.8 + 0.4 * rng.f()) * (LF.sizeOrd ? LF.sizeOrd(ORD[i]) : 1), t0: t, t1: 1e9, node: i, kind: LF.kind });
+    }
+    if (list.length) { leafOf[i] = list; shade(i, 1); }
+  }
+  function dropLeaves(i, t) { const L = leafOf[i]; if (!L) return; for (const j of L) if (leaves[j].t1 > t) leaves[j].t1 = t; leafOf[i] = null; shade(i, -1); }
+  // ---------- gemas ----------
+  const mkBud = (node, d, ord, ax, born, term) => { const b = { node, d, ord, ax, born, idle: 0, alive: true, Q: 0, cnt: 0, ex: 0, ey: 0, ez: 0, v: 0, term }; buds.push(b); budsAt[node].push(b); return b; };
+  function lateralBuds(i, d, ax, ord, y, last) {
+    if (ord + 1 > C.maxOrder) return;
+    const ph = C.phyllo(ord, y), A = axes[ax]; if (!ph) return;
+    if (ph.type === 'whorl' && !last) return;
+    if (!A.side) A.side = perp(d);
+    let side = norm(A.side.map((v, q) => v - dot(A.side, d) * d[q])); if (!isFinite(side[0])) side = perp(d);
+    const beta = ph.angle * Math.PI / 180, dirs = [];
+    if (ph.type === 'alt') { side = rot(side, d, ph.div * Math.PI / 180); dirs.push(side); }
+    else if (ph.type === 'opp') { side = rot(side, d, Math.PI / 2); dirs.push(side, side.map(v => -v)); }
+    else if (ph.type === 'whorl') { side = rot(side, d, rng.f() * 6.2832); for (let k = 0; k < ph.n; k++) dirs.push(rot(side, d, k * 6.2832 / ph.n)); }
+    else if (ph.type === 'plag') { let h = norm(cross(d, UP)); if (!isFinite(h[0]) || Math.abs(dot(d, UP)) > 0.97) h = side; A.k++; dirs.push(A.k % 2 ? h : h.map(v => -v)); if (ph.both) dirs.push(A.k % 2 ? h.map(v => -v) : h); side = h; }
+    A.side = side;
+    for (const s of dirs) {
+      if (rng.f() > ph.p) continue;
+      const sj = rot(s, d, rng.jit(ph.jit ?? 0.25)), bj = beta + rng.jit(0.12);
+      mkBud(i, norm([d[0] * Math.cos(bj) + sj[0] * Math.sin(bj), d[1] * Math.cos(bj) + sj[1] * Math.sin(bj), d[2] * Math.cos(bj) + sj[2] * Math.sin(bj)]), ord + 1, -1, y, false);
+    }
+  }
+  // ---------- andaime da gramática (tronco/estilo vindo do L-System) ----------
+  const SC = C.scaffold, scN = SC ? SC.N : 0, scOn = new Uint8Array(scN);
+  if (SC) {
+    newAxis(0);
+    for (let i = 0; i < scN; i++) addNode(i ? SC.PAR[i] : -1, SC.X[i], SC.Y[i], SC.Z[i], SC.T0[i], SC.T1[i], SC.ORD ? SC.ORD[i] : 0, SC.axis ? (SC.axis[i] === 0 ? 0 : -1) : 0, true);
+  } else { newAxis(0); addNode(-1, 0, 0, 0, 0, 0, 0, 0, true); }
+  const scBuds = SC && SC.buds ? SC.buds.slice() : [];
+  if (!SC) mkBud(0, [0, 1, 0], 0, 0, 0, true); else scOn[0] = 1;
+  const exists = (i) => i < scN ? T0[i] < curY + 1 : true;
+  let curY = 0, grown = 0;
+  const stats = { years: NY, shed: 0, pruned: 0, flowers: 0 };
+  // ---------- laço anual ----------
+  for (let y = 0; y < NY; y++) {
+    curY = y;
+    // andaime que nasce neste ano: gemas axilares (filotaxia) e as gemas das pontas da gramática
+    for (let i = 1; i < scN; i++) if (!scOn[i] && T0[i] < y + 1) {
+      scOn[i] = 1; kill(X[i], Y[i], Z[i]);
+      if (SC.budsOn && SC.budsOn(i)) lateralBuds(i, [DX[i], DY[i], DZ[i]], 0, SC.ORD ? SC.ORD[i] : 0, y, true);
+      if (SC.leafOn && SC.leafOn(i)) addLeaves(i, T1[i]);
+    }
+    for (let k = scBuds.length - 1; k >= 0; k--) { const b = scBuds[k]; if (T1[b.node] < y + 1) { mkBud(b.node, b.d, b.ord, -1, y, true); scBuds.splice(k, 1); } }
+    // 1) espaço: cada ponto livre vai para a gema mais próxima que o "enxerga" (cone de percepção)
+    const bgrid = new Map(), live = [], comp = [];
+    let w0 = 0; for (const b of buds) if (b.alive) buds[w0++] = b; buds.length = w0;
+    for (const b of buds) { b.cnt = 0; b.ex = b.ey = b.ez = 0; b.Q = 0; b.v = 0; live.push(b);
+      const n0 = b.node; b.L = light(X[n0] + b.d[0] * 0.3, Y[n0] + b.d[1] * 0.3, Z[n0] + b.d[2] * 0.3);
+      if (b.L < 0.04) continue; // gema no escuro não compete por espaço (não cresceria)
+      const kk = key(Math.floor(X[n0] / cell), Math.floor(Y[n0] / cell), Math.floor(Z[n0] / cell)); let a = bgrid.get(kk); if (!a) bgrid.set(kk, a = []); a.push(comp.length); comp.push(b); }
+    const nb = comp.length, BP = new Float64Array(nb * 6), BC = new Float64Array(nb * 4);
+    for (let q = 0; q < nb; q++) { const b = comp[q], n0 = b.node; BP[q * 6] = X[n0]; BP[q * 6 + 1] = Y[n0]; BP[q * 6 + 2] = Z[n0]; BP[q * 6 + 3] = b.d[0]; BP[q * 6 + 4] = b.d[1]; BP[q * 6 + 5] = b.d[2]; }
+    const near = new Int32Array(Math.max(nb, 1));
+    if (mAlive > 0 && nb) for (const [kk, L] of mgrid) { // por célula: junta as gemas das 27 vizinhas uma vez e testa todos os pontos da célula
+      let w = 0; for (let q = 0; q < L.length; q++) if (MA[L[q]]) L[w++] = L[q]; L.length = w; if (!w) continue;
+      const j0 = L[0], ix = Math.floor(MX[j0] / cell), iy = Math.floor(MY[j0] / cell), iz = Math.floor(MZ[j0] / cell);
+      let nn = 0;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) { const B = bgrid.get(key(ix + a, iy + b, iz + c)); if (B) for (const u of B) near[nn++] = u; }
+      if (!nn) continue;
+      simAssign(MX, MY, MZ, MT, y, L, near, nn, BP, BC, rp2, cosP * cosP);
+    }
+    for (let q = 0; q < nb; q++) { const b = comp[q]; b.cnt = BC[q * 4]; b.ex = BC[q * 4 + 1]; b.ey = BC[q * 4 + 2]; b.ez = BC[q * 4 + 3]; }
+    // 2) recurso da gema = espaço livre × luz
+    for (const b of live) b.Q = (b.cnt > 0 || C.noSpace ? 1 : 0) * b.L;
+    stats.budMax = Math.max(stats.budMax || 0, live.length);
+    // 3) Borchert-Honda: soma da ponta para a base, divide da base para as pontas (λ = dominância apical)
+    const N = X.length, Qn = new Float64Array(N), V = new Float64Array(N);
+    for (let i = N - 1; i >= 0; i--) {
+      if (TD[i] < 1e8 || !exists(i)) continue;
+      for (const b of budsAt[i]) if (b.alive) Qn[i] += b.Q;
+      if (i > 0) Qn[PAR[i]] += Qn[i];
+    }
+    V[0] = C.alpha * Qn[0];
+    for (let i = 0; i < N; i++) {
+      if (V[i] <= 0) continue;
+      const cand = [];
+      for (const k of kids[i]) if (TD[k] > 1e8 && exists(k) && Qn[k] > 0) cand.push([k, Qn[k], DX[k], DY[k], DZ[k], 0]);
+      for (const b of budsAt[i]) if (b.alive && b.Q > 0) cand.push([b, b.Q, b.d[0], b.d[1], b.d[2], 1]);
+      if (!cand.length) continue;
+      let mi = 0, md = -9; const di = i ? [DX[i], DY[i], DZ[i]] : UP;
+      for (let c = 0; c < cand.length; c++) { const q = cand[c], al = q[2] * di[0] + q[3] * di[1] + q[4] * di[2]; if (al > md) { md = al; mi = c; } }
+      const lam = C.lambda(y, ORD[i]); let W = 0;
+      for (let c = 0; c < cand.length; c++) W += (c === mi ? lam : 1 - lam) * cand[c][1];
+      for (let c = 0; c < cand.length; c++) { const q = cand[c], v = V[i] * (c === mi ? lam : 1 - lam) * q[1] / W; if (q[5]) q[0].v = v; else V[q[0]] = v; }
+    }
+    // 4) brotos do ano
+    for (const b of live) {
+      if (!b.alive) continue;
+      let n = Math.min(Math.floor(b.v * (C.vScale ?? 1)), C.nMax(b.ord, y));
+      if (b.term === false && b.ord > (C.maxOrder ?? 9)) n = 0;
+      if (C.flower && b.ord >= 1 && y >= C.flower.from && n <= 1 && b.Q > 0 && rng.f() < C.flower.p) { // destino: flor (a gema vira flor e termina o eixo)
+        flowers.push({ node: b.node, d: b.d.slice(), t0: y + 0.35, t1: y >= NY - 1 ? 1e9 : y + 1.25 }); b.alive = false; stats.flowers++; continue;
+      }
+      if (n < 1 || X.length >= MAXN) { b.idle++; if (b.idle > C.maxIdle) b.alive = false; continue; }
+      const E = b.cnt > 0 ? norm([b.ex, b.ey, b.ez]) : null, xi = C.xi(b.ord), tr = C.trop(b.ord, y);
+      if (b.ax < 0) b.ax = newAxis(b.ord);
+      let d = b.d.slice(), par = b.node; const prev = b.d.slice();
+      for (let k = 0; k < n && X.length < MAXN; k++) {
+        if (E) { d[0] += xi * E[0]; d[1] += xi * E[1]; d[2] += xi * E[2]; norm(d); }
+        if (tr) { d[1] += tr; norm(d); }
+        if (C.bend) C.bend(d, b.ord, rng);
+        if (k > 0 || !b.term) { const pd = prev, c = d[0] * pd[0] + d[1] * pd[1] + d[2] * pd[2], mt = C.maxTurn ?? 0.45; // curvatura máxima por entrenó
+          if (c < Math.cos(mt)) { const ax = cross(pd, d), al = Math.hypot(...ax); if (al > 1e-6) { const nd = rot(pd, [ax[0] / al, ax[1] / al, ax[2] / al], mt); d[0] = nd[0]; d[1] = nd[1]; d[2] = nd[2]; } } }
+        prev[0] = d[0]; prev[1] = d[1]; prev[2] = d[2];
+        const L = C.len(b.ord, y) * (0.85 + 0.3 * rng.f());
+        const t0 = y + 0.1 + 0.8 * k / n, t1 = y + 0.1 + 0.8 * (k + 1) / n;
+        const i = addNode(par, X[par] + d[0] * L, Y[par] + d[1] * L, Z[par] + d[2] * L, t0, t1, b.ord, b.ax, false);
+        kill(X[i], Y[i], Z[i]);
+        lateralBuds(i, d, b.ax, b.ord, y, k === n - 1);
+        addLeaves(i, t1);
+        par = i;
+      }
+      budsAt[b.node].splice(budsAt[b.node].indexOf(b), 1); b.node = par; budsAt[par].push(b); b.d = d; b.idle = 0; grown++;
+      if (C.fork && C.fork(b.ord, y)) b.alive = false; // dicotomia: a ponta para e as duas gemas do fim do broto assumem
+    }
+    // 5) folhas só perto da ponta de cada eixo (as de trás caem quando o eixo cresce)
+    for (const A of axes) { const keep = LF ? LF.keep(A.ord) : 0; while (A.nodes.length - A.ptr > keep) { const i = A.nodes[A.ptr++]; if (!SCAF[i] || (SC && SC.dropLeaf)) dropLeaves(i, y + 1); } }
+    // 6) autopoda: galho com pouca luz para o tamanho cai (os canos continuam no tronco: o raio não diminui)
+    const N2 = X.length, size = new Float64Array(N2), QL = new Float64Array(N2);
+    for (let i = N2 - 1; i >= 0; i--) {
+      if (TD[i] < 1e8 || !exists(i)) continue;
+      if (leafOf[i]) { size[i] += 1; QL[i] += light(X[i], Y[i], Z[i]); }
+      if (i > 0) { size[PAR[i]] += size[i]; QL[PAR[i]] += QL[i]; }
+    }
+    if (C.debug) { let c = 0, sl = 0, lo = 0; for (let i = 0; i < N2; i++) if (leafOf[i] && TD[i] > 1e8) { const L = light(X[i], Y[i], Z[i]); c++; sl += L; if (L < 0.3) lo++; } (stats.dbg || (stats.dbg = [])).push(y + ':' + c + '/' + (sl / Math.max(c, 1)).toFixed(2) + '/' + lo); }
+    const shed = (i, t) => { const st = [i]; while (st.length) { const j = st.pop(); if (TD[j] < 1e8) continue; TD[j] = t; dropLeaves(j, t); for (const b of budsAt[j]) b.alive = false; for (const k of kids[j]) st.push(k); } };
+    let ytop = 0; for (let i = 0; i < N2; i++) if (TD[i] > 1e8 && exists(i) && Y[i] > ytop) ytop = Y[i];
+    for (let i = 1; i < N2; i++) {
+      if (SCAF[i] || TD[i] < 1e8 || !exists(i) || AXI[i] === AXI[PAR[i]]) continue;
+      if (y - T0[i] < C.shedAge) continue;
+      // cai se não tem mais folhas ou se a luz média das folhas dele ficou abaixo do limiar
+      if (size[i] === 0 || QL[i] / size[i] < C.shedT(ORD[i], y, Y[i] / Math.max(ytop, 1e-3))) { shed(i, y + 1 + 0.6 * rng.f()); stats.shed++; }
+    }
+    // 7) bonsai: poda de formação a cada `every` anos (corta o que saiu das almofadas)
+    if (C.prune && y > 0 && y % C.prune.every === 0) {
+      for (let i = scN; i < N2; i++) { if (TD[i] < 1e8 || SCAF[PAR[i]] && !C.prune.base) continue; if (!C.prune.inside(X[i], Y[i], Z[i], ORD[i])) { shed(i, y + 0.95); stats.pruned++; } }
+    }
+    if (C.yearHook) C.yearHook(y, { X, Y, Z, PAR, T0, T1, TD, ORD, kids, leafOf, addNode, roots, rng });
+  }
+  stats.nodes = X.length; stats.markersLeft = mAlive; stats.markers = MX.length; stats.grown = grown;
+  stats.leaves = leaves.length; stats.liveLeaves = leaves.filter(l => l.t1 > 1e8).length;
+  return { N: X.length, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), PAR: Int32Array.from(PAR), T0: Float32Array.from(T0), T1: Float32Array.from(T1), TD: Float32Array.from(TD), ORD: Int16Array.from(ORD), SCAF: Uint8Array.from(SCAF), leaves, flowers, roots, stats, tEnd: NY + 1.5 };
+}
+// ---------- andaime: a gramática da espécie (axioma + regras de tronco) desenha o tronco/estilo e onde ficam as gemas ----------
+const norm3 = (d) => { const L = Math.hypot(d[0], d[1], d[2]) || 1; d[0] /= L; d[1] /= L; d[2] /= L; return d; };
+const smooth01 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function simScaffold(sp, P, seed, id, G) {
+  const iters = G.iters ?? 0;
+  const { word } = runLSystem({ axiom: G.axiom, rules: G.rules || {} }, iters, new Rand(`${seed}::${id}::sim-rules`), null);
+  const cap = { syms: G.syms || {}, out: [] };
+  const { sk } = interpret(word, sp, P, new Rand(`${seed}::${id}::sim-turtle`), cap);
+  const tY = G.time || ((t) => t * G.years / (iters + 1));
+  const X = [sk.X[0]], Y = [sk.Y[0]], Z = [sk.Z[0]], PAR = [-1], T0 = [0], T1 = [0];
+  const map = new Int32Array(sk.N), first = new Int32Array(sk.N), seg = G.seg || 0.5;
+  for (let i = 1; i < sk.N; i++) { // entrenós longos viram vários (uma gema axilar a cada `seg`)
+    const q = sk.PAR[i], p = map[q], L = Math.hypot(sk.X[i] - sk.X[q], sk.Y[i] - sk.Y[q], sk.Z[i] - sk.Z[q]), k = Math.max(1, Math.ceil(L / seg - 0.2));
+    let par = p; first[i] = X.length;
+    for (let j = 1; j <= k; j++) {
+      const f = j / k; X.push(sk.X[q] + (sk.X[i] - sk.X[q]) * f); Y.push(sk.Y[q] + (sk.Y[i] - sk.Y[q]) * f); Z.push(sk.Z[q] + (sk.Z[i] - sk.Z[q]) * f);
+      PAR.push(par); T0.push(tY(sk.T0[i] + (sk.T1[i] - sk.T0[i]) * (j - 1) / k)); T1.push(tY(sk.T0[i] + (sk.T1[i] - sk.T0[i]) * j / k)); par = X.length - 1;
+    }
+    map[i] = par;
+  }
+  const N = X.length, flag = new Uint8Array(N), out = { N, X, Y, Z, PAR, T0, T1, flag };
+  if (sk.tipw) { out.tipw = sk.tipw.map(([i, w]) => [map[i], w]); for (const [i] of out.tipw) for (let j = i; j > 0; j = PAR[j]) flag[j] = 1; } // nebari: sem gemas
+  if (sk.boost) out.boost = sk.boost.map(b => ({ a: first[b.a], i: map[b.i], t: tY(b.t), f: b.f })); // raízes aéreas da gramática
+  if (sk.jin) { out.jin = []; for (const i of sk.jin) for (let j = first[i]; j <= map[i]; j++) { out.jin.push(j); flag[j] = 2; } }
+  out.buds = [];
+  for (const c of cap.out) { const o = G.syms[c.c](c.p || [], c); if (o) out.buds.push({ node: map[c.node], d: c.d, ord: o.ord ?? 1 }); }
+  out.budsOn = G.budsOn ? (i) => !flag[i] && G.budsOn(i, out) : null;
+  return out;
+}
+// ---------- simulação -> esqueleto + instâncias (o resto da montagem é o mesmo das versões anteriores) ----------
+function buildSimSkeleton(id, seed, sp, P) {
+  const S = SIMS[id](P, new Rand(`${seed}::${id}::sim`), sp, { seed, id });
+  const sc = simScaffold(sp, P, seed, id, S.scaffold);
+  S.cfg.scaffold = sc;
+  const R = growSim(S.cfg, new Rand(`${seed}::${id}::grow`));
+  const sk = { N: R.N, X: R.X, Y: R.Y, Z: R.Z, PAR: R.PAR, T0: R.T0, T1: R.T1, TD: R.TD };
+  if (sc.tipw) sk.tipw = sc.tipw; if (sc.jin) sk.jin = sc.jin;
+  const bo = (sc.boost || []).concat(R.roots); if (bo.length) sk.boost = bo;
+  const inst = {}, rng = new Rand(`${seed}::${id}::sim-inst`);
+  const push = (k, it) => { const a = inst[k] || (inst[k] = []); if (a.length < MAX_INST) a.push(it); };
+  for (const l of R.leaves) push(l.kind, { p: new V3(l.x, l.y, l.z), y: new V3(...l.ly), z: new V3(...l.lz), s: l.s, life: [l.t0, l.t1], node: l.node, arc: 0 });
+  if (S.flower) for (const f of R.flowers) S.flower(f, push, R, rng);
+  return { word: [], done: S.cfg.years, tEnd: R.tEnd, sk, inst, deadK: S.deadK, ring: S.ring, sim: { years: S.cfg.years, stats: R.stats, about: S.about } };
+}
+// flor no fim de um eixo (mesma construção do símbolo K da tartaruga)
+function simFlower(push, P, rng, pos, H, s, life) {
+  const Hn = H.clone().normalize(), Ln = new V3().crossVectors(UPV, Hn); if (Ln.lengthSq() < 1e-6) Ln.set(1, 0, 0); Ln.normalize();
+  const Un = new V3().crossVectors(Hn, Ln);
+  const np = P.petals || 5, open = (P.open || 60) * DEG, off = rng.f() * Math.PI * 2, layers = P.double ? 2 : 1;
+  for (let l = 0; l < layers; l++) for (let i = 0; i < np; i++) {
+    const ang = off + (i + l * 0.5) / np * Math.PI * 2 + rng.jit(0.12);
+    const r = Ln.clone().multiplyScalar(Math.cos(ang)).addScaledVector(Un, Math.sin(ang)), t = Ln.clone().multiplyScalar(-Math.sin(ang)).addScaledVector(Un, Math.cos(ang));
+    const o = open * (l ? 0.55 : 1) + rng.jit(0.1), dir = Hn.clone().multiplyScalar(Math.cos(o)).addScaledVector(r, Math.sin(o)).normalize();
+    push('petal', { p: pos.clone(), y: dir, z: new V3().crossVectors(dir, t).normalize(), s: s * (l ? 0.72 : 1), life, layer: l, node: 0, arc: 0 });
+  }
+  push('center', { p: pos.clone().addScaledVector(Hn, s * 0.06), y: Hn.clone(), z: Un.clone(), s: s * 0.17, life, node: 0, arc: 0 });
+}
+// ---------- configuração por espécie: a gramática define o caráter, a simulação enche a copa ----------
+// unidades = as da gramática clássica (o tamanho final é normalizado por sp.height de qualquer forma)
+const SIMS = {
+  carvalho(P, r) {
+    const hb = P.trunk * r.range(0.95, 1.15), rx = r.range(6.5, 8), ry = r.range(4.6, 5.6), cy = hb + ry * 0.92, l0 = 0.34;
+    const lob = [r.range(0, 6.28), r.range(0, 6.28), r.range(0.1, 0.18)];
+    return {
+      ring: 0.75,
+      about: 'decurrente: dominância apical cai com a idade (λ 0,60 → 0,50), copa larga',
+      scaffold: { axiom: `!(1)F(${n(hb)})/(${n(P.lean * 9)})+(${n(P.lean)})A`, years: 5, seg: 0.4, syms: { A: () => ({ ord: 0 }) }, budsOn: (i, s) => s.Y[i] > hb * 0.35 },
+      cfg: {
+        years: 40, maxNodes: 22000, markers: 7000, rp: 2.2, dk: 0.62, cone: 0.95, maxTurn: 0.35,
+        // a copa disponível cresce com a idade: estreita e alta quando jovem, larga e baixa quando velha
+        markerYear: (p) => 40 * Math.max(Math.pow(Math.hypot(p[0], p[2]) / (rx * 1.05), 1 / 0.85), Math.pow(p[1] / (cy + ry), 1 / 0.55)),
+        sample: (r) => { const x = r.range(-1, 1), y = r.range(-1, 1), z = r.range(-1, 1), a = Math.atan2(z, x);
+          const k = 1 + lob[2] * Math.sin(3 * a + lob[0]) + 0.08 * Math.sin(5 * a + lob[1]);
+          if (x * x + y * y + z * z > k * k) return null; const py = cy + y * ry; if (py < hb + 0.6) return null; return [x * rx, py, z * rx]; },
+        shadow: { vox: 0.6, q: 8, b: 1.1, a: 1, C: 1.5 },
+        alpha: 2.2, nMax: (o) => o === 0 ? 5 : 4, lambda: (y) => 0.6 - 0.1 * smooth01(5, 25, y),
+        xi: () => 0.4, trop: (o) => o === 0 ? 0.08 : -P.gravity * 0.1, len: () => l0,
+        phyllo: (o) => ({ type: 'alt', div: P.div, angle: o === 0 ? 50 : P.angle + 12, p: 0.85 }), maxOrder: 6, maxIdle: 4,
+        leaf: { kind: 'leaf', per: () => 3, size: P.leafSize, pitch: 50, keep: () => 5 },
+        shedAge: 3, shedT: () => 0.3,
+      },
+    };
+  },
+  sequoia(P, r) {
+    const per = P.per, n0 = P.n, H = P.internode * n0 * 0.85, R = r.range(3.2, 4.0) * (0.8 + 0.2 * P.round), NY = 70;
+    return {
+      ring: 0.88,
+      about: 'excurrente: tronco da gramática, verticilos de galhos, copa cônica; os galhos de baixo ficam na sombra e caem (autopoda)',
+      scaffold: {
+        axiom: `!(1)A(0)`, iters: n0, seg: 0.6, years: NY * 0.92,
+        rules: { A: (p, r) => { const k = p[0]; if (k >= n0) return `B`;
+          // dois verticilos por entrenó da gramática (um por ano de crescimento, aprox.)
+          const l = P.internode * (1 - 0.3 * k / n0) / 2; let o = '';
+          for (let h = 0; h < 2; h++) { o += `F(${n(l)})`;
+            if (k >= 1) for (let i = 0; i < per; i++) if (r.chance(0.8)) o += `[/(${n(i * 360 / per + r.jit(30))})&(${n(P.angle + r.jit(8))})B]`;
+            o += `/(${n(137.5 + r.jit(10))})`; }
+          return o + `A(${k + 1})`; } },
+        syms: { B: () => ({ ord: 1 }) },
+      },
+      cfg: {
+        years: NY, maxNodes: 22000, markers: 6500, rp: 1.8, dk: 0.5, cone: 1.0, maxTurn: 0.3,
+        markerYear: (p) => Math.max(p[1] / H * NY * 0.92 - 1, Math.hypot(p[0], p[2]) / 0.12),
+        bend: (d, o) => { if (o >= 1) { d[1] = Math.min(0.1, Math.max(-0.3, d[1])); const L = Math.hypot(d[0], d[1], d[2]); d[0] /= L; d[1] /= L; d[2] /= L; } }, // galhos plagiotrópicos: ficam quase na horizontal
+        sample: (r) => { const y = r.range(0.3, H + 0.6), u = y / (H + 0.6), rr = R * Math.pow(Math.max(1 - u, 0), 0.8) * (0.88 + 0.12 * Math.sin(y * 2.7));
+          const a = r.f() * 6.2832, d = Math.sqrt(r.f()) * rr; return [Math.cos(a) * d, y, Math.sin(a) * d]; },
+        shadow: { vox: 0.7, q: 10, b: 1.15, a: 1, C: 1.5 },
+        alpha: 2.0, nMax: (o) => o === 1 ? 5 : 3, lambda: () => 0.54,
+        xi: () => 0.3, trop: (o) => o === 1 ? -P.droop * 0.15 : P.upturn * 0.2, len: () => 0.3,
+        phyllo: () => ({ type: 'plag', angle: 50, p: 0.75 }), maxOrder: 3, maxIdle: 3,
+        leaf: { kind: 'needles', per: () => 4, along: true, size: P.needleLen * 0.75, needle: true, keep: () => 9 },
+        shedAge: 4, shedT: (o, y, h) => 0.04 + 0.08 * smooth01(18, 45, y) + (h < 0.5 * smooth01(25, 60, y) ? 1 : 0), // jovem: tolera sombra (cone cheio); velha: autopoda forte
+      },
+    };
+  },
+};
+// ---------- fábrica genérica: o envelope da copa sai da própria planta clássica da mesma seed ----------
+// (nuvem de folhas/agulhas do L-System clássico, com a idade em que cada uma nasce): os pontos de atração
+// ficam em volta dessa nuvem e só "acendem" no ano em que a planta clássica chegaria ali. Assim a forma
+// característica (chorão, guarda-chuva, garrafa...) continua; a simulação decide como os galhos a ocupam.
+function classicCloud(sp, P, seed, id, kinds) {
+  const def = sp.build(P);
+  const { word } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
+  const { sk, inst } = interpret(word, sp, P, new Rand(`${seed}::${id}::turtle`));
+  const pts = [], sz = [];
+  for (const k of kinds) for (const it of inst[k] || []) if (it.life[1] > 1e8) { // idade do ponto = nascimento de um ancestral do nó (a copa chega ali antes da folha final)
+    let a = it.node; for (let q = 0; q < 4 && a > 0; q++) a = sk.PAR[a];
+    pts.push([it.p.x, it.p.y, it.p.z, sk.T0[a]]); sz.push(it.s); }
+  sz.sort((a, b) => a - b);
+  let H = 0; for (let i = 0; i < sk.N; i++) H = Math.max(H, sk.Y[i]);
+  return { def, pts, size: sz.length ? sz[sz.length >> 1] : 0.3, H };
+}
+function crownSim(o) {
+  return (P, r, sp, ctx) => {
+    const NY = o.years, yr = (t) => t * NY / (P.iterations + 1); // tempo do L-System (iterações) -> anos
+    const kind = sp.padKind || 'leaf', cl = classicCloud(sp, P, ctx.seed, ctx.id, o.kinds || [kind]), pts = cl.pts, dil = o.dil ?? 0.6; cl.kind = kind;
+    const occ = new Set(), oc = o.pruneCell ?? 0.5, ok = (x, y, z) => `${Math.floor(x / oc)},${Math.floor(y / oc)},${Math.floor(z / oc)}`;
+    if (o.prune) for (const p of pts) occ.add(ok(p[0], p[1], p[2]));
+    const near = (x, y, z) => { const ix = Math.floor(x / oc), iy = Math.floor(y / oc), iz = Math.floor(z / oc);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) if (occ.has(`${ix + a},${iy + b},${iz + c}`)) return true; return false; };
+    const G = o.scaffold(P, cl.def, r);
+    G.time = G.time || yr; G.iters = G.iters ?? 0;
+    const cfg = Object.assign({
+      years: NY, maxNodes: 20000, markers: o.markers ?? 5000, rp: 1.6, dk: 0.45, cone: 1.0, maxTurn: 0.4,
+      sample: (rr) => { if (!pts.length) return null; const q = pts[Math.floor(rr.f() * pts.length)];
+        const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = dil * Math.cbrt(rr.f());
+        const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v), z = q[2] + d * Math.sin(v) * Math.sin(u);
+        return y < 0.15 ? null : [x, y, z, yr(q[3]) * (o.ahead ?? 1)]; },
+      markerYear: (p) => p[3],
+      shadow: { vox: 0.55, q: 8, b: 1.1, a: 1, C: 1.5 },
+      alpha: 2, nMax: () => 3, lambda: () => 0.55, xi: () => 0.4, trop: () => 0, len: () => 0.3,
+      phyllo: () => ({ type: 'alt', div: 137.5, angle: 45, p: 0.85 }), maxOrder: 5, maxIdle: 6,
+      shedAge: 3, shedT: () => 0.12,
+    }, o.cfg(P, cl, r));
+    if (cfg.leaf && cfg.leaf.size == null) cfg.leaf.size = cl.size;
+    if (o.prune) cfg.prune = { every: o.prune.every, base: false, inside: (x, y, z) => near(x, y, z) };
+    return { ring: o.ring, deadK: o.deadK, about: o.about, scaffold: G, cfg, flower: o.flower ? (f, push, R, rng) => o.flower(f, push, R, rng, P) : null };
+  };
+}
+const only = (rules, keys) => Object.fromEntries(keys.map(k => [k, rules[k]])); // andaime: só as regras estruturais (as outras viram gemas)
+const hang = (f, push, R, rng, kind, s, P) => { const i = f.node; push(kind, { p: new V3(R.X[i], R.Y[i], R.Z[i]), y: UPV.clone(), z: new V3(1, 0, 0).applyAxisAngle(UPV, rng.f() * 6.28), s, life: [f.t0, 1e9], node: i, arc: 0 }); };
+Object.assign(SIMS, {
+  pinheiro: crownSim({
+    years: 45, ring: 0.8, kinds: ['needles'], dil: 0.55,
+    about: 'excurrente: tronco e verticilos da gramática; galhos e raminhos crescem pelo espaço e pela luz; os verticilos de baixo secam e caem',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: only(def.rules, ['A']), iters: P.iterations, seg: 0.45, syms: { B: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ rp: 1.5, dk: 0.42, nMax: (o) => o === 1 ? 4 : 2, lambda: () => 0.56, len: () => 0.3, xi: () => 0.3,
+      trop: (o) => -P.droop * 0.12, bend: (d, o) => { if (o >= 1) { d[1] = Math.min(0.15, Math.max(-0.45, d[1])); norm3(d); } },
+      phyllo: () => ({ type: 'plag', angle: P.twigAngle, p: 0.8 }), maxOrder: 3,
+      leaf: { kind: 'needles', per: () => 2, along: true, needle: true, keep: () => 7, size: P.needleLen * 0.6 },
+      shedT: (o, y, h) => 0.06 + 0.1 * smooth01(15, 40, y) + (h < 0.3 * smooth01(25, 45, y) ? 1 : 0) }),
+  }),
+  arbusto: crownSim({
+    years: 14, ring: 0.6, kinds: ['leaf'], dil: 0.4, markers: 4000,
+    about: 'vários caules da base; brotos disputam espaço e luz; gemas na ponta viram flor (destino da gema)',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: 1, seg: 0.3, syms: { A: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ rp: 1.1, dk: 0.3, nMax: () => 2, lambda: () => 0.48, len: () => 0.2, xi: () => 0.45, trop: () => 0.03, maxTurn: 0.3,
+      phyllo: () => ({ type: 'alt', div: P.div, angle: P.angle + 15, p: 0.85 }), maxOrder: 6,
+      leaf: { kind: 'leaf', per: () => 3, pitch: 50, keep: () => 6 },
+      flower: { from: 4, p: 0.18 }, shedT: () => 0.08 }),
+    flower: (f, push, R, rng, P) => { const i = f.node; simFlower(push, P, rng, new V3(R.X[i], R.Y[i], R.Z[i]), new V3(...f.d), P.flowerSize * (0.8 + 0.35 * rng.f()), [f.t0, 1e9]); },
+  }),
+  salgueiro: crownSim({
+    years: 30, ring: 0.7, kinds: ['leaf'], dil: 0.5,
+    about: 'pernadas da gramática; os ramos finos crescem para o espaço e caem com a gravidade (cortinas); orbes nascem como destino de gema',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: only(def.rules, ['A']), iters: 2, seg: 0.6, syms: { A: () => ({ ord: 1 }), T: () => ({ ord: 2 }) } }),
+    cfg: (P) => ({ rp: 1.6, dk: 0.4, nMax: () => 4, lambda: () => 0.52, len: () => 0.32, xi: () => 0.35,
+      trop: (o) => o >= 2 ? -P.gravity * 1.4 : 0, maxTurn: 0.6, nMax: (o) => o >= 2 ? 6 : 3, lambda: (y, o) => o >= 2 ? 0.75 : 0.52,
+      phyllo: (o) => ({ type: 'alt', div: P.div, angle: o >= 1 ? 40 : P.angle, p: 0.85 }), maxOrder: 4,
+      leaf: { kind: 'leaf', per: () => 2, pitch: 35, keep: () => 14, droop: 0.4 },
+      flower: { from: 6, p: 0.05 }, shedT: () => 0.08 }),
+    flower: (f, push, R, rng, P) => hang(f, push, R, rng, 'orb', P.orbSize * (0.6 + 0.6 * rng.f()), P),
+  }),
+  dragoeiro: crownSim({
+    years: 30, ring: 0.6, kinds: ['leaf'], dil: 0.7, markers: 3500,
+    about: 'dicotomia: cada broto termina em duas gemas e a ponta para; rosetas de folhas só nas pontas; o guarda-chuva enche pelo espaço livre',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: Math.max(1, P.iterations - 4), seg: 0.5, syms: { A: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ rp: 1.8, dk: 0.6, nMax: () => 3, lambda: () => 0.5, len: () => 0.32, xi: () => 0.25, trop: () => P.up * 0.8, maxTurn: 0.25,
+      phyllo: () => ({ type: 'whorl', n: 2, angle: P.angle, p: 1, jit: 0.2 }), fork: () => true, maxOrder: 9,
+      leaf: { kind: 'leaf', per: () => Math.round(P.leaves * 0.6), pitch: 62, pitchJ: 20, keep: () => 1 },
+      shedT: () => 0.06 }),
+  }),
+  baoba: crownSim({
+    years: 30, ring: 0.85, kinds: ['leaf'], dil: 0.6, markers: 3000,
+    about: 'tronco-garrafa da gramática; a copa curta e retorcida cresce pelo espaço; frutos pendentes como destino de gema',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: only(def.rules, ['C', 'B']), iters: 2, seg: 0.6, syms: { B: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ rp: 2.5, dk: 0.45, nMax: () => 3, lambda: () => 0.5, len: () => 0.3, xi: () => 0.45, maxTurn: 0.6,
+      bend: (d, o, rng) => { d[0] += rng.jit(0.35); d[2] += rng.jit(0.35); norm3(d); },
+      phyllo: () => ({ type: 'alt', div: 140, angle: 40, p: 0.6 }), maxOrder: 5,
+      leaf: { kind: 'leaf', per: () => 3, pitch: 50, keep: () => 3 },
+      flower: P.fruits ? { from: 10, p: 0.06 } : null, shedT: () => 0.08 }),
+    flower: (f, push, R, rng, P) => hang(f, push, R, rng, 'fruit', P.fruitSize * (0.8 + 0.4 * rng.f()), P),
+  }),
+  eucalipto: crownSim({
+    years: 40, ring: 0.8, kinds: ['leaf'], dil: 0.6,
+    about: 'tronco alto e reto da gramática; galhos altos crescem pela luz, os de baixo caem (fuste limpo); folhas pendentes',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: only(def.rules, ['A']), iters: P.n + 1, seg: 0.5, time: (t) => t * 40 / (P.n + 2) * 0.9, syms: { B: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ markers: 6500, rp: 2.0, dk: 0.4, nMax: () => 5, lambda: () => 0.53, len: () => 0.36, xi: () => 0.35, trop: (o) => 0.03,
+      phyllo: () => ({ type: 'alt', div: 137.5, angle: 38, p: 0.8 }), maxOrder: 5,
+      leaf: { kind: 'leaf', per: () => 4, pitch: 120, pitchJ: 15, keep: () => 6 },
+      shedT: (o, y, h) => 0.08 + (h < 0.45 * smooth01(15, 35, y) ? 1 : 0) }),
+  }),
+  figueira: crownSim({
+    years: 35, ring: 0.7, kinds: ['leaf'], dil: 0.6,
+    about: 'galhos horizontais e raízes aéreas da gramática; a copa larga cresce pelo espaço e pela luz',
+    scaffold: (P, def) => ({ axiom: def.axiom, rules: only(def.rules, ['B']), iters: Math.max(2, P.iterations - 2), seg: 0.5, syms: { B: () => ({ ord: 1 }), C: () => ({ ord: 1 }) } }),
+    cfg: (P) => ({ rp: 1.7, dk: 0.5, nMax: () => 3, lambda: () => 0.52, len: () => 0.32, xi: () => 0.4, trop: () => 0.02,
+      phyllo: () => ({ type: 'alt', div: 137.5, angle: 42, p: 0.85 }), maxOrder: 5,
+      leaf: { kind: 'leaf', per: () => 2, pitch: 55, keep: () => 4 }, shedT: () => 0.1 }),
+  }),
+});
+// bonsais: o andaime é o estilo inteiro (nebari, tronco, jin, galhos); cada almofada vira uma gema que brota raminhos
+// para dentro do volume da almofada clássica; a cada `every` anos a "tesoura" corta o que saiu dele (poda de formação)
+const bonsaiSim = (every) => crownSim({
+  years: 24, ring: 0.85, dil: 0.22, markers: 3500, prune: { every }, pruneCell: 0.25, ahead: 0.6,
+  about: `estilo da gramática; os raminhos das almofadas crescem pelo espaço e pela luz e levam poda de formação a cada ${every} anos`,
+  scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: P.iterations, seg: 0.35, time: (t) => t * 24 * 0.6 / (P.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }), C: () => ({ ord: 2 }), D: () => ({ ord: 2 }) } }),
+  cfg: (P, cl) => ({ shadow: { vox: 0.4, q: 4, b: 1.3, a: 1, C: 4 }, rp: 0.7, dk: 0.16, cone: 1.2, nMax: () => 2, lambda: () => 0.5, len: () => 0.1, xi: () => 0.5, trop: () => 0.04, maxTurn: 0.6,
+    phyllo: () => ({ type: 'alt', div: 137.5, angle: 50, p: 0.9 }), maxOrder: 7, maxIdle: 8,
+    leaf: { kind: cl.kind, per: () => 3, pitch: 30, pitchJ: 25, keep: () => 4, needle: cl.kind === 'needles' }, shedT: () => 0.06 }),
+});
+for (const id of ['bordo', 'pinheiro_branco', 'cipreste', 'junipero']) SIMS[id] = (P, r, sp, ctx) => bonsaiSim(id === 'bordo' ? 2 : 3)(P, r, sp, ctx);
+/* SIM-END */
 /* =====================================================================
    7. Montagem: esqueleto -> raios (Leonardo + idade) -> tubos contínuos
    ===================================================================== */
 // Regra de Leonardo: r^e = Σ r_filho^e (pontas = 1), só com os nós que já existem na idade T,
 // vezes o crescimento secundário (1 + G·idade_do_nó). Barato: O(N) por quadro.
 function computeRadii(sk, T, W, s, out) {
+  if (W.TD) return computeRadiiSim(sk, T, W, s, out); // v7: crescimento simulado (nós com morte)
   const { N, PAR, T0, T1 } = sk; s.fill(0);
   for (let i = N - 1; i >= 1; i--) {
     if (T0[i] > T) continue;
@@ -2099,10 +2028,34 @@ function computeRadii(sk, T, W, s, out) {
   return mx;
 }
 
+// v7: mesma regra, mas um galho que caiu (TD ≤ T) some (raio 0) e continua contando no pai com a carga que tinha:
+// os canos dele viram cerne do tronco, que não afina quando a árvore se poda sozinha.
+function computeRadiiSim(sk, T, W, s, out) {
+  const { N, PAR, T0, T1 } = sk, TD = W.TD; s.fill(0);
+  for (let i = N - 1; i >= 1; i--) {
+    if (T0[i] > T) continue;
+    if (s[i] === 0) { s[i] = Math.min(1, (T - T0[i]) / Math.max(T1[i] - T0[i], 1e-4)) + 1e-6; if (W.TW && W.TW[i]) s[i] *= W.TW[i]; }
+    s[PAR[i]] += TD[i] <= T && TD[PAR[i]] > T ? s[i] * W.deadK : s[i]; // galho que caiu: os canos ficam no pai, com peso deadK
+  }
+  let smax = 1e-6; for (let i = 1; i < N; i++) if (s[i] > smax) smax = s[i];
+  const invE = 1 / W.leo, G = W.G / W.tEnd, sc = W.scale, rmin = W.rMin, ring = W.ring, sh = W.share;
+  let mx = 0;
+  for (let i = 0; i < N; i++) {
+    if (s[i] === 0 || TD[i] <= T) { out[i] = 0; continue; }
+    const age = Math.max(0, T - T1[i]);
+    const r = Math.max(Math.pow(s[i], invE) * (1 + G * age) * sc + ring * age * Math.pow(s[i] / smax, sh), rmin * Math.min(1, s[i]));
+    out[i] = r; if (i > 0 && r > mx) mx = r;
+  }
+  if (W.roots) { const rT = out[1] || out[0];
+    for (const b of W.roots) { const g = Math.min(1, Math.max(0, (T - b.t) / b.d)); if (g <= 0) continue;
+      const rr = rT * b.f * Math.pow(g, 0.8), k = Math.max(b.i - b.a, 1);
+      for (let j = b.a; j <= b.i; j++) if (out[j] > 0) { const v = Math.max(out[j], rr * (0.8 + 0.2 * (j - b.a) / k)); out[j] = v; if (v > mx) mx = v; } } }
+  return mx;
+}
 const catmull = (a, b, c, d, t) => { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); };
 
 function buildTubes(sk, rFull, sp, P, rng, W, tags) {
-  const TB = sp.tube; // v4: opções de tubo das exóticas (lados fixos, segmentos retos, ponta, costelas)
+  const TB = sp.tube; // v5: opções de tubo (tube.bump: perfil do tronco)
   const { N, X, Y, Z, PAR, T0, T1 } = sk;
   const kids = Array.from({ length: N }, () => []);
   for (let i = 1; i < N; i++) kids[PAR[i]].push(i);
@@ -2113,7 +2066,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     const k = kids[i]; if (!k.length) continue;
     dir(i, da); let best = -9, bi = -1;
     for (const c of k) { const sc = dir(c, db).dot(da) + 0.25 * Math.pow(rFull[c] / (rFull[i] || 1), 2); if (sc > best) { best = sc; bi = c; } }
-    main[i] = TB && TB.straight ? -1 : bi;
+    main[i] = bi;
   }
   const pos = [], nor = [], cp = [], bb = [], nn = [], col = [], bump = [], clr = [], bk = [], idx = [], fxa = [];
   const arcNode = new Float32Array(N); // comprimento de arco acumulado até cada nó (UV v contínuo pelo colar)
@@ -2125,9 +2078,9 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     chains++;
     const k = list.length - 1;
     const rel = rFull[list[1]] / rMaxFull;
-    let R = TB && TB.R ? TB.R(rel, P) : rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
-    if (W.lod && !(TB && TB.R)) R = Math.max(3, Math.round(R * 0.6)); // v5: jardim com menos lados (não mexe no consumo do RNG)
-    const Sbase = TB && TB.S ? TB.S(rel, P) : rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
+    let R = rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    if (W.lod) R = Math.max(3, Math.round(R * 0.6)); // v5: jardim com menos lados (não mexe no consumo do RNG)
+    const Sbase = rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
     // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
     const J = list[0], l1 = Math.hypot(X[list[1]] - X[J], Y[list[1]] - Y[J], Z[list[1]] - Z[J]);
     dir(J, da);
@@ -2136,11 +2089,6 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     const py = (j) => j < 0 ? g0[1] : j > k ? 2 * Y[list[k]] - Y[list[k - 1]] : Y[list[j]];
     const pz = (j) => j < 0 ? g0[2] : j > k ? 2 * Z[list[k]] - Z[list[k - 1]] : Z[list[j]];
     const rings = []; // {x,y,z,b,nA,nB,f}
-    if (TB && TB.straight) { // cristal: prisma reto de nó a nó
-      const B = list[1];
-      rings.push({ x: X[J], y: Y[J], z: Z[J], b: T0[B], nA: B, nB: B, f: 0, end: -1, sf: 0 });
-      rings.push({ x: X[B], y: Y[B], z: Z[B], b: T1[B], nA: B, nB: B, f: 0, end: B, sf: 1 });
-    } else
     for (let j = 1; j <= k; j++) {
       const S = Sbase + (j === 1 ? 3 : 0), B = list[j], A = list[j - 1];
       for (let s = (j === 1 ? 0 : 1); s <= S; s++) {
@@ -2158,7 +2106,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     const scaleD = 1 / Math.max(rFull[list[1]] * 3, 1e-4);
     const arc0 = collarParent >= 0 ? arcNode[J] : 0; let arc = arc0, prevB = rings[0].b;
     const c0 = cOld.clone().offsetHSL(rng.jit(0.01), rng.jit(0.04), rng.jit(0.03));
-    const tag = tags ? tags[list[1]] : 0, pointK = TB && TB.point ? TB.point(P) : 0, collarP = TB && TB.noCollar ? -2 : collarParent;
+    const tag = tags ? tags[list[1]] : 0, collarP = collarParent;
     for (let m = 0; m < M; m++) {
       const g = rings[m], gp = rings[Math.max(m - 1, 0)], gn = rings[Math.min(m + 1, M - 2)];
       if (m > 0) arc += Math.hypot(g.x - gp.x, g.y - gp.y, g.z - gp.z);
@@ -2168,7 +2116,6 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
       if (m === 0) { tmp.set(Math.abs(Tn.y) < 0.9 ? 0 : 1, Math.abs(Tn.y) < 0.9 ? 1 : 0, 0); Nn.crossVectors(Tn, tmp).normalize(); }
       else { Nn.addScaledVector(Tn, -Nn.dot(Tn)); if (Nn.lengthSq() < 1e-10) { tmp.set(1, 0, 0); Nn.crossVectors(Tn, tmp); } Nn.normalize(); }
       Bn.crossVectors(Tn, Nn);
-      if (g.cap && pointK) { Tn.set(X[list[k]] - X[list[k - 1]], Y[list[k]] - Y[list[k - 1]], Z[list[k]] - Z[list[k - 1]]).normalize(); } // ponta: segue o último entrenó
       const nr = rng.f();
       const pr = m > 0 ? rings[m - 1] : g;
       if (g.end >= 0 && !g.cap) arcNode[g.end] = arc;
@@ -2176,20 +2123,14 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
       for (let q = 0; q < R; q++) {
         const th = q / R * Math.PI * 2, cs = Math.cos(th), sn = Math.sin(th);
         const dx = Nn.x * cs + Bn.x * sn, dy = Nn.y * cs + Bn.y * sn, dz = Nn.z * cs + Bn.z * sn;
-        if (g.cap && pointK) nor.push(Tn.x, Tn.y, Tn.z); else nor.push(dx, dy, dz);
+        nor.push(dx, dy, dz);
         pos.push(g.x, g.y, g.z); cp.push(pr.x, pr.y, pr.z);
         bb.push(g.b, m > 0 ? prevB : g.b); nn.push(g.nA, g.nB, g.f);
         col.push(collarP, arc - arc0);
         const d = (arc - arc0) * scaleD;
-        if (TB && TB.ribs) { // cacto: costelas em espiral + estrangulamento entre gomos
-          const x = P.ribs * (th + arc * P.spiral), rib = Math.pow(Math.abs(Math.cos(x / 2)), 1.6);
-          const seg = 1 - P.pinch * Math.pow(1 - Math.sin(Math.PI * Math.min(Math.max(g.sf, 0), 1)), 2);
-          bump.push(g.cap ? pointK : (1 + P.ribAmp * (rib - 0.6)) * seg);
-        } else {
-          let bv = g.cap ? pointK : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr));
-          if (TB && TB.bump && !g.cap) bv *= TB.bump(th, arc, g, collarParent === -1, P); // v5: garrafa do baobá, sapopemas, base das raízes
-          bump.push(bv);
-        }
+        let bv = g.cap ? 0 : 1 + amp * ((0.55 * Math.sin(3 * th + ph1 + d * 1.3) + 0.45 * Math.sin(5 * th - d * 2.1 + ph2)) * (0.6 + 0.4 * nr));
+        if (TB && TB.bump && !g.cap) bv *= TB.bump(th, arc, g, collarParent === -1, P); // v5: garrafa do baobá, sapopemas, base das raízes
+        bump.push(bv);
         if (sp.fx) fxa.push(tag);
         clr.push(c0.r, c0.g, c0.b);
         bk.push(cs * rF, sn * rF, arc);
@@ -2242,11 +2183,6 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod) {
     lives[i * 2] = it.life[0] + delay; lives[i * 2 + 1] = it.life[1];
   });
   geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(lives, 2));
-  if (sp.fx) { // v4: distância no esqueleto + etiqueta, para ondas/pulsos nas instâncias
-    const fi = new Float32Array(count * 2);
-    items.forEach((it, i) => { fi[i * 2] = it.arc || 0; fi[i * 2 + 1] = tags ? tags[it.node] || 0 : 0; });
-    geo.setAttribute('aFxI', new THREE.InstancedBufferAttribute(fi, 2));
-  }
   let count2 = count, mats2 = mats, cols2 = cols;
   if (lod && (kind === 'leaf' || kind === 'needles') && count > 2500) { // v5: LOD do jardim: metade das folhas, 30% maiores (depois do RNG: mesma seed, mesma planta)
     count2 = Math.ceil(count / 2); mats2 = new Float32Array(count2 * 16); cols2 = new Float32Array(count2 * 3); const l2 = new Float32Array(count2 * 2);
@@ -2256,7 +2192,6 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod) {
       cols2.set(cols.subarray(i * 3, i * 3 + 3), j * 3); l2.set(lives.subarray(i * 2, i * 2 + 2), j * 2);
     }
     geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(l2, 2));
-    if (geo.attributes.aFxI) { const f = geo.attributes.aFxI.array, f2 = new Float32Array(count2 * 2); for (let i = 0, j = 0; i < count; i += 2, j++) f2.set(f.subarray(i * 2, i * 2 + 2), j * 2); geo.setAttribute('aFxI', new THREE.InstancedBufferAttribute(f2, 2)); }
   }
   let mat = sp.instMaterial ? sp.instMaterial(kind, P) : null;
   if (mat) {}
@@ -2282,25 +2217,32 @@ function buildPlant(id, seed, opts = {}) {
   const sp = SPECIES[id];
   const P = sp.params(new Rand(`${seed}::${id}::params`));
   const def = sp.build(P);
-  const { word, done, tEnd } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
+  const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P) : null; // v7: crescimento simulado (senão: L-System clássico, igual à v6)
+  const { word, done, tEnd } = SIM || runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
   const tLs = performance.now();
   const rng = new Rand(`${seed}::${id}::turtle`);
-  const { sk, inst } = interpret(word, sp, P, rng);
+  const { sk, inst } = SIM || interpret(word, sp, P, rng);
   const tSk = performance.now();
   // parâmetros da madeira (seed)
   const wr = new Rand(`${seed}::${id}::wood`);
-  const lam = sp.wood.ring ?? 0.5;
+  const lam = SIM && SIM.ring != null ? SIM.ring : sp.wood.ring ?? 0.5; // v7: no simulado o tronco engrossa mais por anéis anuais (idade) e menos pelos canos
   const W = { leo: sp.wood.leo[0] + wr.f() * (sp.wood.leo[1] - sp.wood.leo[0]), G: sp.wood.G * (0.8 + wr.f() * 0.4), tEnd, scale: 1, rMin: 0, ring: 0, share: sp.wood.share ?? 0.4 };
   if (opts.lod) W.lod = true;
+  if (SIM) { W.TD = sk.TD; W.deadK = SIM.deadK ?? 0.45; }
   if (sk.tipw) { W.TW = new Float32Array(sk.N); for (const [i, w] of sk.tipw) W.TW[i] = w; }
   if (sk.boost) W.roots = sk.boost.map(b => ({ a: b.a, i: b.i, t: b.t, d: Math.max(tEnd - b.t, 0.5) * 0.9, f: b.f })); // v5: raízes aéreas
   const sbuf = new Float32Array(sk.N), rFull = new Float32Array(sk.N);
   const unitMax = computeRadii(sk, tEnd, W, sbuf, rFull) || 1;
   W.scale = (1 - lam) * sp.baseWidth / unitMax; W.ring = lam * sp.baseWidth / tEnd; W.rMin = sp.baseWidth * (sp.wood.tip ?? 0.012);
   const rMaxFull = computeRadii(sk, tEnd, W, sbuf, rFull); W.rMaxFull = rMaxFull;
-  // v4: etiquetas por nó (neural: axônio x dendritos), uniforms de efeito e objetos extras (sino, planeta, soma, esporos)
+  let rTube = rFull;
+  if (SIM) { // v7: lados/anéis e domínio da casca pelo maior raio que o nó teve na vida (galhos que caem já foram grossos)
+    rTube = rFull.slice(); const tmp = new Float32Array(sk.N);
+    for (let y = 1; y < SIM.sim.years; y += 1) { computeRadii(sk, y + 0.95, W, sbuf, tmp); for (let i = 0; i < sk.N; i++) if (tmp[i] > rTube[i]) rTube[i] = tmp[i]; }
+  }
+  // etiquetas por nó (jin), uniforms de efeito da casca e objetos extras (vaso, silhueta humana)
   const tags = sp.tags ? sp.tags(sk) : null;
-  const fxU = sp.fx ? { uFx: { value: new THREE.Vector4() }, uFx2: { value: new THREE.Vector4() }, uFxP: { value: new V3() }, uFxC: { value: new V3() }, uFxC2: { value: new V3() } } : null;
+  const fxU = sp.fx ? { uFx: { value: new THREE.Vector4() }, uFx2: { value: new THREE.Vector4() } } : null;
   const group = new THREE.Group();
   const ex = sp.extra ? sp.extra({ group, sk, inst, P, rFull, W, fxU, rng: new Rand(`${seed}::${id}::fx`), tEnd }) : null;
   // extensão / altura
@@ -2332,7 +2274,7 @@ function buildPlant(id, seed, opts = {}) {
     uScale: { value: 1 }, uBkFreq: { value: 1 }, uMatT: { value: BK.mat } };
   if (fxU) Object.assign(U, fxU);
   const tTube0 = performance.now();
-  const tube = buildTubes(sk, rFull, sp, P, rng, W, tags);
+  const tube = buildTubes(sk, rTube, sp, P, rng, W, tags);
   const tTube = performance.now() - tTube0;
   const bmat = patch(sp.material ? sp.material(P) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'branch', U, sp.fx);
   const bmesh = new THREE.Mesh(tube.geo, bmat);
@@ -2349,14 +2291,14 @@ function buildPlant(id, seed, opts = {}) {
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
   const pl = {
-    id, sp, P, def, word, done, W, BK, rFull, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
+    id, sp, P, def, word, done, W, BK, rFull, sim: SIM && SIM.sim, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
     theme: typeof sp.theme === 'function' ? sp.theme(P) : sp.theme,
     update(age) {
       if (age === this.lastAge) return;
       const t = performance.now();
       const T = Math.pow(age, 0.8) * tEnd;
       computeRadii(sk, T, W, sbuf, radData); radTex.needsUpdate = true;
-      let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
+      let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && !(sk.TD && sk.TD[i] <= T) && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
       this.curH = hy * inner.scale.x;
       this.lastAge = age; this.radUpdateMs = performance.now() - t;
     },
@@ -2414,12 +2356,6 @@ function gradientTex(stops) {
 const THEMES = {
   day: { bg: gradientTex([[0, '#7fb2e5'], [0.55, '#cfe4ef'], [1, '#e9e3d0']]), fog: 0xdfe3d6, ground: 0x6a8a4c, soil: 0x4a3a2a, hemi: [0xdfefff, 0x4a3a28, 1.1], sun: [0xfff1d6, 2.7], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.95] },
   night: { bg: gradientTex([[0, '#03040d'], [0.6, '#0c1030'], [1, '#1d1838']]), fog: 0x141433, ground: 0x10182a, soil: 0x0a0d18, hemi: [0x7080d0, 0x202040, 0.8], sun: [0x9fb4ff, 1.0], fill: 0.3, exp: 1.1, bloom: [0.6, 0.45, 0.85] },
-  // v4: cenários das exóticas
-  gruta: { bg: gradientTex([[0, '#06040e'], [0.55, '#1b1233'], [1, '#3a2c52']]), fog: 0x1d1630, ground: 0x241e30, soil: 0x16121e, hemi: [0xc8b8ff, 0x2a2038, 0.9], sun: [0xffffff, 3.2], fill: 0.9, exp: 1.05, bloom: [0.4, 0.4, 0.88], stars: true },
-  abismo: { bg: gradientTex([[0, '#00030a'], [0.55, '#02172e'], [1, '#05384f']]), fog: 0x032036, ground: 0x0b2a35, soil: 0x061a22, hemi: [0x3f86d8, 0x02101a, 0.75], sun: [0x9fd8ff, 0.9], fill: 0.3, exp: 1.05, bloom: [0.6, 0.45, 0.78] },
-  deserto: { bg: gradientTex([[0, '#090822'], [0.5, '#35204d'], [0.82, '#b45a6c'], [1, '#f0a368']]), fog: 0x4a2a4a, ground: 0x8a5a3c, soil: 0x6a4028, hemi: [0xffc0b0, 0x402030, 0.85], sun: [0xffb890, 1.5], fill: 0.45, exp: 1.0, bloom: [0.55, 0.45, 0.85], stars: true },
-  vazio: { bg: gradientTex([[0, '#000000'], [0.6, '#050918'], [1, '#0e1430']]), fog: 0x070b1a, ground: 0x0a0e1a, soil: 0x05070d, hemi: [0x5868b0, 0x0a0a14, 0.7], sun: [0x8090ff, 1.0], fill: 0.3, exp: 1.05, bloom: [0.75, 0.45, 0.72], stars: true },
-  floresta: { bg: gradientTex([[0, '#010403'], [0.6, '#0a1810'], [1, '#1b2a1a']]), fog: 0x0c1810, ground: 0x18220f, soil: 0x120e08, hemi: [0xb0b0c0, 0x100c08, 0.6], sun: [0xc8d0ff, 0.9], fill: 0.3, exp: 1.1, bloom: [0.75, 0.5, 0.72], stars: true },
   // v5: cenários das raras
   arido: { bg: gradientTex([[0, '#5d8fc4'], [0.55, '#bcd2dc'], [1, '#e8d8b8']]), fog: 0xe0d6c0, ground: 0x9a8058, soil: 0x7a5e3e, hemi: [0xeef4ff, 0x5a4630, 1.05], sun: [0xfff0d0, 2.9], fill: 0.5, exp: 1.0, bloom: [0.3, 0.4, 0.95] },
   savana: { bg: gradientTex([[0, '#4d78b8'], [0.5, '#d9b98a'], [0.85, '#f0a060'], [1, '#f4c98c']]), fog: 0xe2c49a, ground: 0x9a8a48, soil: 0x7a5a32, hemi: [0xffe8cc, 0x5a4024, 1.05], sun: [0xffd8a0, 2.8], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.94] },
@@ -2496,12 +2432,19 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12, ty = 0.46 } = {})
    ===================================================================== */
 const $ = (id) => document.getElementById(id);
 const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
-for (const [label, ids] of [['Realistas', ORDER], ['Raras', RARE], ['Exóticas', EXOTIC], ['Bonsais', BONSAI]]) {
+for (const [label, ids] of [['Realistas', ORDER], ['Raras', RARE], ['Bonsais', BONSAI]]) {
   const og = document.createElement('optgroup'); og.label = label;
   for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; og.appendChild(o); }
   ui.species.appendChild(og);
 }
 let plants = [], mode = 'single', anim = null, labels = [];
+let growMode = 'sim'; // v7: 'sim' (simulado) | 'ls' (L-System clássico, igual à v6)
+function setGrowMode(m) {
+  growMode = m; $('gm-sim').classList.toggle('on', m === 'sim'); $('gm-ls').classList.toggle('on', m === 'ls');
+  const id = ui.species.value;
+  $('gmnote').textContent = m === 'ls' ? 'A gramática pura: a mesma planta da v6 para a mesma seed.'
+    : mode === 'single' && !SIMS[id] ? 'A samambaia não tem simulação: continua só L-System.' : 'Ano a ano: os galhos disputam espaço e luz, os sombreados caem; o slider escolhe o ano.';
+}
 let follow = null;
 
 const WORDS = ['orvalho', 'musgo', 'aurora', 'raiz', 'brisa', 'semente', 'samba', 'ipê', 'jabuti', 'lua', 'cipó', 'trovão', 'sereno', 'pólen', 'arara', 'neblina', 'carvalho', 'vento', 'jardim', 'galáxia'];
@@ -2509,11 +2452,11 @@ const randomSeed = () => `${WORDS[Math.floor(Math.random() * WORDS.length)]}-${W
 
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
-  return { esp: h.get('especie'), seed: h.get('seed') };
+  return { esp: h.get('especie'), seed: h.get('seed'), cresc: h.get('cresc') === 'classico' ? 'ls' : 'sim' };
 }
 function writeHash() {
   const esp = mode === 'garden' ? 'jardim' : ui.species.value;
-  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}`;
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + (growMode === 'ls' ? '&cresc=classico' : '');
   if (location.hash !== s) history.replaceState(null, '', s);
 }
 
@@ -2527,7 +2470,12 @@ function showInfo(pl) {
     + wood.map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('');
   $('rules').textContent = def.display.join('\n') + `\n\nraio (Leonardo): r(nó)^${W.leo.toFixed(2)} = Σ r(filho)^${W.leo.toFixed(2)}, pontas = r₀\n` +
     `idade: só existem nós nascidos até t; r ×= 1 + ${W.G.toFixed(2)}·(t − nascimento)/t_max`;
-  $('word').textContent = wordToString(pl.word, 700);
+  if (pl.sim) {
+    const st = pl.sim.stats;
+    $('rules').textContent += `\n\n— crescimento simulado (v7) —\n${pl.sim.about}\nandaime: a gramática acima (só o tronco/estilo e as gemas) · copa: colonização do espaço (${st.markers} pontos de atração, ${st.markersLeft} sobraram)\n` +
+      `luz: grade de sombra · recurso: Borchert-Honda com dominância apical · ${st.years} anos · ${st.shed} galhos caíram por sombra` + (st.pruned ? ` · ${st.pruned} cortes de poda` : '') + (st.flowers ? ` · ${st.flowers} flores` : '');
+    $('word').textContent = '(crescimento simulado: a planta não sai de uma palavra; mude para "L-System clássico" para ver a palavra gerada)';
+  } else $('word').textContent = wordToString(pl.word, 700);
   $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 32)}</b>`;
 }
 function showStats() {
@@ -2545,27 +2493,26 @@ async function generate({ animate = true } = {}) {
     clearPlants();
     const seed = ui.seed.value.trim() || 'lindenmayer'; ui.seed.value = seed;
     if (mode === 'single') {
-      const id = ui.species.value; const pl = buildPlant(id, seed);
+      const id = ui.species.value; const pl = buildPlant(id, seed, { sim: growMode === 'sim' });
       plants.push(pl); scene.add(pl.object);
       setTheme(pl.theme);
       const size = pl.box.getSize(new V3());
       soil.scale.setScalar(pl.sp.years ? 0.001 : Math.max(size.x, size.z) * 0.32 + 0.5); // v6: bonsai tem vaso, sem mancha de terra
       glowLight.intensity = id === 'salgueiro' ? 30 : 0;
       if (id === 'salgueiro') { glowLight.color = hsl(pl.P.glowH, 0.9, 0.6); glowLight.position.set(0, size.y * 0.35, 0); glowLight.distance = size.y * 3; }
-      if (pl.sp.glow) { const g = pl.sp.glow(pl); glowLight.color = g.color; glowLight.intensity = g.i; glowLight.position.set(0, size.y * g.y, 0); glowLight.distance = size.y * 3; }
       frame(pl.box);
       $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`; $('capD').textContent = pl.sp.desc;
       showInfo(pl);
     } else {
-      // v6: quatro fileiras: bonsais na frente, exóticas, realistas e raras (as maiores) atrás; LOD menor nos tubos
+      // v7: três fileiras: bonsais na frente, realistas no meio e raras (as maiores) atrás; LOD menor nos tubos
       setTheme('jardim'); glowLight.intensity = 0;
-      const gap = 2.6; const built = ALL.map(id => buildPlant(id, seed, { lod: true }));
+      const gap = 2.6; const built = ALL.map(id => buildPlant(id, seed, { lod: true, sim: growMode === 'sim' }));
       const all = new THREE.Box3();
       let zRow = 0, prevDepth = 0;
-      const ROWS = [BONSAI, EXOTIC, ORDER, RARE];
+      const ROWS = [BONSAI, ORDER, RARE];
       for (const ids of ROWS) {
         const row = ids.map(id => built[ALL.indexOf(id)]);
-        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * (ids === EXOTIC ? 0.72 : ids === BONSAI ? 1 : 0.85); });
+        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * (ids === BONSAI ? 1 : 0.85); });
         const depth = Math.max(...row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z); }));
         const totalW = widths.reduce((a, b) => a + b, 0) + gap * (row.length - 1);
         let x = -totalW / 2;
@@ -2584,7 +2531,7 @@ async function generate({ animate = true } = {}) {
       plants.push(...built);
       soil.scale.setScalar(0.001);
       frame(all, { dir: new V3(0.1, 0.68, 1), pad: 0.98, ty: 0.22 }); // v5: alvo mais baixo, espaço para as etiquetas da frente acima da legenda
-      $('capT').textContent = '🌿 Jardim: as 19 espécies'; $('capD').textContent = `Mesma seed "${seed}", dezenove gramáticas diferentes: bonsais na frente, depois exóticas, realistas e árvores raras. Clique no nome para abrir a espécie.`;
+      $('capT').textContent = '🌿 Jardim: as 14 espécies'; $('capD').textContent = `Mesma seed "${seed}", catorze espécies diferentes: bonsais na frente, realistas no meio e árvores raras atrás. Clique no nome para abrir a espécie.`;
       showInfo(built[ALL.indexOf(ui.species.value)] || built[0]);
     }
     showStats(); writeHash();
@@ -2597,15 +2544,18 @@ function startGrowth() { anim = { t0: performance.now(), dur: 7000 }; SHARED.uGr
 function syncSlider() {
   ui.growth.value = SHARED.uGrowth.value;
   const pl = mode === 'single' && plants[0], g = SHARED.uGrowth.value;
-  $('gval').textContent = pl && pl.sp.years ? `${Math.round(g * pl.P.years)} de ${pl.P.years} anos de formação` : Math.round(g * 100) + '%'; // v6: bonsai conta anos
+  if (pl && pl.sim) { const Y = pl.sim.years, y = Math.min(Y, Math.floor(Math.pow(g, 0.8) * (Y + 1.5))); $('gval').textContent = `ano ${y} de ${Y}` + (pl.sp.years ? ' de formação' : ''); } // v7: simulado: o slider é o ano
+  else $('gval').textContent = pl && pl.sp.years ? `${Math.round(g * pl.P.years)} de ${pl.P.years} anos de formação` : Math.round(g * 100) + '%'; // v6: bonsai conta anos
 }
-function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 19'; }
+function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 14'; }
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
 
 $('gen').onclick = () => generate();
 $('rand').onclick = () => { ui.seed.value = randomSeed(); generate(); };
 ui.seed.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
-ui.species.onchange = () => { if (mode === 'garden') { showInfo(plants[ALL.indexOf(ui.species.value)]); writeHash(); } else generate(); };
+$('gm-sim').onclick = () => { if (growMode !== 'sim') { setGrowMode('sim'); generate(); } };
+$('gm-ls').onclick = () => { if (growMode !== 'ls') { setGrowMode('ls'); generate(); } };
+ui.species.onchange = () => { setGrowMode(growMode); if (mode === 'garden') { showInfo(plants[ALL.indexOf(ui.species.value)]); writeHash(); } else generate(); };
 $('garden').onclick = () => { setMode(mode === 'garden' ? 'single' : 'garden'); generate(); };
 $('replay').onclick = () => startGrowth();
 ui.growth.oninput = () => { anim = null; SHARED.uGrowth.value = +ui.growth.value; syncSlider(); };
@@ -2614,7 +2564,7 @@ $('wind').onchange = (e) => SHARED.uWind.value = e.target.checked ? 1 : 0;
 $('share').onclick = async () => { writeHash(); try { await navigator.clipboard.writeText(location.href); $('share').textContent = '✔ Link copiado'; } catch { prompt('Copie o link:', location.href); } setTimeout(() => $('share').textContent = '🔗 Copiar link', 1500); };
 $('hide').onclick = () => { $('panel').classList.add('hidden'); applyViewOffset(); };
 $('toggle').onclick = () => { $('panel').classList.remove('hidden'); applyViewOffset(); };
-addEventListener('hashchange', () => { const h = readHash(); if (h.seed && (h.seed !== ui.seed.value || (h.esp === 'jardim') !== (mode === 'garden') || (h.esp !== 'jardim' && h.esp !== ui.species.value))) init(); });
+addEventListener('hashchange', () => { const h = readHash(); if (h.seed && (h.seed !== ui.seed.value || h.cresc !== growMode || (h.esp === 'jardim') !== (mode === 'garden') || (h.esp !== 'jardim' && h.esp !== ui.species.value))) init(); });
 addEventListener('resize', () => {
   applyViewOffset();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
@@ -2623,7 +2573,8 @@ addEventListener('resize', () => {
 function init() {
   const h = readHash();
   ui.seed.value = h.seed || 'lindenmayer';
-  if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); if (SPECIES[h.esp]) ui.species.value = h.esp; }
+  setGrowMode(h.cresc);
+  if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); ui.species.value = SPECIES[h.esp] ? h.esp : 'carvalho'; } setGrowMode(h.cresc); // v7: espécies removidas (exóticas) caem no carvalho
   const q = new URLSearchParams(location.search);
   if (q.has('age')) { generate({ animate: false }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
   else if (q.has('nogrow')) { generate({ animate: false }); } else generate();
@@ -2643,7 +2594,7 @@ function loop() {
   }
   const ageChanged = plants.some(pl => pl.lastAge !== SHARED.uGrowth.value);
   for (const pl of plants) pl.update(SHARED.uGrowth.value);
-  for (const pl of plants) if (pl.tick) pl.tick(SHARED.uTime.value, SHARED.uGrowth.value, pl); // v4: sino, planeta, soma
+  for (const pl of plants) if (pl.tick) pl.tick(SHARED.uTime.value, SHARED.uGrowth.value, pl); // gancho de animação por quadro (extra().tick)
   if (follow && mode === 'single' && plants[0] && $('follow').checked && (ageChanged || anim)) {
     // câmera acompanha a idade: aproxima na muda, afasta conforme cresce
     const want = THREE.MathUtils.clamp((plants[0].curH || 0) / follow.h * 1.15, 0.22, 1);
@@ -2669,7 +2620,7 @@ function loop() {
     for (const l of vis) { l.el.style.left = l.x + 'px'; l.el.style.top = l.y + 'px'; }
   }
 }
-window.camera = camera; window.controls = controls; window.THREE = THREE; window.__lsys = { buildPlant, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
+window.camera = camera; window.controls = controls; window.THREE = THREE; window.__lsys = { buildPlant, computeRadii, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>

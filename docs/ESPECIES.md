@@ -1,6 +1,8 @@
-# As 19 espécies
+# As 14 espécies
 
-5 realistas (v1–v3), 5 exóticas (v4), 5 árvores raras (v5) e 4 bonsais (v6, no fim deste arquivo).
+5 realistas (v1–v3), 5 árvores raras (v5) e 4 bonsais (v6, no fim deste arquivo). As 5 exóticas da v4 (cristal, medusa, cacto, neural, coral-fungo) foram removidas na v7 (ver [HISTORICO](HISTORICO.md)).
+
+Desde a v7 cada espécie (menos a samambaia) tem também um **crescimento simulado** (padrão), descrito no fim de cada seção e em [ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7). O que está abaixo de cada espécie (gramática, parâmetros) vale para o modo clássico e é o "caráter" que a simulação usa: o andaime (tronco, verticilos, estilo) vem dessa gramática e o envelope da copa vem da planta clássica da mesma seed.
 
 Cada espécie é um objeto em `SPECIES` (`index.html`, seção 6) com:
 
@@ -56,6 +58,8 @@ Cor das folhas: matiz ±18° (outono) ou ±8°, sat. ±0.1, lum. ±0.07 por folh
 
 ---
 
+**Crescimento simulado (v7):** 40 anos. Andaime: só o tronco da gramática (altura `trunk`, inclinação `lean`), com gemas axilares acima de 35% dele. Envelope próprio: elipsoide largo com 3 lobos (seed), que **cresce com a idade** (estreito e alto na muda, largo e baixo no velho), então a copa muda de forma e não só engrossa. Filotaxia alternada com a divergência da seed; λ (dominância apical) cai de 0,60 para 0,50 entre os anos 5 e 25 (decurrente: o líder some e a copa vira domo). Folhas só nos 5 últimos entrenós de cada eixo; galho com luz média < 0,3 cai.
+
 ## 🌲 Pinheiro Boreal (`pinheiro`)
 
 **Inspiração:** pinheiros e abetos (*Pinus*, *Abies*), crescimento **monopodial**: o ápice do tronco continua sempre e produz um verticilo (anel) de galhos por ano. Os galhos de baixo são os mais velhos e mais longos, o que dá a forma de cone.
@@ -100,6 +104,8 @@ final:  A → N(0.5) F(0.5) N(0.4) F(0.4)   B → N F   C → N F
 
 ---
 
+**Crescimento simulado (v7):** 45 anos. Andaime: tronco e verticilos da gramática (`A` completo); cada `B` vira gema de galho. Galhos plagiotrópicos (direção presa perto da horizontal, caimento pela seed), raminhos em plano. Agulhas nos 7 últimos entrenós. Autopoda pela luz e, depois dos 25 anos, os verticilos abaixo de ~30% da altura caem (copa sobe).
+
 ## 🌿 Samambaia Espiral (`samambaia`)
 
 **Inspiração:** samambaias (*Polypodiopsida*), roseta de frondes que nascem enroladas (**vernação circinada**, o "báculo") e se desenrolam. Cada fronde é pinada: a raque gera pinas, e as pinas, folíolos.
@@ -142,6 +148,8 @@ Sem regras juvenis: as próprias frondes são a "muda".
 
 ---
 
+**Crescimento simulado (v7):** Sem simulação: a samambaia continua só L-System (fronde em espiral não é um problema de disputa de espaço). O botão de modo não muda nada nela.
+
 ## 🌺 Arbusto Florido (`arbusto`)
 
 **Inspiração:** arbustos floríferos multicaule, como azaleia e hibisco: vários caules desde a base, ramificação densa e flores nas pontas na maturidade.
@@ -183,6 +191,8 @@ final:  A → F(0.12) leafStr(leafSize, 70°) K(flowerSize·(0.8–1.15))
 
 ---
 
+**Crescimento simulado (v7):** 14 anos. Andaime: a primeira iteração dos caules da base; as gemas `A` brotam. Brotos curtos, várias pontas; **flor como destino de gema** (a partir do ano 4, gema fraca no fim do eixo vira flor com a mesma construção do `K`: pétalas, camadas, paleta da seed). Copa preenche a nuvem de folhas da planta clássica.
+
 ## ✨ Salgueiro Lumínico (`salgueiro`)
 
 **Inspiração:** salgueiro-chorão (*Salix babylonica*), com ramos finais longos e pendentes. É uma espécie **fantástica**: as gavinhas têm folhas e orbes bioluminescentes, e a cena é noturna, com uma luz pontual da cor do brilho.
@@ -222,6 +232,8 @@ Os orbes usam cor HDR (×1.3–2.4) para acionar o bloom; as folhas têm emissiv
 
 ---
 
+**Crescimento simulado (v7):** 30 anos. Andaime: 2 iterações das pernadas `A`; o resto vira gema (`A` e as gavinhas `T`). Ramos de 2ª ordem em diante têm gravitropismo forte (pela `gravity` da seed) e dominância apical alta: crescem como cortinas pendentes. Orbes nascem como destino de gema.
+
 ## Casca procedural (v3)
 
 Definida em `BARK[espécie](P, rng)` com o fluxo `${seed}::${id}::bark` (novo na v3, então a forma e as cores das folhas de cada seed não mudaram). Detalhes do shader em [ARQUITETURA.md](ARQUITETURA.md#9-casca-procedural-v3).
@@ -243,132 +255,6 @@ Campos: `type` (0 lisa, 1 sulcada, 2 placas, 3 raque), `stretch` (compressão do
 
 Paletas: carvalho `hi` ≈ (1.45, 1.38, 1.3), `lo` ≈ (0.3, 0.28, 0.28); pinheiro `hi` = (k, 0.72k, 0.55k) com k = 1.6–2.4 (placas avermelhadas), `lo` = (0.35, 0.32, 0.32); arbusto `hi` ≈ 1.12, `lo` = (0.6, 0.55, 0.5); salgueiro `hi` ≈ (1.2, 1.15, 1.25), `lo` = (0.45, 0.42, 0.5); samambaia `hi` = (1.1, 1.1, 1.05), `lo` = (0.85, 0.85, 0.8).
 
-
----
-
-# As 5 espécies exóticas (v4)
-
-Mesmo motor das realistas, com os ganchos descritos em [ARQUITETURA §10](ARQUITETURA.md#10-espécies-exóticas-v4). Fluxos de RNG próprios (`seed::<id>::params`, `rules`, `turtle`, `wood`, `bark`, `fx`), então nada muda nas realistas.
-
-## 💎 Árvore de Cristal (`cristal`)
-
-**Ideia:** um "fractal mineral". Cristais não crescem por escolha, crescem por simetria, então a gramática é **determinística** (nenhuma regra estocástica): a seed só escolhe parâmetros.
-
-```
-ω : { [ /(360/c·i + 30°) &(30|60°) A(0.5) ] } × c   { [ /(yaw) &(90°) f(d) ^(90°−tilt) X(s) ] } × lascas   A(1)
-A(s) → F(s·len) { [ &(60°|90°) A(s·ratio) ] /(120°|90°) } × (3|4)  /(60°|45°) A(s·apex)      (s < 0.1 → F)
-final: A → F(s·len·0.6)
-```
-
-- Simetria `hexagonal` (3 filhos a 60°, giro de 120°, prisma de 6 faces) ou `cúbica` (4 filhos a 90°, giro de 90°, prisma de 5 ou 6 faces).
-- Tubo `straight`: cada entrenó é um prisma reto separado (sem Catmull-Rom nem colar), com ponta piramidal de 1.8–2.8× o raio.
-- **Mineral** (seed): ametista, esmeralda, quartzo rosa, citrino, safira, cristal de rocha ou obsidiana arco-íris (opaca, com iridescência). Cada um define cor, transmissão, IOR, dispersão e distância de atenuação.
-- Lascas `X` espalhadas na base (10–18), 3–6 cristais laterais.
-
-| Parâmetro | Faixa |
-|---|---|
-| `iterations` | 4 |
-| `ratio` | hex 0.56–0.66 · cúbica 0.45–0.55 |
-| `apex` | 0.7–0.85 |
-| `len` | 1.6–2.2 |
-| `cluster` | 3–6 |
-| `point` | 1.8–2.8 |
-
-## 🪼 Medusa Flutuante (`medusa`)
-
-**Ideia:** uma planta de cabeça para baixo. O "solo" dela é o sino, e os galhos pendem.
-
-```
-ω : { [ /(360/n·i) &(90°) f(rim) &(flare) ~(g) T(seg) ] } × n    { [ /(…) &(166°) M(armSeg) ] } × braços
-T(l) → F(l) ±(0–curl°) O? T(l·0.985)         (O com p = beads: nematocisto luminoso)
-M(l) → F(l) /(37°) [ &(75°) L ] [ ^(75°) L ] M(l·0.97)   (braço oral com babados)
-final: T → O (ponta brilhante), M → L
-```
-
-- Um entrenó por iteração (20–26): os tentáculos crescem em linha com a idade; o sino escala de 30% a 100% e pulsa (`max(0, sin(ωt))²`), e a planta toda boia (`float = 0.14`, sobe e desce devagar).
-- Sino: superfície paramétrica com borda em 8–16 lóbulos, canais radiais e borda emissivos com fresnel, 4 gônadas luminosas dentro; neve marinha em volta.
-- Ondulação no vertex shader pela distância à raiz no esqueleto (ver ARQUITETURA §10). Paleta: lunar, rosa abissal, âmbar, violeta, verde ácido ou azul elétrico, com matiz secundário de ±30–70°.
-
-| Parâmetro | Faixa |
-|---|---|
-| `tentacles` | 12–22 |
-| `arms` | 3–5 |
-| `rim` / `bellH` | 1.5–2.1 / 0.55–0.95 |
-| `flare` | 58–80° |
-| `gravity` | 0.03–0.08 |
-| `beads` | 0.08–0.25 |
-| `wave` / `amp` / `pulse` | 0.7–1.3 / 0.05–0.09 / 1.4–2.2 |
-
-## 🌵 Cacto Gravitacional (`cacto`)
-
-**Ideia:** um cacto colunar que sente a gravidade de um planetinha. Os braços se curvam para cima (gravitropismo negativo) **e** para o ponto onde o planeta passa mais perto (periastro da órbita).
-
-```
-ω : !(1) C(0)
-C(k) → F(seg) [ /(?) &(armAngle) ~(−up) $(att) B(1) ]? /(137.5°) C(k+1)     (braço com p = pArm; k = segs → Z)
-B(l) → F(l·seg·0.8) [ +(55°) $(att) B(l·0.7) ]? B(l·0.9)                       (l < 0.5 → Z)
-final: C, B, Z → coroa de 3 flores K
-```
-
-- Tubo com **costelas** (8, 13 ou 21: números de Fibonacci) que giram em espiral pelo arco, e estrangulamento entre gomos. Aréolas brancas desenhadas no shader nas cristas.
-- **Planeta**: gigante gasoso, anelado, gelo, lava ou violeta anelado (textura de faixas seedada, luz pontual própria). Órbita elíptica (excentricidade 0.25–0.45, inclinação 12–32°, período 14–22 s, sentido pela seed).
-- **Flores**: 14–22 pétalas em duas camadas, cor pela seed. Ficam em botão e só abrem (e brilham) quando o planeta passa perto.
-
-| Parâmetro | Faixa |
-|---|---|
-| `segs` (gomos do tronco) | 5–7 |
-| `iterations` | segs + 2–3 |
-| `ribs` | 8 · 13 · 21 |
-| `spiral` | ±0.05–0.12 rad por unidade |
-| `pArm` / `armAngle` | 0.55–0.85 / 72–88° |
-| `up` / `att` | 0.1–0.18 / 0.1–0.2 |
-
-## 🧠 Raiz Neural (`neural`)
-
-**Ideia:** um neurônio que é planta. O soma é a semente; os dendritos são a copa; o axônio é o caule que desce e vira raiz.
-
-```
-ω : [ &(180°) X(axonSegs) ]  { [ /(137.5°·i) &(12–80°) D(1) ] } × dend
-D(s) → p = pSplit : F(s·dLen) [ +(dAngle) D(s·decay) ] [ −(dAngle) D(s·decay) ]
-       senão      : F(s·dLen) /(±60°) &(±14°) O? D(s·0.93)          (s < 0.22 → F O: espinha dendrítica)
-X(k) → F(axonLen) O? X(k−1)   |   X(0) → R(1)                         (O: nós de Ranvier, se sorteado)
-R(s) → F(s) ~(rootGrav) { [ &(rootAngle) R(s·rootRatio) ] /(120°) } × 3   (s < 0.3 → botão sináptico O)
-```
-
-- `tags`: os nós da subárvore do axônio ganham etiqueta 1. Os pulsos de luz **saem** do soma pelo axônio e **chegam** ao soma pelos dendritos (como o sinal de verdade). Os botões sinápticos e nós de Ranvier piscam quando o pulso passa; o soma pisca no ritmo do trem de pulsos.
-- `float = 0`: a ponta mais baixa das raízes encosta no chão.
-
-| Parâmetro | Faixa |
-|---|---|
-| `dend` | 5–8 |
-| `dAngle` / `decay` / `pSplit` | 26–42° / 0.8–0.86 / 0.55–0.8 |
-| `axonSegs` / `axonLen` | 5–7 / 0.75–0.95 |
-| `rootAngle` / `rootGrav` | 38–58° / 0.04–0.12 |
-| `speed` / `spacing` / `width` | 2.2–3.8 / 5–9 / 0.35–0.55 |
-| cor | ciano, violeta, magenta, âmbar, verde sináptico, azul |
-
-## 🍄 Coral-Fungo Bioluminescente (`coral`)
-
-**Ideia:** trocar folhas por chapéus. Um símbolo novo, `P(r)`, desenha um chapéu (domo com a borda virada) e lamelas radiais por baixo, que brilham.
-
-```
-ω : !(1) F(0.45) { [ /(360/estipes·i) S(1) ] } × estipes
-S(s) → p = pBranch : F(s·seg) P(s·cap)? [ +(angle) S(s·0.82) ] /(137.5°) S(s·capDecay)
-       senão       : F(s·seg) P(s·cap·0.85)? /(137.5°) S(s·capDecay)
-final: S → F P (chapéu do topo, um pouco maior)
-```
-
-- A seed escolhe a **variante**: *coral do fundo do mar* (tons azulados/violeta/rosa coral, chapéus quase planos, bolhas subindo, cenário `abismo`) ou *fungo da floresta* (laranja/âmbar/ferrugem/dourado, chapéus abaulados, esporos dourados, cenário `floresta`).
-- Os chapéus inclinam um pouco na direção do ramo (`capTilt = 0.35`). A estipe usa a casca da v3 (lisa com lenticelas luminosas).
-
-| Parâmetro | Faixa |
-|---|---|
-| `stems` | 2–4 |
-| `iterations` | 6–7 |
-| `pBranch` / `angle` | 0.55–0.8 / 28–45° |
-| `cap` / `capDecay` / `pCap` | 0.5–0.72 / 0.8–0.88 / 0.35–0.6 |
-| `dome` | mar 0.04–0.1 · floresta 0.22–0.34 |
-| `gills` | 28–44 |
 
 ---
 
@@ -402,6 +288,8 @@ juvenil: A → roseta (80% das folhas)
 | `leafLen` | 0.75–1.0 |
 | `sap` / `sapAmt` | 55% · 0.6–1 |
 
+**Crescimento simulado (v7):** 30 anos. Andaime: as primeiras dicotomias da gramática (iterações − 4). Simulação em **dicotomia**: cada broto termina com duas gemas no plano oposto e a ponta para (modo `fork`), curvatura máxima pequena (galhos retos e grossos), tropismo para cima. Rosetas de folhas só no último nó de cada eixo; o guarda-chuva enche pelo espaço livre.
+
 ## 🪵 Baobá (`baoba`)
 
 **Ideia:** *Adansonia*. O tronco é uma garrafa maciça e a copa é curta e retorcida, como raízes viradas para cima. Duas coisas fazem o tronco engordar tanto:
@@ -431,6 +319,8 @@ juvenil: C, B → folhas (a muda tem folhas antes de ter copa)
 | `ratio` | 0.60–0.68 |
 | `leafP` | 0.35–0.7 |
 | `fruits` / `fruitP` | 70% · 0.25–0.45 |
+
+**Crescimento simulado (v7):** 30 anos, anéis pesados (`ring` 0,85). Andaime: o tronco-garrafa e a primeira divisão dos galhos (`C`, `B`). Copa curta e retorcida (direção com ruído, curvatura alta), poucas folhas; **frutos pendentes como destino de gema** (se a seed tem frutos).
 
 ## 🌈 Eucalipto Arco-Íris (`eucalipto`)
 
@@ -462,6 +352,8 @@ juvenil: A → 4 folhas (a muda tem folhas no ápice)
 | `speed` (maturação da cor) | 3.5–5 |
 | `cell` · `warp` · `spread` | 1.1–1.6 · 0.5–1.1 · 0.8–1.6 |
 
+**Crescimento simulado (v7):** 40 anos. Andaime: o tronco da gramática inteiro; os galhos `B` viram gemas. Folhas pendentes (inclinação 120°). Autopoda pela luz e, depois dos 15 anos, galhos abaixo de ~45% da altura caem (fuste limpo).
+
 ## 🌳 Figueira-de-Bengala (`figueira`)
 
 **Ideia:** *Ficus benghalensis*. Galhos quase horizontais soltam **raízes aéreas** que descem até o chão. Quando a raiz toca o solo, ela engrossa com a idade e vira um tronco secundário, e uma árvore vira um pequeno bosque.
@@ -487,6 +379,8 @@ C(s) → F(0.8s) L [ +(35°) C(0.68s) ] [ −(35°) C(0.68s) ] /(90°) C(0.6s)  
 | `pRoot` (raiz por segmento) | 0.25–0.4 |
 | `pSide` | 0.2–0.35 |
 | `leafSize` | 0.42–0.55 |
+
+**Crescimento simulado (v7):** 35 anos. Andaime: os galhos horizontais e as **raízes aéreas** (`W`) da gramática; as raízes engrossam como antes (fora de Leonardo). A copa cresce das gemas `B` e `C` restantes.
 
 ## 🌲 Sequoia Gigante (`sequoia`)
 
@@ -517,6 +411,8 @@ juvenil: A → tufo de agulhas em cone
 | `realH` | 70–95 m |
 
 ---
+
+**Crescimento simulado (v7):** 70 anos. Andaime: o tronco da gramática com **dois verticilos por entrenó** (gemas `B` desde o primeiro). Envelope próprio: cone (raio pela seed e `round`) que só fica disponível na altura que o tronco já alcançou e a um raio que cresce devagar. Galhos plagiotrópicos (direção presa entre −0,3 e 0,1 na vertical). Limiar de autopoda sobe com a idade (jovem tolera sombra, velha não) e, depois dos 25 anos, a base da copa sobe até a metade da altura: **a muda é um cone cheio até o chão e a árvore velha tem tronco nu e copa só no topo**.
 
 # Os 4 bonsais (v6)
 
@@ -555,6 +451,8 @@ final: B → Z   ·   juvenil: B → Z pequena
 
 Vaso oval raso quase preto. Cenário `preto` (fundo preto, luz de estúdio).
 
+**Crescimento simulado (v7):** Bonsai (vale para os 4): 24 anos de formação. Andaime = estilo completo da gramática (nebari, tronco, galhos, jin); cada almofada `Z` e cada ponta `B` viram gema. Os raminhos crescem para dentro do volume da almofada clássica (pontos de atração em volta das folhas dela), com sombra fraca (o bonsaísta mantém as almofadas abertas) e **poda de formação** a cada 2 anos no bordo (3 nos outros): o que sai do volume é cortado.
+
 ## 🌲 Bonsai de Pinheiro-Branco (`pinheiro_branco`)
 
 **Ideia:** *Pinus parviflora*. Tronco **maciço e torcido**: cada segmento gira para um plano de curva aleatório (`/(60–130°)`), e um `tube.bump` só no tronco cria sulcos e nós torcidos (`1 + gnarl·(0,55·sin(3θ + 2,1·arco + φ) + 0,45·sin(5θ − 1,4·arco))`, mais forte perto da base). Casca em placas cinza (tipo 2). Galhos nivelados por `_(0.8)` terminam em almofadas horizontais e finas de tufos de agulha. No 2º segmento sai a **cascata**: um galho que vai para fora, nivelado, e cai por gravitropismo para além da borda do vaso.
@@ -579,6 +477,8 @@ D → F(0.25) Z(0.7)
 
 Vaso oval largo e raso, marrom-acinzentado, com bastante musgo. Cenário `estudio` (cinza-claro).
 
+**Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A cascata vem do andaime.
+
 ## 🎋 Bonsai de Cipreste Hinoki (`cipreste`)
 
 **Ideia:** *Chamaecyparis obtusa* em **chokkan** (ereto formal). Tronco reto e afinando (13–16 segmentos quase sem desvio). A parte de baixo (`bare`) não tem galhos; acima, cada segmento recebe um galho nivelado que **alterna de lado** (180° ± 22°, com um passo extra de 70° a cada 4) e **encurta até o topo** (`0.3 + Lmax·(1 − u)^0.9`), formando a silhueta triangular em andares. As folhas são escamas serrilhadas (`hinoki`) em almofadas densas.
@@ -600,6 +500,8 @@ B(s) → F(0.6s) _(0.6) [ +(split) B(0.5s) ] [ −(split) B(0.5s) ] B(0.68s)    
 | `shari` / `shariH` / `shariTwist` | 10–16% da volta · 30–45% da altura · 0–0.12 rad/unid. |
 
 Vaso redondo e fundo de terracota com musgo. Cenário `terracota` (fundo marrom-avermelhado, luz dramática).
+
+**Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). Os andares e o shari vêm do andaime.
 
 ## 🌀 Bonsai de Junípero (`junipero`)
 
@@ -626,3 +528,5 @@ B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s
 | `padR` / `padH` / `padN` | 0.3–0.38 · 0.2–0.26 · 16–20 |
 
 Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.
+
+**Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A hélice, o shari e os jin vêm do andaime.

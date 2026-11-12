@@ -7,7 +7,8 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
 5. Shaders (idade + vento + casca procedural)
-6. As 5 espécies realistas · 6b. As 5 espécies exóticas (v4) · 6c. As 5 árvores raras (v5) · 6d. Os 4 bonsais (v6)
+6. As 5 espécies realistas · 6c. As 5 árvores raras (v5) · 6d. Os 4 bonsais (v6) (a 6b, das exóticas, saiu na v7)
+7a. v7: crescimento simulado (`SIM-BEGIN` … `SIM-END`: `growSim`, `simScaffold`, `buildSimSkeleton`, `SIMS`)
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
 9. UI / estado
@@ -126,7 +127,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - Temas `day` / `night` (céu em gradiente, neblina, luzes, bloom); o salgueiro usa `night` e uma `PointLight` com a cor da luz.
 - Escala: cada planta é normalizada para a altura-alvo da espécie (`height`), considerando a largura (`max(altura, 0.75·largura)`).
 - Enquadramento: `frame()` ajusta a câmera ao bounding box e desloca a projeção (`setViewOffset`) para não ficar atrás do painel (no desktop, à direita; no celular, para cima). "Câmera segue" aproxima a câmera na muda e afasta conforme a planta cresce.
-- Jardim (v5): as 15 espécies em três fileiras (exóticas na frente, realistas no meio, raras atrás), tema `jardim` (crepúsculo), câmera mais alta, rótulos clicáveis projetados na tela (fileira da frente embaixo da planta, as de trás em cima da copa) e afastados por um passo guloso a cada quadro (ordenados por y, cada rótulo que encosta em outro desce até não encostar mais). As plantas do jardim são montadas com LOD (ver §11).
+- Jardim (v7): as 14 espécies em três fileiras (bonsais na frente, realistas no meio, raras atrás), tema `jardim` (crepúsculo), câmera mais alta, rótulos clicáveis projetados na tela (fileira da frente embaixo da planta, as de trás em cima da copa) e afastados por um passo guloso a cada quadro (ordenados por y, cada rótulo que encosta em outro desce até não encostar mais). As plantas do jardim são montadas com LOD (ver §11).
 
 ## 8. Desempenho medido
 
@@ -187,40 +188,9 @@ Tudo no fragment shader do `MeshStandardMaterial` dos galhos, via `onBeforeCompi
 Os valores estão em `BARK` (`index.html`) e em [ESPECIES.md](ESPECIES.md#casca-procedural-v3). O painel mostra a variante, a escala, a profundidade e o musgo.
 
 
-## 10. Espécies exóticas (v4)
+## 10. Espécies exóticas (v4, removidas na v7)
 
-As 5 exóticas usam o mesmo motor (L-System → tartaruga → esqueleto → Leonardo → tubos → instâncias), mais alguns **ganchos opcionais** na definição da espécie. Quando o gancho não existe, o caminho de código é o mesmo da v3, então as 5 realistas saem **idênticas** (verificado: hash de palavra, esqueleto, raios, todos os atributos de geometria e matrizes/cores das instâncias para 4 seeds × 5 espécies, e screenshot da cena 3D pixel a pixel).
-
-| Gancho | Para que serve | Quem usa |
-|---|---|---|
-| `fx` | liga `#define LS_FX` + `LS_FX_<NOME>` nos shaders do galho e das instâncias | todas as exóticas |
-| `tube` | `R` (lados fixos), `S` (anéis por entrenó), `straight` (prisma reto nó a nó, sem continuar a cadeia), `point` (ponta: o anel final avança `k·raio` na tangente), `noCollar`, `ribs` (costelas) | cristal, cacto |
-| `material(P)` / `instMaterial(kind, P)` / `geom(kind, P)` | material do galho, material e geometria de cada tipo de instância | todas |
-| `float` | sobe a planta para que a base fique `float × altura` acima do chão | medusa (0.14), neural (0) |
-| `tags(sk)` | etiqueta por nó, vira atributo `aFx` | neural (1 = subárvore do axônio) |
-| `extra(ctx)` | objetos fora do L-System (sino, planeta, soma, partículas), pontos extras para o enquadramento e um `tick(t, idade, pl)` por quadro | medusa, cacto, neural, coral |
-| `glow(pl)` | luz pontual colorida da cena | medusa, neural, coral |
-| `theme(P)` | cenário pode depender da seed | coral (abismo ou floresta) |
-
-**Símbolos novos da tartaruga:** `$(a)` tropismo para um ponto (`P.attractor`), `P(r)` chapéu com lamelas (gera instâncias `cap` + `gill`), `X(s)` lasca de cristal. A tartaruga também passou a acumular a distância percorrida (`arc`) e grava `arc` e o nó atual em cada instância (campos extras, não afetam as realistas).
-
-**Shaders:** tudo atrás de `#ifdef LS_FX`.
-- Galho (vertex): `vFx = (cos θ, sin θ, arco, etiqueta)`; na medusa soma `lsMedusa(p, arco)`.
-- Galho (fragment, medusa/neural/cacto): substitui a casca por `lsFxCol` (cor) e `lsFxEmis` (emissão). O coral reusa a casca da v3 (tipo lisa com lenticelas luminosas); o cristal não tem fragment próprio (é `MeshPhysicalMaterial`).
-- Instâncias: atributo `aFxI = (arco, etiqueta)`, `vFxI` multiplica a cor (pulso nos botões sinápticos, onda nos nematocistos, flor que abre perto do planeta).
-- Sombras: os materiais de profundidade recebem o mesmo `fx`, então o deslocamento da medusa também move a sombra.
-
-**Efeitos:**
-- *Ondulação da medusa*: `d = max(arco − raio_do_sino, 0)`, `A = amp·d^1.25`, deslocamento `(sin(1.6t − k·d + 3θ), 0.25·sin(…), cos(1.25t − 0.85k·d + 3.9θ))·A`, com `θ = atan(z, x)` (cada tentáculo tem fase própria sem precisar de atributo) e um empurrão radial perto do sino sincronizado com o pulso.
-- *Pulso neural*: `s = d ∓ v·t` (axônio: para fora; dendritos: para dentro), brilho `exp(−((fract(s/λ) − ½)·λ/w)²)` + um segundo trem com `λ·0.618`. O soma pisca com a mesma função avaliada em `d = 0` (no JS).
-- *Flor do cacto*: `abre = 1 − smoothstep(perto, longe, |pos_flor − pos_planeta|)`; a pétala gira em torno do eixo local X por `1.25·(1 − abre)` rad (botão fechado) e escala de 0.35 a 1.15. O planeta segue uma órbita kepleriana (equação de Kepler resolvida com 5 iterações de Newton simples), acelera no periastro.
-- *Costelas do cacto*: no CPU, `bump = (1 + amp·(|cos(x/2)|^1.6 − 0.6))·(1 − pinch·(1 − sin(π·f))²)`, `x = costelas·(θ + arco·espiral)`; no fragment, aréolas brancas nas cristas com espaçamento pelo arco e defasagem de 0.618 entre costelas.
-- *Partículas*: `THREE.Points` com `ShaderMaterial` aditivo; cada ponto sobe (ou desce, na neve marinha) com `t = fract(tempo·vel + fase)`, balança em x/z e some nas pontas; só aparecem a partir de ~55% de idade.
-- *Cristal*: `MeshPhysicalMaterial` com `transmission`, `ior`, `dispersion`, `attenuationColor`, `iridescence`, `flatShading` (facetas) e um `envMap` próprio (`RoomEnvironment` via PMREM). `scene.environment` continua nulo, para não mudar a iluminação das realistas.
-
-**Cenários novos:** `gruta` (cristal), `abismo` (medusa, coral do mar), `deserto` (cacto), `vazio` (neural), `floresta` (fungo), `jardim` (crepúsculo, modo Jardim). Os que têm `stars` mostram um céu estrelado (`Points` fixo, sem neblina).
-
-**Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 1,0 fps; cristal 2,0; medusa 3,5; cacto 3,5; neural 3,3; coral 3,0; jardim com as 10: 0,5 fps. Montagem: cristal ~20–50 ms (1,3–3,5 mil nós), medusa ~10–20 ms, cacto < 15 ms, neural 30–200 ms (1,4–8 mil nós), coral < 15 ms.
+As 5 exóticas (cristal, medusa, cacto, neural, coral-fungo) e o que só elas usavam saíram na v7: efeitos `LS_FX_*` de medusa/neural/cacto/cristal/coral, o modo de fragment `own`, o atributo `aFxI`, as geometrias `shard`/`frill`/`cap`/`gill`, os símbolos `P` e `X` da tartaruga, as opções de tubo `straight`/`R`/`S`/`point`/`noCollar`/`ribs`, a luz `glow`, os cenários `gruta`/`abismo`/`deserto`/`vazio`/`floresta` e o `RoomEnvironment`. Ficaram os ganchos que as raras e os bonsais usam: `fx` com `frag: 'bark'` (dragoeiro, eucalipto, cipreste, junípero; atributo `aFx` + `vFx`), `tube.bump`, `float`, `tags`, `extra`/`tick`, `theme`, e o símbolo `$` (tropismo para um ponto). O código completo continua no commit `7a1a60b` (v4) e em qualquer versão até a v6.
 
 ## 11. Árvores raras (v5)
 
@@ -241,7 +211,7 @@ Mesma regra da v4: todo gancho novo é opcional e, sem ele, o caminho de código
 
 As duas casca-FX usam o modo `frag: 'bark'` da v4 (reusam o shader da v3 e só acrescentam um bloco antes do musgo), então a casca, o relevo e a iluminação continuam os mesmos.
 
-**LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas 30% maiores. As duas reduções acontecem **depois** de todo o consumo de RNG (o número de anéis não muda, e as cores das folhas são sorteadas antes do corte), então a planta do jardim é a mesma planta, só mais leve. Espécies com lados fixos (`tube.R`, como cristal e cacto) não mudam.
+**LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas 30% maiores. As duas reduções acontecem **depois** de todo o consumo de RNG (o número de anéis não muda, e as cores das folhas são sorteadas antes do corte), então a planta do jardim é a mesma planta, só mais leve. 
 
 **Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 0,8 fps; dragoeiro 2,8; baobá 3,8; eucalipto 2,3; figueira 1,3; sequoia 2,3. Jardim com as 15 (com LOD): 0,5 fps e 360 mil vértices de tubo, contra 0,3 fps e 414 mil do jardim da v4 com 10 espécies (mesma máquina, mesma sessão). Montagem: dragoeiro ~45 ms, baobá ~15 ms, eucalipto ~80 ms, figueira 130–230 ms (3 mil nós, 14 mil folhas), sequoia ~55–80 ms; o jardim inteiro ~640 ms.
 
@@ -261,6 +231,38 @@ Mesma regra das versões anteriores: todo gancho novo é opcional, e sem ele o c
 | Anos de formação | `syncSlider` | espécies com `years: true` mostram "N de M anos de formação" no slider (só no modo de uma espécie). |
 | Folhas novas | `GEOMS` | `palm` (5 lobos), `palm7` (7 lobos), `hinoki` (escama serrilhada). |
 | Cenários | `THEMES` | `preto`, `estudio`, `terracota`, `zen`. O disco de chão some para bonsais (o vaso faz o papel). |
-| Jardim | `ROWS` | 4 fileiras: bonsais na frente (rótulos embaixo), depois exóticas, realistas e raras. |
+| Jardim | `ROWS` | (v6) 4 fileiras: bonsais na frente (rótulos embaixo), depois exóticas, realistas e raras. Na v7: 3 fileiras (bonsais, realistas, raras). |
 
 **Desempenho (headless SwiftShader, só relativo; seed padrão):** pinheiro-branco 1,5 fps, cipreste 1,0, junípero 2,0. Montagem: bordo ~150 ms (o mais pesado: ~30–38 mil folhas palmadas), pinheiro-branco ~50 ms, cipreste ~55–75 ms, junípero ~40 ms. Jardim com as 19 (com LOD): ~0,3 fps, ~390 mil vértices de tubo, montagem ~1 s.
+
+## 13. Crescimento simulado (v7)
+
+Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc=classico` abre o clássico). No clássico nada muda: `buildPlant` só entra na simulação com `opts.sim` e `SIMS[id]` definido, e todos os ganchos novos são opcionais (o clássico é idêntico à v6 em hash completo, 14 espécies × 5 seeds). A samambaia não tem `SIMS` e é sempre clássica.
+
+**Ideia.** O L-System continua definindo o **caráter** da espécie (tronco, verticilos, dicotomia, ângulos, filotaxia, estilo do bonsai); a simulação decide **como a copa ocupa o espaço**, ano a ano. Isso resolve o que a gramática sozinha não resolve: galhos que se cruzam, folhas dentro da madeira, copas ralas ou com tufos, e o fato de a estrutura não reagir à sombra (galho de baixo nunca morria).
+
+**Fluxo** (`buildSimSkeleton`):
+
+1. `SIMS[id](P, rng, sp, {seed, id})` devolve `{ scaffold, cfg, ring, deadK, about, flower }`.
+2. **Andaime** (`simScaffold`): roda a gramática da espécie (só as regras estruturais, poucas iterações, fluxos `::sim-rules`/`::sim-turtle`) e interpreta com a tartaruga normal em modo captura: todo símbolo não terminal listado em `syms` (ex.: `B` do pinheiro, `A` do salgueiro, `Z`/`B` dos bonsais) vira uma **gema** com posição, direção e ordem. Entrenós longos são subdivididos (`seg`) para ter gemas axilares. O tempo do L-System vira anos (`time`). Nebari (`tipw`), jin e raízes aéreas (`boost`) passam adiante remapeados.
+3. **Pontos de atração**: `sample(rng)` sorteia pontos num envelope com a forma da espécie; `markerYear(p)` diz em que ano cada ponto fica disponível (o envelope cresce com a idade). Carvalho e sequoia têm envelope próprio (elipsoide com lobos; cone). As demais usam a fábrica `crownSim`: o envelope é a **nuvem de folhas da planta clássica da mesma seed** (`classicCloud`), dilatada (`dil`), e o ano de cada ponto é o nascimento de um ancestral (4 nós acima) da folha clássica mais próxima. Assim a silhueta característica fica (chorão, guarda-chuva, garrafa) e a simulação decide como os galhos a preenchem.
+4. **Laço anual** (`growSim`, fluxo `::grow`), para `y = 0 … anos−1`:
+   - nós do andaime que nascem neste ano: matam os pontos perto, criam gemas axilares (`budsOn`) e liberam as gemas capturadas;
+   - **espaço** (Runions et al. 2007): cada ponto ativo vai para a gema mais próxima dentro do raio de percepção `rp` e do cone (`cone`, rad) dela (grade de hash com célula = `rp`; teste feito por célula: `simAssign`); a gema recebe a contagem e a direção média;
+   - **luz** (Palubicki et al. 2009, simplificada): grade de voxels (`vox`); cada nó com folhas sombreia uma pirâmide **abaixo** dele (`q` níveis), com peso `a·b^−q` espalhado pela base `(2q+1)²` (assim a sombra ≈ área foliar acima). Luz = `exp(−sombra/C)`. A grade é atualizada incrementalmente quando folhas nascem/caem;
+   - **recurso**: `Q = luz` se a gema tem espaço (senão 0); Borchert-Honda: soma de Q da ponta para a base, `v = α·Q_base` distribuído da base para as pontas com `λ` para o filho mais alinhado (continuação) e `1−λ` para os laterais, proporcional a Q;
+   - **destino da gema**: `n = floor(v)` metâmeros (máx. `nMax(ordem, ano)`); sem recurso, dorme (`maxIdle` anos e morre); com `flower`, gema fraca de ordem ≥ 1 vira flor/orbe/fruto e termina o eixo; `fork` (dragoeiro) faz a ponta parar depois do broto (dicotomia);
+   - **broto**: direção = anterior + `xi`·direção do espaço + tropismo (`trop`) + `bend` (ex.: plagiotropia da sequoia/pinheiro), com curvatura máxima por entrenó (`maxTurn`); cada metâmero ganha gemas laterais pela filotaxia (`alt` com divergência, `opp`, `whorl` no último nó, `plag` em plano) e folhas (`leaf.per`);
+   - folhas só nos `keep` últimos nós de cada eixo (as de trás caem quando o eixo cresce);
+   - **autopoda**: para cada galho lateral (base de eixo), luz média das folhas da subárvore < `shedT(ordem, ano, altura relativa)` ou sem folhas → o galho inteiro morre (`TD` = ano + 1…1,6). O limiar pode depender da idade e da altura (base da copa que sobe na sequoia, pinheiro e eucalipto);
+   - **poda de formação** (bonsais, `prune.every`): corta o que está fora do volume das almofadas clássicas (grade de ocupação `pruneCell`).
+5. Saída: esqueleto com `T0/T1` (nascimento, em anos) e **`TD`** (morte) por nó, folhas com `[t0, t1]`, flores, raízes; `tEnd = anos + 1,5`. As instâncias usam os mesmos tipos e geometrias do clássico (`leaf` com o `leafKind` da espécie, `needles`, `petal`/`center` via `simFlower`, `orb`, `fruit`).
+
+**Raios** (`computeRadiiSim`, chamado por `computeRadii` quando `W.TD` existe): igual ao Leonardo da v2 (`r = s^(1/e)·(1+G·idade)·escala + anel·idade·(s/smax)^share`), com duas diferenças: nó morto tem raio 0 (some no shader, como os não nascidos), e o galho que caiu **continua contando no pai** com peso `deadK` (0,45), então o tronco não afina quando a copa de baixo cai. Na simulação a parcela dos anéis anuais é maior (`ring` 0,6–0,88 em vez de `wood.ring`), para o tronco engrossar todo ano mesmo quando a quantidade de folhas para de crescer. Os lados e anéis dos tubos são dimensionados pelo **maior raio que o nó teve na vida** (`rTube`), porque um galho que caiu já foi grosso. A textura de raios por ano continua a mesma: o slider só escolhe o ano.
+
+**Determinismo**: todo sorteio vem de `Rand` com fluxos próprios (`::sim`, `::grow`, `::sim-rules`, `::sim-turtle`, `::sim-inst`); a ordem de iteração é fixa (arrays, `Map` em ordem de inserção). Duas execuções dão o mesmo hash (14 × 5 seeds).
+
+**Desempenho medido** (Chrome headless + SwiftShader; montagem completa, média de 5 seeds com JIT aquecido / máximo): carvalho 169 / 229 ms; sequoia 80 / 97; pinheiro 96 / 124; arbusto 45 / 55; salgueiro 94 / 115; dragoeiro 39 / 44; baobá 22 / 27; eucalipto 88 / 141; figueira 100 / 116; bordo 190 / 256; pinheiro-branco 79 / 130; cipreste 80 / 92; junípero 52 / 77. A primeira montagem (JIT frio) fica entre ~150 e ~400 ms (bordo). Jardim (14, com LOD): ~1,1 s simulado contra ~0,44 s clássico, ~281 mil vértices e ~60 mil instâncias (contra ~255 mil e ~101 mil). Limites mantidos: `maxNodes` 20–22 mil, `MAX_INST` por tipo.
+
+**Por espécie**: ver o parágrafo "Crescimento simulado (v7)" de cada uma em [ESPECIES](ESPECIES.md). Limitações em [ROADMAP](ROADMAP.md#crescimento-simulado-v7).
+

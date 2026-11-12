@@ -2,11 +2,27 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v7: crescimento simulado e saída das exóticas (11/11/2026)
+
+Commit `(este)`, ver `git log`.
+
+- **Removidas as 5 espécies exóticas** (💎 cristal, 🪼 medusa, 🌵 cacto, 🧠 neural, 🍄 coral-fungo), adicionadas na v4: elas destoavam demais da ideia principal (árvores realistas). Saíram o código das espécies, os shaders e ganchos que só elas usavam (`LS_FX_*` da medusa/neural/cacto, geometrias de prisma/babado/chapéu/lamela, opções de tubo `straight`/`R`/`S`/`point`/`noCollar`/`ribs`, luz `glow`, cenários `gruta`/`abismo`/`deserto`/`vazio`/`floresta`, `RoomEnvironment`), o grupo do seletor e as vagas no jardim. O código continua recuperável no histórico do git: commit [`7a1a60b`](https://github.com/rafapignataro/lsystem-plants/commit/7a1a60b) (v4) e qualquer versão até a v6. Link antigo com `#especie=cristal` (ou outra removida) abre o carvalho.
+- **Jardim com 14** em três fileiras: bonsais na frente, realistas no meio, raras atrás.
+- **Crescimento simulado** (novo padrão; botão "Crescimento: Simulado / L-System clássico", hash `&cresc=classico` para o clássico), ver [ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7):
+  - colonização do espaço (Runions et al. 2007) com pontos de atração num envelope com a forma da espécie, que se expande com a idade; raio de percepção, cone e distância de morte;
+  - luz por propagação de sombra numa grade de voxels e alocação de recurso de Borchert-Honda com dominância apical λ (Palubicki et al. 2009);
+  - simulação ano a ano: destino de cada gema (cresce, dorme, flor, morre), folhas só perto das pontas, **autopoda** (galho com pouca luz seca e cai), engrossamento anual (canos de Leonardo + anéis), **poda de formação** nos bonsais;
+  - o L-System define o caráter (tronco, verticilos, dicotomia, estilo do bonsai), a simulação enche a copa; a samambaia continua só L-System;
+  - o slider de idade mostra a estrutura daquele ano (nascimento e morte por nó, textura de raios por ano) e o painel mostra "ano X de Y";
+  - sequoia: muda em cone cheio até o chão que vira tronco nu e alto com a copa só no topo; carvalho: copa alta e estreita quando jovem, domo largo quando velho.
+- **Compatibilidade**: o modo clássico é idêntico à v6 para as 14 espécies (hash completo de palavra, esqueleto, raios, geometria e instâncias, 14 × 5 seeds). O modo simulado é determinístico por seed (duas execuções idênticas, 14 × 5).
+- Screenshots: `screenshots/v7/` (antes/depois por espécie, faixas de idade 10/25/50/75/100%, jardim; no workspace do POC, fora do repositório).
+
 ## v6: 4 bonsais (11/11/2026)
 
 Commit [`2e7f3bb`](https://github.com/rafapignataro/lsystem-plants/commit/2e7f3bb0f9bcf67c61053c8f1de0e2f8253d31bd), 11:31.
 
-- **4 espécies novas**, no grupo "Bonsais" do seletor (agora Realistas / Raras / Exóticas / Bonsais): 🍁 Bordo Japonês, 🌲 Pinheiro-Branco, 🎋 Cipreste Hinoki, 🌀 Junípero (ver [ESPECIES](ESPECIES.md#os-4-bonsais-v6)), inspiradas em 4 fotos de referência do Rafael.
+- **4 espécies novas**, no grupo "Bonsais" do seletor (na época Realistas / Raras / Exóticas / Bonsais): 🍁 Bordo Japonês, 🌲 Pinheiro-Branco, 🎋 Cipreste Hinoki, 🌀 Junípero (ver [ESPECIES](ESPECIES.md#os-4-bonsais-v6)), inspiradas em 4 fotos de referência do Rafael.
 - **Vaso procedural** (superelipse: oval, redondo ou retangular) com terra, monte e musgo, e mesinha de madeira no junípero. O vaso se ajusta ao tamanho da copa e define o chão da planta.
 - **Motor**: almofadas de folhagem `Z`, raízes de superfície (nebari) com peso `Q` na regra de Leonardo, nivelamento `_` (galhos "aramados" na horizontal), jin `J`, folhas `palm`/`palm7`/`hinoki`.
 - **Casca**: shader de madeira morta (`LS_DEAD`): shari em espiral no junípero e em faixa reta no cipreste, jin, veios e borda de casca viva.
