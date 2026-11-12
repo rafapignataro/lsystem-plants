@@ -29,7 +29,7 @@ Desde a v7 o padrão é o **crescimento simulado** (24 anos de formação, poda 
 
 Árvores **em miniatura e formadas por anos de poda**, cada uma num vaso. A forma não sai só de uma regra "natural" de crescimento: o axioma já desenha o **estilo** (a curva do tronco, os andares, a hélice), como um bonsaísta faria com arame, e as regras ramificam os galhos até virarem **almofadas de folhagem**. Cada espécie tem fluxos de RNG próprios (`seed::<id>::…`). Os ganchos estão em [ARQUITETURA §12](ARQUITETURA.md#12-bonsais-v6).
 
-Comum aos quatro:
+Comum aos bonsais:
 
 - **Nebari** (raízes de superfície): `nebari(r, k, len, w)` gera `k` cordões `[ /(360°/k·i ± jit) &(90°) F(len) /(±40°) +(±25°) F(len) Q(w) ]` que saem quase na horizontal da base. `Q(w)` dá um peso extra à ponta da raiz na regra de Leonardo, então as raízes ficam grossas e a base do tronco alarga (o raio da base continua sendo `baseWidth`).
 - **Almofada** `Z(rx, ry, n, s)`: `n` folhas/tufos de agulha distribuídos num domo achatado de raio `rx` e altura `ry`, viradas para cima (`padUp`). Cada folha nasce com um atraso aleatório de até 0,7 da vida do módulo, então a almofada "enche" aos poucos. `pad(P, k)` escala raio por `k`, altura por `√k` e número de folhas por `k²`.
@@ -141,3 +141,34 @@ B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s
 Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.
 
 **Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A hélice, o shari e os jin vêm do andaime.
+
+## 🪴 Bonsai de Ficus (`ficus`)
+
+**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco é grosso e musculoso, de casca lisa cinza com lenticelas; a curva é a mesma do bordo, `&(curva · cos(2π·ciclos·k/n + φ))`. O nebari não usa o helper compartilhado: são 6–8 dedos de cinco segmentos, quase na horizontal, com peso `Q` para engrossar, saindo de um colo curto (`F(0.04)`, o nó 1, de onde a raiz aérea mede a fração do tronco). Dos galhos baixos descem raízes aéreas `W(seg, atraso, fração)` até o musgo. A copa é um conjunto de almofadas arredondadas de folhas ovais pequenas, verde-escuras e brilhantes.
+
+```
+ω : F(0.04)  nebari × raízes (5 F quase horizontais + Q)   tronco { &(curva·cos(…)) F } × n
+     a partir do 2º segmento, espiral áurea: [ /(137° ± 16°) &(abertura) B(L) ]
+     no primeiro andar, um segundo galho do lado oposto
+     raízes aéreas nos galhos baixos: F W(0.2, atraso, fração do tronco)
+     ápice: F B
+B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.55s) ] ^(16°) B(0.68s)
+       (s < 0.28 → almofada)
+```
+
+`tube.bump` deixa o tronco quase liso (um flare curto na base e um músculo suave) e engrossa o nebari no colo, afinando até a ponta. A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, de esmalte azul-turquesa, com musgo e sem pedras (elas cairiam fora do vaso baixo).
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 12–40 |
+| `segs` / `segLen` | 6–7 · 0.48–0.56 |
+| `curve` / `cycles` | 14–24° · 0.85–1.15 |
+| `roots` / `rootLen` / `rootW` | 6–8 · 1.15–1.42 · 22–32 |
+| `aerials` | 4–5 |
+| `branchLen` / `bAngle` | 0.62–0.84 · 42–54° |
+| `padR` / `padH` / `padN` | 0.56–0.7 · 0.32–0.42 · 72–96 |
+| `flare` / `muscle` | 0.05–0.12 · 0.04–0.08 |
+
+Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
+
+**Crescimento simulado (v7):** Bonsai, com poda a cada 2 anos e o andaime um pouco mais cedo, para a copa já estar enchendo no meio da formação. O estilo (nebari, tronco, raízes aéreas) vem da gramática; as almofadas enchem de raminhos com mais folhas ovais por gema.

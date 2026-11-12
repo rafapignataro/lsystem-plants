@@ -19,7 +19,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero'];
+const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero', 'ficus'];
 const shots = join(root, 'screenshots/v8');
 await mkdir(shots, { recursive: true });
 
@@ -65,7 +65,7 @@ const garden = await page.evaluate(() => ({
   n: window.__lsys?.plants?.length || 0,
   cap: document.getElementById('capT')?.textContent || '',
 }));
-if (garden.n !== 4) errors.push('jardim com ' + garden.n + ' plantas');
+if (garden.n !== 5) errors.push('jardim com ' + garden.n + ' plantas');
 if (!/Bonsai Garden/.test(garden.cap)) errors.push('legenda do jardim: ' + garden.cap);
 await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false });
 const t0 = performance.now();

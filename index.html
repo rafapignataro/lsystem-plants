@@ -200,6 +200,14 @@ const GEOMS = {
   palm: () => palmGeo(5),
   palm7: () => palmGeo(7),
   hinoki: () => sheet({ width: 0.42, fold: 0.03, curve: 0.04, profile: (u) => (0.45 + 0.55 * Math.abs(Math.sin(u * Math.PI * 4.5))) * Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.97 + 0.03)), 0.55), nu: 18, nv: 1 }),
+  // ficus retusa: folha oval/obovada, coriácea, levemente côncava (o brilho pega na face)
+  ficus: () => sheet({
+    width: 0.34, fold: 0.035, curve: 0.02, cup: 0.16, nu: 7, nv: 2,
+    profile: (u) => {
+      const t = Math.min(1, Math.max(0, (u - 0.02) / 0.96));
+      return Math.pow(Math.sin(Math.PI * Math.pow(t, 0.78)), 0.55);
+    },
+  }),
 };
 // folha palmada do bordo: leque de lobos pontudos em volta do pecíolo, levemente côncava (origem = pecíolo, eixo +y)
 function palmGeo(lobes) {
@@ -248,7 +256,10 @@ function soilGeo({ a, b, n = 2 }, mound, moss, rng, M = 64, Rn = 14) {
 }
 // monta vaso + terra (+ mesa) num grupo; devolve pontos para o enquadramento e a cota do fundo
 function makePot(group, o, rng) {
-  const pot = new THREE.Mesh(potGeo(o), new THREE.MeshStandardMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.75, metalness: 0, side: THREE.DoubleSide }));
+  const potMat = o.glaze
+    ? new THREE.MeshPhysicalMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.2, metalness: o.metal ?? 0.04, clearcoat: o.clearcoat ?? 0.8, clearcoatRoughness: o.clearcoatRough ?? 0.15, side: THREE.DoubleSide })
+    : new THREE.MeshStandardMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.75, metalness: 0, side: THREE.DoubleSide });
+  const pot = new THREE.Mesh(potGeo(o), potMat);
   const soil = new THREE.Mesh(soilGeo(o, o.mound ?? 0.05 * Math.min(o.a, o.b), o.moss ?? 0.5, rng), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   for (const m of [pot, soil]) { m.castShadow = m.receiveShadow = true; group.add(m); }
   let floor = -o.h;
@@ -532,6 +543,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     const k = list.length - 1;
     const rel = rFull[list[1]] / rMaxFull;
     let R = rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    if (sp.tubeMinSides) R = Math.max(R, sp.tubeMinSides);
     if (W.lod) R = Math.max(3, Math.round(R * 0.6)); // v5: jardim com menos lados (não mexe no consumo do RNG)
     const Sbase = rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
     // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
@@ -654,8 +666,10 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
   let mat = sp.instMaterial ? sp.instMaterial(kind, P) : null;
   if (mat) {}
   else if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  else {
-    mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: kind === 'petal' ? 0.45 : 0.7, metalness: 0 });
+  else if ((kind === 'leaf' || kind === 'needles') && sp.leafCoat) {
+    mat = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: sp.leafRough ?? 0.32, metalness: 0, clearcoat: sp.leafCoat, clearcoatRoughness: sp.leafCoatRough ?? 0.25 });
+  } else {
+    mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: sp.leafRough != null ? sp.leafRough : (kind === 'petal' ? 0.45 : 0.7), metalness: 0 });
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
   patch(mat, 'inst', U, sp.fx);
