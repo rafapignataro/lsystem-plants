@@ -4,7 +4,7 @@ Datas no horário de Brasília (UTC−3).
 
 ## v7: crescimento simulado e saída das exóticas (11/11/2026)
 
-Commit `(este)`, ver `git log`.
+Commit [`1033af9`](https://github.com/rafapignataro/lsystem-plants/commit/1033af96ed9f4b0107e7a2c0a9e4eefa8f7fa523), 21:20.
 
 - **Removidas as 5 espécies exóticas** (💎 cristal, 🪼 medusa, 🌵 cacto, 🧠 neural, 🍄 coral-fungo), adicionadas na v4: elas destoavam demais da ideia principal (árvores realistas). Saíram o código das espécies, os shaders e ganchos que só elas usavam (`LS_FX_*` da medusa/neural/cacto, geometrias de prisma/babado/chapéu/lamela, opções de tubo `straight`/`R`/`S`/`point`/`noCollar`/`ribs`, luz `glow`, cenários `gruta`/`abismo`/`deserto`/`vazio`/`floresta`, `RoomEnvironment`), o grupo do seletor e as vagas no jardim. O código continua recuperável no histórico do git: commit [`7a1a60b`](https://github.com/rafapignataro/lsystem-plants/commit/7a1a60b) (v4) e qualquer versão até a v6. Link antigo com `#especie=cristal` (ou outra removida) abre o carvalho.
 - **Jardim com 14** em três fileiras: bonsais na frente, realistas no meio, raras atrás.
