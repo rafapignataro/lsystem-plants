@@ -779,22 +779,30 @@ function assemblePlant(pkg) {
   bmesh.castShadow = bmesh.receiveShadow = true; bmesh.frustumCulled = false;
   bmesh.customDepthMaterial = depthMat('branch', U, sp.fx);
   group.add(bmesh);
-  const addPlain = (part, color, rough) => {
+  const addPlain = (part, color, rough, grow) => {
     if (!part || !part.pos || part.pos.length < 9) return;
     const jg = new THREE.BufferGeometry();
     jg.setAttribute('position', new THREE.BufferAttribute(part.pos, 3));
     jg.setAttribute('normal', new THREE.BufferAttribute(part.nor, 3));
     jg.setIndex(part.idx.length > 65535 ? new THREE.Uint32BufferAttribute(part.idx, 1) : new THREE.Uint16BufferAttribute(part.idx, 1));
-    const mesh = new THREE.Mesh(jg, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 }));
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 });
+    const mesh = new THREE.Mesh(jg, mat);
+    if (grow && part.node) {
+      jg.setAttribute('aNode', new THREE.BufferAttribute(part.node, 1));
+      jg.setAttribute('aCen', new THREE.BufferAttribute(part.cen, 3));
+      jg.setAttribute('aRef', new THREE.BufferAttribute(part.ref, 1));
+      attachJointGrowth(mat, U);
+      mesh.customDepthMaterial = attachJointGrowth(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), U);
+    }
     mesh.castShadow = mesh.receiveShadow = true;
     group.add(mesh);
   };
   const deadwood = sp.fx === 'junipero' || sp.fx === 'cipreste';
-  const joints = deadwood ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40 });
+  const joints = deadwood ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40, rRef: rFull });
   if (joints) {
     const barkCol = sp.bark(P)[0];
-    addPlain(joints.joints, asColor(barkCol), 0.88);
-    addPlain(joints.jin, new THREE.Color(0.86, 0.83, 0.76), 0.72);
+    addPlain(joints.joints, asColor(barkCol), 0.88, true);
+    addPlain(joints.jin, new THREE.Color(0.86, 0.83, 0.76), 0.72, true);
   }
   if (pkg.stones) {
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6d675f, roughness: 1 });
@@ -841,10 +849,30 @@ function assemblePlant(pkg) {
   imp.visible = false;
   group.add(imp);
   pl.impostor = imp;
+  pl.impBase = { sx: imp.scale.x, sy: imp.scale.y, y: imp.position.y };
   pl.foliage = [];
   group.traverse((o) => { if (o.isInstancedMesh) pl.foliage.push(o); });
   pl.update(1);
+  pl.fullH = pl.curH || 0;
   return pl;
+}
+/* Junção e jin: mesma textura de raio dos tubos. some até o nó nascer, cresce com ele, e em 100% (s = 1) o vértice fica exatamente onde foi construído. */
+function attachJointGrowth(mat, U) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRad = U.uRad;
+    sh.uniforms.uGrowth = SHARED.uGrowth;
+    sh.vertexShader = `uniform sampler2D uRad; uniform float uGrowth;
+attribute float aNode; attribute vec3 aCen; attribute float aRef;
+float lsRadJ(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 1024, ii / 1024), 0).r; }
+` + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+{
+  float now = lsRadJ(aNode);
+  float s = aRef > 1e-5 ? now / aRef : step(0.999, uGrowth);
+  transformed = mix(aCen, position, s);
+}`);
+  };
+  mat.customProgramCacheKey = () => 'lsys-joint-grow-' + (mat.isMeshDepthMaterial ? 'd' : 'c');
+  return mat;
 }
 function impostorTex() {
   if (impostorTex.tex) return impostorTex.tex;
@@ -1307,7 +1335,16 @@ function loop() {
     const h = Math.max(pl.box.getSize(tmpV).y, 0.5);
     const pix = h / (2 * Math.tan(camera.fov * DEG * 0.5) * Math.max(dist, 0.5)) * innerHeight;
     const far = pix < 42;
-    if (pl.impostor) pl.impostor.visible = far;
+    if (pl.impostor) {
+      const base = pl.impBase;
+      const k = base && pl.fullH > 0 ? Math.min(1, Math.max(0, (pl.curH || 0) / pl.fullH)) : 1;
+      const s = k >= 1 ? 1 : k;
+      if (base) {
+        pl.impostor.scale.set(base.sx * s, base.sy * s, 1);
+        pl.impostor.position.y = base.y * s;
+      }
+      pl.impostor.visible = far && s > 0.02;
+    }
     for (const m of pl.foliage) {
       m.visible = !far;
       if (!m.userData.fullCount) m.userData.fullCount = m.count;
