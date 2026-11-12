@@ -202,28 +202,27 @@ Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
 
 ## 🌸 Bonsai de Azaleia Satsuki (`azaleia`)
 
-**Ideia:** *Rhododendron indicum* em estilo **moyogi** (ereto informal). O tronco é curto, com uma curva leve em S, afinado da base para o ápice, nebari na terra e casca marrom-avermelhada lisa com descamações pequenas. Os galhos são curtos e saem em espiral; o comprimento segue o contorno de um domo (mais longo no meio, mais curto embaixo e no ápice) e cada entrenó leva uma almofada de folhas, de modo que a copa fecha num monte compacto.
+**Ideia:** *Rhododendron indicum* em estilo **moyogi** (ereto informal). O tronco é curto e grosso, com movimento, e afina da base até o pescoço; a casca é marrom-avermelhada, lisa, com descamações finas. A copa é um domo fechado de raminhos de verdade: folhas pequenas e brilhantes e flores grandes nascem na casca da ponta, não num volume solto. A ficha e as referências estão em `docs/especies/azaleia.md`.
 
-As flores são funis pequenos de **cinco pétalas** (`E`), agrupadas em almofadas arredondadas que cobrem quase toda a copa. Folhinhas verde-escuras aparecem entre elas e dão volume. A seed escolhe a paleta — rosa, magenta, branca ou **mescla** (as três na mesma planta, traço conhecido da satsuki). Elas só abrem nos estágios finais (`bloomAt` no clássico; no simulado, a partir de cerca de dois terços dos anos de formação). No simulado as flores são instâncias colocadas junto às folhas vivas da casca da copa, em almofadas, com um vão mínimo, então não flutuam. A planta não recebe pedras soltas: o vaso é o chão.
+As flores são funis de **cinco pétalas** (`E`) presos ao nó do raminho. A seed escolhe a paleta — rosa, magenta, branca ou **mescla** — e pode sortear uma segunda cor ou pétalas listradas. Elas só abrem nos estágios finais. No simulado, o vestir coloca folha e flor só em pontas vivas; `enforcePhysical` senta cada instância na casca do segmento. A planta não recebe pedras soltas.
 
 ```
-ω : nebari curto × roots   tronco { /(±) &(curve·cos) F [ /(yaw) &(ângulo→fecha no topo) ~(−0.02) B ] } × segs   ápice B
-B(s) → F(0.26s) Z [ +(split) ^ B(ratio·s) ] [ −(split) ^ B(ratio·s) ] ^(lift) B(cont·s)     (s < 0.12 → Z + E)
-final: B → Z + E(flR, flH, flN, flowerSize)
-juvenil: B → Z pequeno, sem flores
+ω : nebari curto × roots   tronco curto { &(curve·cos) F } × 6   galhos a partir do 2º segmento
+B(s) → F(0.36s) [ +(split) ^ B ] [ −(split) ^ B ] ^(lift) B     (s < 0.1 → leque de raminhos)
+ponta: F L E — folha e uma flor na casca da ponta
 ```
 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 18–45 |
-| `segs` / `segLen` | 4–5 · 0.11–0.14 |
-| `curve` | 22–32° |
-| `branchLen` / `bAngle` / `split` | 0.16–0.24 · 48–62° · 28–40° |
-| `flowerSize` / `open` / `flN` | 0.028–0.038 · 40–48° · 12–15 |
-| `palette` | rosa, magenta, branco ou mescla |
-| `pot` | redondo ou retangular, barro sem esmalte, com musgo |
+| `segs` / `segLen` | 6 · 0.072–0.086 |
+| `curve` | 12–20° |
+| `branchLen` / `bAngle` / `split` | 0.34–0.46 · 62–74° · 28–40° |
+| `flowerSize` / `open` | 1,35–1,62 × a folha · 36–46° |
+| `palette` | rosa, magenta, branco ou mescla; sport e listra por seed |
+| `pot` | redondo ou oval, esmalte que conversa com a flor |
 
-**Crescimento simulado (v7):** poda a cada 3 anos, com o envelope colado na copa clássica. Um passo extra veste a casca da copa com almofadas de funis pequenos só depois do ano 16 de 24. Aos 40% da idade a estrutura e as folhas já existem e as flores ainda não.
+**Crescimento simulado:** o andaime é a gramática (o símbolo `E` não vira volume). O vestir acrescenta folhas e uma ou duas flores por ponta viva, entre as folhas. Aos 40% da idade a estrutura e as folhas já existem e as flores ainda não.
 
 ## 🌲 Bonsai de Pinheiro-Negro em Cascata (`pinheiro_negro`)
 

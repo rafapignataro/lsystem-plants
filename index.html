@@ -851,6 +851,7 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
   mesh.instanceMatrix = new THREE.InstancedBufferAttribute(mats2, 16);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(cols2, 3);
   mesh.frustumCulled = false;
+  mesh.userData.kind = kind;
   mesh.castShadow = kind !== 'orb'; mesh.receiveShadow = kind !== 'orb';
   if (sp.noShadow && sp.noShadow(kind)) mesh.castShadow = false;
   mesh.customDepthMaterial = depthMat('inst', U, sp.fx);
@@ -1182,6 +1183,18 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.4, 0.95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// ?shot=1: um quadro barato para o Playwright. Sem isso o swiftshader gasta
+// um minuto por árvore na sombra 2048 e no bloom antes de a foto sair.
+const SHOT = new URLSearchParams(location.search).has('shot');
+const SHOT_HI = new URLSearchParams(location.search).has('hi');
+if (SHOT) {
+  sun.castShadow = false;
+  renderer.shadowMap.enabled = false;
+  bloom.enabled = false;
+  bloom.strength = 0;
+  renderer.setPixelRatio(SHOT_HI ? 1.5 : 0.55);
+  composer.setPixelRatio(SHOT_HI ? 1.5 : 0.55);
+}
 
 function setTheme(name) {
   const t = THEMES[name] || THEMES.day;
@@ -1574,7 +1587,9 @@ function init() {
 
 const clock = new THREE.Clock();
 const tmpV = new V3();
+let shotHold = false;
 function loop() {
+  if (shotHold) return;
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
   SHARED.uTime.value += dt;
@@ -1617,7 +1632,10 @@ function loop() {
     }
   }
   controls.update();
-  composer.render();
+  if (SHOT && plants.length) {
+    renderer.render(scene, camera);
+    shotHold = true;
+  } else composer.render();
   perfFrames++;
   if (performance.now() - perfT > 1000) { perfFps = perfFrames; perfFrames = 0; perfT = performance.now(); }
   if (labels.length) { // v5: projeta e empurra para baixo as etiquetas que se sobrepõem (guloso, por y na tela)
@@ -1645,7 +1663,55 @@ function loop() {
 }
 let perfFps = 0, perfFrames = 0, perfT = performance.now();
 window.camera = camera; window.controls = controls; window.THREE = THREE;
-window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle, measureDesign, designOf };
+function prepShot() {
+  shotHold = true;
+  sun.castShadow = false;
+  bloom.strength = 0;
+  bloom.enabled = false;
+  renderer.setPixelRatio(SHOT_HI ? 1.5 : 0.55);
+  renderer.setSize(innerWidth, innerHeight, false);
+  renderer.render(scene, camera);
+}
+// Aproxima uma flor da frente da copa, para a foto mostrar a pétala saindo da casca.
+function aimFlower() {
+  shotHold = true;
+  sun.castShadow = false;
+  bloom.enabled = false;
+  const pl = plants[0];
+  if (!pl) return null;
+  pl.object.updateMatrixWorld(true);
+  let mesh = null;
+  pl.object.traverse((o) => { if (o.isInstancedMesh && o.userData.kind === 'petal' && o.count > (mesh?.count || 0)) mesh = o; });
+  if (!mesh) return null;
+  const mat = new THREE.Matrix4();
+  const p = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  const sc = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  pl.box.getCenter(center);
+  let best = null, bestZ = -1e9;
+  const step = Math.max(1, Math.floor(mesh.count / 900));
+  for (let i = 0; i < mesh.count; i += step) {
+    mesh.getMatrixAt(i, mat);
+    mat.decompose(p, q, sc);
+    p.applyMatrix4(mesh.matrixWorld);
+    if (p.y < center.y + 0.2) continue;
+    if (p.z > bestZ) { bestZ = p.z; best = p.clone(); }
+  }
+  if (!best) return null;
+  camera.fov = 24;
+  camera.near = 0.02;
+  camera.position.set(best.x * 0.25, best.y + 1.35, best.z + 3.4);
+  controls.target.set(best.x * 0.45, best.y + 0.55, best.z - 0.55);
+  camera.lookAt(best);
+  camera.updateProjectionMatrix();
+  controls.update();
+  renderer.setPixelRatio(1.4);
+  renderer.setSize(innerWidth, innerHeight, false);
+  renderer.render(scene, camera);
+  return { x: best.x, y: best.y, z: best.z };
+}
+window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle, measureDesign, designOf, camera, controls, prepShot, aimFlower };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>

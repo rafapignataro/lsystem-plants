@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Verificação v8: console limpo, build, determinismo, FPS aproximado */
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -13,7 +13,10 @@ const base = `http://127.0.0.1:${port}/index.html`;
 const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 900));
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  args: ['--use-gl=angle', '--use-angle=swiftshader'],
+});
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -31,16 +34,17 @@ async function waitPlant(n = 1) {
 }
 
 for (const sp of species) {
-  await page.goto(`${base}?nogrow&norotate#especie=${sp}&seed=lindenmayer`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`${base}?nogrow&norotate&shot#especie=${sp}&seed=lindenmayer`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await waitPlant();
   const stats = await page.evaluate(() => window.__lsys?.plants?.[0]?.stats);
   results.builds[sp] = stats?.ms;
-  await page.screenshot({ path: join(shots, `${sp}.png`) });
+  await page.evaluate(() => window.__lsys.prepShot?.());
+  await page.screenshot({ path: join(shots, `${sp}.png`), timeout: 120000, animations: 'disabled' });
   const h1 = await page.evaluate(() => {
     const sk = window.__lsys.plants[0].sk;
     return window.__lsys.hex(JSON.stringify([...sk.X.slice(0, 20), ...sk.Y.slice(0, 20)]));
   });
-  await page.goto(`${base}?nogrow&norotate#especie=${sp}&seed=lindenmayer`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`${base}?nogrow&norotate&shot#especie=${sp}&seed=lindenmayer`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await waitPlant();
   const h2 = await page.evaluate(() => {
     const sk = window.__lsys.plants[0].sk;
@@ -49,7 +53,7 @@ for (const sp of species) {
   results.determinism[sp] = h1 === h2;
 }
 
-await page.goto(`${base}?nogrow&norotate#especie=carvalho&seed=rafael`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+await page.goto(`${base}?nogrow&norotate&shot#especie=carvalho&seed=rafael`, { waitUntil: 'domcontentloaded', timeout: 120000 });
 await waitPlant();
 const fallback = await page.evaluate(() => ({
   id: window.__lsys?.plants?.[0]?.id,
@@ -59,7 +63,7 @@ const fallback = await page.evaluate(() => ({
 if (fallback.id !== 'bordo') errors.push('fallback esperado bordo, veio ' + fallback.id);
 if (!/Bonsai Garden/.test(fallback.title) || !/Bonsai Garden/.test(fallback.h1)) errors.push('título sem Bonsai Garden: ' + fallback.title + ' / ' + fallback.h1);
 
-await page.goto(`${base}?nogrow&norotate#especie=jardim&seed=rafael`, { waitUntil: 'domcontentloaded', timeout: 300000 });
+await page.goto(`${base}?nogrow&norotate&shot#especie=jardim&seed=rafael`, { waitUntil: 'domcontentloaded', timeout: 300000 });
 await page.waitForFunction(() => {
   const n = window.__lsys?.plants?.length || 0;
   const all = window.__lsys?.SPECIES ? Object.keys(window.__lsys.SPECIES).length : 0;
@@ -72,13 +76,17 @@ const garden = await page.evaluate(() => ({
 }));
 if (garden.n !== garden.all) errors.push('jardim com ' + garden.n + ' plantas, registro ' + garden.all);
 if (!/Bonsai Garden/.test(garden.cap)) errors.push('legenda do jardim: ' + garden.cap);
-await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false, timeout: 120000 });
+await page.evaluate(() => window.__lsys.prepShot?.());
+await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false, timeout: 120000, animations: 'disabled' });
 const t0 = performance.now();
 for (let i = 0; i < 30; i++) await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 results.fps.garden = 30 / ((performance.now() - t0) / 1000);
 
 server.kill();
 await browser.close();
+
+const realism = spawnSync(process.execPath, ['scripts/check-realism.mjs', '--seeds', '50'], { cwd: root, stdio: 'inherit' });
+if (realism.status !== 0) errors.push('check-realism reprovou pelo menos uma combinação de espécie, estilo e seed');
 
 const report = { errors, results, ok: errors.length === 0 && Object.values(results.determinism).every(Boolean) };
 await writeFile(join(shots, 'report.json'), JSON.stringify(report, null, 2));
