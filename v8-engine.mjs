@@ -33,7 +33,8 @@ export function parseGenomeHash(str) {
     const g = {};
     for (const part of str.split(',')) {
       const [k, v] = part.split(':'); if (!k || v == null) continue;
-      g[k.trim()] = +v;
+      const num = +v;
+      g[k.trim()] = v.trim() !== '' && Number.isFinite(num) ? num : v.trim();
     }
     return Object.keys(g).length ? g : null;
   } catch { return null; }
@@ -41,7 +42,12 @@ export function parseGenomeHash(str) {
 
 export function genomeToHash(g) {
   if (!g) return '';
-  const pairs = GENE_CATALOG.map(({ key }) => `${key}:${(+g[key]).toFixed(3)}`);
+  const pairs = [];
+  for (const { key } of GENE_CATALOG) {
+    if (g[key] == null || !Number.isFinite(+g[key])) continue;
+    pairs.push(`${key}:${(+g[key]).toFixed(3)}`);
+  }
+  if (g.estilo) pairs.push(`estilo:${g.estilo}`);
   return pairs.join(',');
 }
 
@@ -60,6 +66,9 @@ export function crossGenomes(a, b, mutation, Rand) {
     else if (r.chance(0.18)) v += r.jit((gene.max - gene.min) * 0.12);
     child[gene.key] = Math.min(gene.max, Math.max(gene.min, v));
   }
+  const styleA = a?.estilo, styleB = b?.estilo;
+  child.estilo = r.chance(0.5) ? (styleA || styleB || null) : (styleB || styleA || null);
+  if (!child.estilo) delete child.estilo;
   return child;
 }
 
@@ -170,12 +179,13 @@ export function deflectRoots(sk, stones = [], pot = null) {
       }
     }
     if (pot) {
-      const nx = X[i] / pot.a, nz = Z[i] / pot.b;
+      const cx = pot.ox || 0, cz = pot.oz || 0;
+      const nx = (X[i] - cx) / pot.a, nz = (Z[i] - cz) / pot.b;
       const e = nx * nx + nz * nz;
       if (e > 0.9) {
         const k = Math.sqrt(0.86 / e);
-        X[i] *= k;
-        Z[i] *= k;
+        X[i] = cx + (X[i] - cx) * k;
+        Z[i] = cz + (Z[i] - cz) * k;
       }
     }
   }
