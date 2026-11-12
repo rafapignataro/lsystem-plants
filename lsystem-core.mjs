@@ -807,19 +807,19 @@ Object.assign(SPECIES, {
     },
   },
   azaleia: {
-    name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 1.15, years: true, float: 0,
+    name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 2.4, years: true, float: 0,
     desc: 'Rhododendron indicum em estilo moyogi (ereto informal): tronco curto e afinado, casca marrom-avermelhada levemente escamosa, ramificação fina que fecha uma copa em domo coberta de flores em funil de cinco pétalas — rosa, magenta ou brancas, e às vezes as três na mesma planta — com folhinhas verde-escuras aparecendo entre elas, num vaso de barro sem esmalte com musgo.',
-    baseWidth: 0.13, leafRoll: 22, bump: 0.012, stones: false, wood: { leo: [2.55, 2.85], G: 0.48, tip: 0.014, ring: 0.28, share: 0.48 },
+    baseWidth: 0.046, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [1.9, 2.1], G: 0.7, tip: 0.007, ring: 0.35, share: 0.55 },
     params(r) {
       const palette = r.pick(['rosa', 'magenta', 'branco', 'mescla']);
       const tone = palette === 'magenta' ? { h: r.range(312, 328), s: r.range(0.7, 0.84), l: r.range(0.46, 0.56) }
         : palette === 'branco' ? { h: r.range(350, 16), s: r.range(0.03, 0.07), l: r.range(0.9, 0.94) }
         : { h: r.range(336, 350), s: r.range(0.58, 0.74), l: r.range(0.64, 0.74) };
       return {
-        iterations: 5, years: r.int(18, 45), segs: r.int(4, 5), segLen: r.range(0.15, 0.19), curve: r.range(18, 28), cycles: r.range(0.9, 1.2), phase: r.range(0, 6.28), lean: r.range(-9, 9),
-        roots: r.int(5, 7), rootW: r.range(2.2, 3.6), branchLen: r.range(0.58, 0.74), bAngle: r.range(55, 68), split: r.range(26, 38), ratio: r.range(0.54, 0.62), cont: r.range(0.66, 0.74), lift: r.range(10, 16),
-        padR: r.range(0.28, 0.36), padH: r.range(0.15, 0.22), padN: r.int(9, 13), leafS: r.range(0.042, 0.058), leafH: r.range(132, 150), leafSat: r.range(0.55, 0.72), leafL: r.range(0.07, 0.12),
-        flR: r.range(0.2, 0.26), flH: r.range(0.12, 0.17), flN: 2, flowerSize: r.range(0.078, 0.098), open: r.range(46, 54), petals: 5,
+        iterations: 5, years: r.int(18, 45), segs: r.int(4, 5), segLen: r.range(0.11, 0.14), curve: r.range(22, 32), cycles: r.range(0.75, 1.05), phase: r.range(0, 6.28), lean: r.range(-5, 5),
+        roots: r.int(5, 7), rootW: r.range(3.4, 5), branchLen: r.range(0.28, 0.38), bAngle: r.range(64, 76), split: r.range(28, 40), ratio: r.range(0.4, 0.48), cont: r.range(0.42, 0.5), lift: r.range(10, 16),
+        padR: r.range(0.2, 0.26), padH: r.range(0.1, 0.14), padN: r.int(14, 18), leafS: r.range(0.032, 0.044), leafH: r.range(122, 136), leafSat: r.range(0.4, 0.55), leafL: r.range(0.045, 0.072),
+        flR: r.range(0.16, 0.22), flH: r.range(0.09, 0.13), flN: r.int(11, 14), flowerSize: r.range(0.015, 0.021), open: r.range(36, 44), petals: 5,
         palette, petalH: tone.h, petalS: tone.s, petalL: tone.l, pot: r.chance(0.5) ? 'redondo' : 'retangular', bloomAt: 5.7,
       };
     },
@@ -828,40 +828,40 @@ Object.assign(SPECIES, {
       const r = new Rand('azaleia-axioma::' + P.phase);
       const bloom = (sc = 1) => `E(${n(P.flR * sc)},${n(P.flH * Math.sqrt(sc))},${Math.max(2, Math.round(P.flN * sc))},${n(P.flowerSize)})`;
       let roots = '';
-      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(16))})&(${n(84 + r.f() * 5)})F(${n(0.11 * (0.7 + r.f() * 0.3))})Q(${n(P.rootW * (0.35 + r.f() * 0.3))})]`;
+      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(8))})&(${n(90 + r.f() * 4)})F(${n(0.07 * (0.7 + r.f() * 0.4))})Q(${n(P.rootW * (0.4 + r.f() * 0.35))})]`;
       let ax = `!(1)${roots}/(${n(P.lean * 5)})&(${n(P.lean)})`, yaw = r.f() * 360;
       const start = 1;
       for (let k = 0; k < P.segs; k++) {
         const bend = P.curve * Math.cos(6.2832 * P.cycles * k / P.segs + P.phase);
-        ax += `/(${n(r.jit(5))})&(${n(bend)})F(${n(P.segLen * (1 - 0.28 * k / P.segs))})`;
+        ax += `/(${n(8 + r.jit(10))})&(${n(bend)})F(${n(P.segLen * (1 - 0.34 * k / P.segs))})`;
         if (k >= start) {
           const u = (k - start) / Math.max(P.segs - start, 1);
-          const outline = Math.sqrt(Math.max(0.22, 1 - Math.pow((u - 0.42) * 1.45, 2)));
-          const ang = 22 + (P.bAngle - 22) * (1 - u * 0.88);
-          const len = P.branchLen * (0.4 + 0.55 * outline);
-          yaw += 57 + r.jit(12);
-          ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})~(${n(-0.04)})B(${n(len)})]`;
-          ax += `[/(${n(yaw + 128 + r.jit(14))})&(${n(ang * 0.9 + r.jit(3))})~(${n(-0.03)})B(${n(len * (0.8 + r.f() * 0.1))})]`;
-          if (u < 0.72) ax += `[/(${n(yaw + 242 + r.jit(12))})&(${n(ang * 0.82)})B(${n(len * 0.62)})]`;
+          const dome = Math.sqrt(Math.max(0.12, 1 - Math.pow((u - 0.42) / 0.58, 2)));
+          const ang = 30 + (P.bAngle - 30) * (1 - u * 0.72);
+          const len = P.branchLen * (0.3 + 0.7 * dome);
+          yaw += 52 + r.jit(10);
+          ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})~(${n(-0.02)})B(${n(len)})]`;
+          ax += `[/(${n(yaw + 118 + r.jit(12))})&(${n(ang * 0.88 + r.jit(3))})~(${n(-0.015)})B(${n(len * (0.78 + r.f() * 0.1))})]`;
+          ax += `[/(${n(yaw + 230 + r.jit(10))})&(${n(ang * 0.8)})~(${n(-0.01)})B(${n(len * 0.66)})]`;
         }
       }
-      ax += `^(${n(8 + r.jit(4))})B(${n(P.branchLen * 0.32)})`;
+      ax += `^(${n(10 + r.jit(4))})B(${n(P.branchLen * 0.42)})`;
       return {
         axiom: ax,
         rules: {
           B: (p, rr) => {
             const s = p[0];
-            if (s < 0.16) return `F(${n(Math.max(s * 0.45, 0.04))})` + pad(P, 0.8) + bloom(0.85);
-            return `F(${n(s * 0.48)})[+(${n(P.split + rr.jit(6))})^(${n(P.lift * 0.35)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(6))})^(${n(P.lift * 0.35)})B(${n(s * P.ratio)})]^(${n(P.lift + rr.jit(2))})/(${n(rr.jit(14))})B(${n(s * P.cont)})`;
+            if (s < 0.12) return `F(${n(Math.max(s * 0.28, 0.016))})` + pad(P, 0.9) + bloom(0.95);
+            return `F(${n(s * 0.26)})` + pad(P, 0.5) + `[+(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})]^(${n(P.lift * 0.5)})/(${n(rr.jit(12))})B(${n(s * P.cont)})`;
           },
         },
         finalize: { B: () => pad(P, 0.7) + bloom(1) },
         juvenile: { B: () => pad(P, 0.42) }, juvenileLife: 1.45,
         display: [
           `ω : nebari × ${P.roots}   tronco curto em S { &(${n(P.curve)}°·cos) F [ /(lado ±) &(${n(P.bAngle)}°→mais fechado no topo) ~(−0.04) B ] } × ${P.segs}   ápice B`,
-          `B(s) → F(0.48s) [ +(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] [ −(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] ^(${n(P.lift)}°) B(${n(P.cont)}s)      (s < 0.16 → almofada de folhas + flores)`,
-          `final: B → almofada de folhas + E(domo de funis)   ·   as flores só abrem depois de t = ${n(P.bloomAt)} (estágios finais)`,
-          `E = ${P.flN} flores em funil de 5 pétalas, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco na mesma planta)' : ''}, folhas verde-escuras por baixo`,
+          `B(s) → F(0.26s) Z [ +(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] [ −(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] ^(${n(P.lift)}°) B(${n(P.cont)}s)      (s < 0.12 → almofada de folhas + almofada de flores)`,
+          `final: B → almofada de folhas + E(domo de funis pequenos)   ·   as flores só abrem depois de t = ${n(P.bloomAt)} (estágios finais)`,
+          `E = ${P.flN} flores pequenas em funil de 5 pétalas, agrupadas, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco na mesma planta)' : ''}, folhas verde-escuras entre elas`,
           `vaso ${P.pot} de barro sem esmalte, com musgo`,
           yearsTxt(P),
         ],
@@ -1002,7 +1002,7 @@ Object.assign(BARK, {
   junipero: (P, r) => ({ variant: 'veia viva fibrosa + madeira morta', type: 1, stretch: r.range(0.05, 0.08), crack: 0.22, freq: r.range(6, 8), depth: 0.14, fbm: 0.8, lent: 0, hi: [1.4, 1.15, 1.05], lo: [0.4, 0.3, 0.28], moss: 0, mossH: 90, mat: 0.3 }),
   olmo_chines: (P, r) => ({ variant: 'exfoliante manchada (cinza, bege, laranja)', type: 0, stretch: 1, crack: 0.02, freq: r.range(1.5, 2.1), depth: 0.01, fbm: 0.18, lent: 0, hi: [1.02, 0.98, 0.94], lo: [0.9, 0.86, 0.8], moss: 0, mossH: 95, mat: 0.45 }),
   ficus: (P, r) => ({ variant: 'lisa cinza (ficus)', type: 0, stretch: 1, crack: 0.05, freq: r.range(5, 7), depth: 0.03, fbm: 0.4, lent: r.range(0.12, 0.2), hi: [1.05, 1.04, 1.03], lo: [0.58, 0.57, 0.55], moss: 0, mossH: 100, mat: 0.52 }),
-  azaleia: (P, r) => ({ variant: 'escamas finas avermelhadas', type: 0, stretch: 1, crack: 0.08, freq: r.range(14, 18), depth: r.range(0.012, 0.02), fbm: 0.55, lent: r.range(0.35, 0.55), hi: [1.16, 1.02, 0.9], lo: [0.72, 0.48, 0.38], moss: r.range(0.02, 0.06), mossH: 108, mat: 0.34 }),
+  azaleia: (P, r) => ({ variant: 'lisa com descamações finas', type: 2, stretch: r.range(1.5, 1.9), crack: r.range(0.05, 0.075), freq: r.range(16, 22), depth: r.range(0.03, 0.042), fbm: 0.28, lent: 0.04, hi: [1.14, 1.02, 0.9], lo: [0.66, 0.42, 0.34], moss: r.range(0.02, 0.05), mossH: 108, mat: 0.42 }),
   pinheiro_negro: (P, r) => ({ variant: 'placas cinza-escuras', type: 2, stretch: r.range(0.62, 0.82), crack: r.range(0.1, 0.15), freq: r.range(6.5, 8.5), depth: r.range(0.18, 0.24), fbm: 0.8, lent: 0, hi: [0.95, 0.92, 0.88], lo: [0.32, 0.3, 0.28], moss: r.range(0.02, 0.08), mossH: 100, mat: 0.55 }),
 });
 
@@ -1393,10 +1393,14 @@ const bonsaiSim = (every) => crownSim({
 });
 for (const id of ['bordo', 'pinheiro_branco', 'cipreste', 'junipero']) SIMS[id] = (P, r, sp, ctx) => bonsaiSim(id === 'bordo' ? 2 : 3)(P, r, sp, ctx);
 SIMS.azaleia = (P, r, sp, ctx) => {
-  const S = bonsaiSim(3)(P, r, sp, ctx);
-  S.about = 'moyogi da gramática; a copa em domo enche por espaço e luz; as flores em funil abrem só nos anos finais de formação';
-  S.cfg.markers = 4800; S.cfg.rp = 0.5; S.cfg.dk = 0.12; S.cfg.len = () => 0.072;
-  if (S.cfg.leaf) { S.cfg.leaf.size = Math.min(S.cfg.leaf.size || P.leafS, P.leafS * 1.05); S.cfg.leaf.keep = () => 8; }
+  const S = crownSim({
+    years: 24, ring: 0.4, dil: 0.08, markers: 6200, prune: { every: 3 }, pruneCell: 0.16, ahead: 0.55, deadK: 0.08,
+    about: 'moyogi da gramática; galhos curtos fecham um domo; almofadas de flores pequenas abrem só nos anos finais',
+    scaffold: (PP, def) => ({ axiom: def.axiom, rules: def.rules, iters: PP.iterations, seg: 0.22, time: (t) => t * 24 * 0.55 / (PP.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
+    cfg: (PP, cl) => ({ shadow: { vox: 0.28, q: 4, b: 1.2, a: 1, C: 4 }, rp: 0.28, dk: 0.07, cone: 1.15, nMax: () => 2, lambda: () => 0.48, len: () => 0.034, xi: () => 0.5, trop: () => 0.03, maxTurn: 0.55,
+      phyllo: () => ({ type: 'alt', div: 137.5, angle: 48, p: 0.9 }), maxOrder: 6, maxIdle: 7,
+      leaf: { kind: cl.kind, per: () => 6, pitch: 28, pitchJ: 20, keep: () => 14, size: PP.leafS * 1.3 }, shedT: () => 0.05 }),
+  })(P, r, sp, ctx);
   const bloom = S.cfg.years * 0.66;
   S.dress = (push, R, rng) => {
     const live = [];
@@ -1410,7 +1414,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     const outer = [];
     for (const l of live) {
       const shell = Math.hypot(l.x - cx, l.z - cz) / maxR, top = l.y / Math.max(maxY, 1e-3);
-      if (shell > 0.4 || top > 0.62) outer.push(l);
+      if (shell > 0.1 || top > 0.32) outer.push(l);
     }
     if (!outer.length) return;
     let cy = 0; for (const l of live) cy += l.y; cy /= live.length;
@@ -1422,21 +1426,27 @@ SIMS.azaleia = (P, r, sp, ctx) => {
       const rad = vx * vx + vy * vy + vz * vz, b = az + el * AZ;
       if (!bins[b] || bins[b].rad < rad) bins[b] = { l, rad };
     }
-    const gap = Math.max(0.048, P.flowerSize * 0.62);
+    const gap = Math.max(0.034, P.flowerSize * 1.8);
     const gap2 = gap * gap;
     const placed = [];
     const put = (l) => {
       for (const q of placed) { const dx = q.x - l.x, dy = q.y - l.y, dz = q.z - l.z; if (dx * dx + dy * dy + dz * dz < gap2) return; }
       placed.push(l);
-      const dir = new V3(l.x - cx, 0.28 + 0.55 * (l.y / Math.max(maxY, 1e-3)), l.z - cz);
+      const dir = new V3(l.x - cx, 0.35 + 0.5 * (l.y / Math.max(maxY, 1e-3)), l.z - cz);
       if (dir.lengthSq() < 1e-8) dir.set(0, 1, 0);
       dir.normalize();
-      const pos = new V3(l.x, l.y, l.z).addScaledVector(dir, 0.01 + rng.f() * 0.016);
-      const face = dir.clone(); face.y += 0.38; face.normalize();
-      emitFunnel(push, rng, pos, face, P.flowerSize * (0.9 + rng.f() * 0.18), P.open + rng.jit(2.5), P.petals || 5, [bloom, 1e9], 0.11);
+      const side = new V3(-dir.z, 0, dir.x); if (side.lengthSq() < 1e-8) side.set(1, 0, 0); side.normalize();
+      const up = new V3().crossVectors(side, dir).normalize();
+      const nFl = 8 + (rng.f() * 3 | 0), rad = 0.028 + rng.f() * 0.016;
+      for (let k = 0; k < nFl; k++) {
+        const a = (k / nFl) * 6.2832 + rng.f() * 0.3, u = rng.f(), rr = rad * Math.sqrt(u), lift = rad * (0.25 + 0.85 * Math.sqrt(Math.max(0, 1 - u)));
+        const pos = new V3(l.x, l.y, l.z).addScaledVector(dir, 0.004 + lift * 0.25).addScaledVector(side, Math.cos(a) * rr).addScaledVector(up, Math.sin(a) * rr * 0.72 + lift * 0.15);
+        const face = dir.clone(); face.y += 0.55; face.normalize();
+        emitFunnel(push, rng, pos, face, P.flowerSize * (0.85 + rng.f() * 0.25), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.09);
+      }
     };
-    for (const b of bins) if (b && placed.length < 780) put(b.l);
-    for (let i = 0; i < outer.length && placed.length < 780; i++) put(outer[i]);
+    for (const b of bins) if (b && placed.length < 640) put(b.l);
+    for (let i = 0; i < outer.length && placed.length < 640; i++) put(outer[i]);
   };
   return S;
 };
