@@ -948,9 +948,9 @@ Object.assign(SPECIES, {
     },
   },
   pinheiro_negro: {
-    name: 'Bonsai de Pinheiro-Negro em Cascata', emoji: '🌲', height: 6.4, theme: 'estudio', padKind: 'needles', padUp: 0.58, years: true, float: 0, below: true, stoneR: 0.48,
+    name: 'Bonsai de Pinheiro-Negro em Cascata', emoji: '🌲', height: 6.4, theme: 'estudio', padKind: 'needles', padUp: 0.8, years: true, float: 0, below: true, stoneR: 0.48,
     desc: 'Pinus thunbergii em kengai (cascata plena): o tronco sobe pouco, dobra na borda de um vaso hexagonal fundo e sem esmalte, quase preto, e desce em zigue-zague suave até abaixo da base do vaso, afinando da base à ponta. Casca em placas finas, alongadas e irregulares, cinza-escuras, com fissuras escuras. Tufos densos de agulhas rígidas verde-escuro nas pontas dos galhos, um ápice pequeno acima do vaso, e o vaso num suporte alto de madeira para a cascata ter para onde cair.',
-    baseWidth: 0.13, bump: 0.02, wood: { leo: [2.05, 2.25], G: 0.95, tip: 0.05, ring: 0.42, share: 0.85 },
+    baseWidth: 0.13, bump: 0.02, tubeMinSides: 16, wood: { leo: [2.05, 2.25], G: 0.95, tip: 0.05, ring: 0.42, share: 0.85 },
     tube: {
       bump: (th, arc, g, main, P, rad) => {
         if (!main) {
@@ -974,7 +974,7 @@ Object.assign(SPECIES, {
         bend3: r.range(50, 58), len3: r.range(0.22, 0.3), droop: r.range(0.03, 0.06), pull: r.range(0.02, 0.04),
         zig: r.range(12, 18), fall: r.range(0.52, 0.62),
         roots: r.int(5, 7), rootW: r.range(3.4, 5.2), plate: r.range(0.028, 0.045),
-        padR: r.range(0.3, 0.38), padH: r.range(0.13, 0.18), padN: r.int(48, 62), leafS: r.range(0.17, 0.22),
+        padR: r.range(0.28, 0.36), padH: r.range(0.045, 0.07), padN: r.int(48, 62), leafS: r.range(0.17, 0.22),
         needleLen: r.range(0.2, 0.25), needleH: r.range(128, 142), apex: r.range(0.72, 0.88),
       };
     },
@@ -992,7 +992,7 @@ Object.assign(SPECIES, {
       ax += `[^(${n(26 + r.jit(5))})F(${n(0.15 + r.f() * 0.05)})${pad(P, P.apex)}]`;
       ax += `&(${n(P.bend1)})F(${n(P.len1)})`;
       ax += `&(${n(P.bend2)})F(${n(P.len2)})`;
-      ax += `[^(10)_(0.72)F(0.18)${pad(P, 0.7)}]`;
+      ax += `[^(6)_(0.96)F(0.12)${pad(P, 0.7)}]`;
       ax += `~(${n(P.droop)})$(${n(P.pull)})&(${n(P.bend3)})F(${n(P.len3)})C(0)`;
       return {
         axiom: ax,
@@ -1007,7 +1007,7 @@ Object.assign(SPECIES, {
             // passo par abre (o tronco sai um pouco); passo ímpar fecha além da vertical (volta em direção ao vaso). A queda fica ao lado do vaso.
             const pitch = open ? -(18 + rr.f() * 6) : (30 + rr.f() * 6);
             const step = P.fall * (open ? 0.72 : 0.98) * (0.94 + rr.f() * 0.08);
-            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step)})[+(${n(sign * 70)})_(0.78)F(${n(0.2 + rr.f() * 0.08)})${pad(P, sc)}]C(${j + 1})`;
+            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step)})[+(${n(sign * 46)})_(0.96)F(${n(0.1 + rr.f() * 0.04)})${pad(P, sc)}]C(${j + 1})`;
           },
         },
         finalize: { C: () => pad(P, 0.9) },
@@ -1021,7 +1021,7 @@ Object.assign(SPECIES, {
         ],
       };
     },
-    bark: () => [hsl(25, 0.06, 0.16), hsl(80, 0.16, 0.22)],
+    bark: () => [hsl(25, 0.06, 0.16), hsl(28, 0.05, 0.18)],
     color(kind, it, P, r) { return hsl(P.needleH + r.jit(4), 0.46 + r.jit(0.05), 0.11 + r.jit(0.025)); },
     extra({ group, sk, inst, P, rng }) {
       let minY = 0;
@@ -1508,35 +1508,23 @@ SIMS.azaleia = (P, r, sp, ctx) => {
 // kengai: a copa clássica fica abaixo do vaso. Os pontos com y < 0.15 não podem ser descartados,
 // e um alvo (P.attractor) puxa a brotação para baixo em vez da colonização só para cima.
 SIMS.pinheiro_negro = crownSim({
-  years: 24, ring: 0.86, dil: 0.14, markers: 4400, prune: { every: 3 }, pruneCell: 0.2, ahead: 0.5,
-  about: 'kengai: o tronco da gramática dobra na borda; a cascata e os raminhos descem com tropismo para um alvo abaixo do vaso, e a poda segura as almofadas',
+  years: 24, ring: 0.86, dil: 0.14, markers: 1400, prune: { every: 2 }, pruneCell: 0.14, ahead: 0.28,
+  about: 'kengai: o tronco da gramática é a cascata; os brotos ficam curtos dentro das almofadas e a poda corta o que sai delas',
   scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: P.iterations, seg: 0.34, time: (t) => t * 22 / (P.iterations + 1), syms: { Z: () => ({ ord: 2 }), C: () => ({ ord: 2 }) } }),
   cfg: (P, cl) => ({
-    shadow: { vox: 0.32, q: 4, b: 1.2, a: 1, C: 4.2 }, rp: 0.48, dk: 0.12, cone: 1.15,
-    nMax: () => 2, lambda: () => 0.55, len: () => 0.055, xi: () => 0.52, trop: () => 0, maxTurn: 0.5,
-    phyllo: () => ({ type: 'alt', div: 137.5, angle: 40, p: 0.7 }), maxOrder: 4, maxIdle: 6,
+    shadow: { vox: 0.32, q: 4, b: 1.2, a: 1, C: 4.2 }, rp: 0.36, dk: 0.08, cone: 1.05,
+    nMax: () => 1, lambda: () => 0.4, len: () => 0.028, xi: () => 0.2, trop: () => 0, maxTurn: 0.1,
+    phyllo: () => ({ type: 'alt', div: 137.5, angle: 28, p: 0.55 }), maxOrder: 3, maxIdle: 4,
     sample: (rr) => {
       const pts = cl.pts, yr = (t) => 24 * t / (P.iterations + 1);
       if (!pts.length) return null;
       const q = pts[Math.floor(rr.f() * pts.length)];
-      const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = 0.1 * Math.cbrt(rr.f());
-      let x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v) * 0.45, z = q[2] + d * Math.sin(v) * Math.sin(u);
-      const A = P.attractor || [0, -2.6, -1.2];
-      if (q[1] < 0.05 && rr.f() < 0.18) {
-        const t = 0.08 + 0.14 * rr.f();
-        x = q[0] * (1 - t) + A[0] * t; y = q[1] * (1 - t) + A[1] * t; z = q[2] * (1 - t) + A[2] * t;
-      }
+      const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = 0.06 * Math.cbrt(rr.f());
+      const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v) * 0.35, z = q[2] + d * Math.sin(v) * Math.sin(u);
       if (y < 0.16 && y > -1.55 && Math.hypot(x, z) < 0.9) return null;
       return [x, y, z, yr(q[3]) * 0.5];
     },
-    bend: (d) => {
-      if (d[1] > 0.28) return;
-      const A = P.attractor || [0, -2.6, -1.2];
-      const L = Math.hypot(A[0], A[1], A[2]) || 1, pull = 0.18;
-      d[0] += pull * A[0] / L; d[1] += pull * A[1] / L; d[2] += pull * A[2] / L;
-      norm3(d);
-    },
-    leaf: { kind: 'needles', per: () => 6, pitch: 38, pitchJ: 26, keep: () => 7, needle: true },
+    leaf: { kind: 'needles', per: () => 14, pitch: 38, pitchJ: 26, keep: () => 10, needle: true },
     shedT: () => 0.05,
   }),
 });

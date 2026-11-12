@@ -246,8 +246,8 @@ O nebari desta espécie não usa o helper compartilhado: cada raiz é um segment
 | `zig` / `fall` | 12–18° · 0.52–0.62 |
 | `droop` | 0.03–0.06 |
 | `roots` / `rootW` | 5–7 · 3.4–5.2 |
-| `padR` / `padH` / `padN` | 0.3–0.38 · 0.13–0.18 · 48–62 |
+| `padR` / `padH` / `padN` | 0.28–0.36 · 0.045–0.07 · 48–62 |
 
 Vaso hexagonal fundo, sem esmalte, quase preto, sobre um suporte alto. Cenário `estudio`. O enquadramento inclui o que fica abaixo do vaso.
 
-**Crescimento simulado:** o andaime é o kengai inteiro. As almofadas brotam para dentro da nuvem clássica, inclusive abaixo do vaso, com raminhos curtos e vários tufos por gema para o volume ficar na almofada. Um alvo (`P.attractor`) puxa a brotação para baixo em vez da colonização só para cima, e a poda de formação (a cada 3 anos) segura as almofadas. A raiz do nebari continua no vaso; a cascata não é tratada como raiz.
+**Crescimento simulado:** o andaime é o kengai inteiro: um tronco que desce em zigue-zague, com galhos laterais curtos e nivelados terminando em almofada. Os brotos novos são curtos e ficam dentro da almofada; a poda (a cada 2 anos) corta o que sai dela. A raiz do nebari continua no vaso; a cascata não é tratada como raiz.
