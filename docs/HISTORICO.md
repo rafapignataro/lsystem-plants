@@ -2,6 +2,13 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## Foco em bonsais
+
+- O app passa a se chamar **Bonsai Garden** (título, painel e modo jardim). O repositório no GitHub continua `lsystem-plants`.
+- Saíram as 5 realistas (carvalho, pinheiro boreal, samambaia, arbusto florido, salgueiro) e as 5 raras (dragoeiro, baobá, eucalipto, figueira, sequoia), com a casca, as folhas, os cenários e os testes que só elas usavam. Ficaram os 4 bonsais e o motor genérico (crescimento simulado e clássico, junções, madeira morta, raízes, LOD, genoma, export).
+- O jardim monta só os ids de `ALL` (hoje os 4 bonsais), em fileiras de até 4, sem vaga vazia. Link antigo com uma espécie removida abre o bordo.
+- Registro: id em `BONSAI`, objeto em `SPECIES`, casca em `BARK`. Sem `SIMS` próprio, o bonsai novo usa a poda padrão.
+
 ## v8: motor (revisão) (12/11/2026)
 
 - Visual padrão de novo alinhado à v7: genes só mudam a planta quando o usuário cruza, muta ou edita um controle. Gravidade e fototropismo começam em zero. A sombra simulada volta a cair na vertical até o sol sair do padrão.

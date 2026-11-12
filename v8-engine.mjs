@@ -265,7 +265,7 @@ function pushSphere(pos, nor, idx, meta, cx, cy, cz, R, seg, node, ref) {
 }
 
 /**
- * Esferas só nas forquilhas grossas (inclui o carvalho). Jin: esferas lascadas, malha à parte.
+ * Esferas só nas forquilhas grossas (tronco e andaime). Jin: esferas lascadas, malha à parte.
  * Cada vértice guarda o nó e o raio aos 100% (opts.rRef; senão o raio usado no tamanho).
  * O shader da planta escala a esfera por raio_atual/raio_final: some até o galho existir
  * e em idade 1 volta ao tamanho em que foi construída.

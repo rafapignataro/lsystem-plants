@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v8 · POC Three.js</title>
+<title>Bonsai Garden · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -62,8 +62,8 @@
 <div id="app"></div>
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
-  <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v8 · motor (junções, ambiente, genoma, folhagem LOD) · 5 realistas + 5 raras + 4 bonsais</p>
+  <h1>🌿 Bonsai Garden</h1>
+  <p class="sub" id="subline">POC v8 · junções, ambiente, genoma e folhagem</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -78,13 +78,13 @@
     <button id="gen" class="primary">Gerar</button>
   </div>
   <div class="row">
-    <button id="garden">🌿 Ver todas as 14</button>
+    <button id="garden">🌿 Ver todos os 4</button>
     <button id="share">🔗 Copiar link</button>
   </div>
 
   <label class="l" for="growth">Idade da planta <span id="gval"></span></label>
   <input id="growth" type="range" min="0" max="1" step="0.001" value="1">
-  <div class="row"><button id="replay">▶ Animar crescimento (muda → árvore)</button></div>
+  <div class="row"><button id="replay">▶ Animar crescimento (muda → bonsai)</button></div>
   <div class="toggles">
     <label><input type="checkbox" id="rotate" checked> Auto-rotação</label>
     <label><input type="checkbox" id="wind" checked> Vento</label>
@@ -139,7 +139,7 @@ import {
   ENV_DEFAULT, envSunDir, envWindDir, makeSunShade, phototropismBias, lightGradientAt,
 } from './v8-engine.mjs';
 import {
-  Rand, SPECIES, BARK, SIMS, ALL, ORDER, RARE, BONSAI, hex, n, computeRadii, wordToString,
+  Rand, SPECIES, BARK, SIMS, ALL, BONSAI, hex, n, computeRadii, wordToString,
   buildSkeletonPackage, deserializeInst, serializeInst, unpackWorkerPayload,
 } from './lsystem-core.mjs';
 
@@ -193,19 +193,10 @@ function needleTuft(count = 18) {
   return g;
 }
 const GEOMS = {
-  oak: () => sheet({ width: 0.42, fold: 0.18, curve: 0.12, profile: PROFILES.oval }),
-  bush: () => sheet({ width: 0.36, fold: 0.15, curve: 0.08, profile: PROFILES.oval }),
-  fern: () => sheet({ width: 0.3, fold: 0.06, curve: 0.08, profile: PROFILES.lance, nu: 5, nv: 1 }),
-  willow: () => sheet({ width: 0.14, fold: 0.05, curve: 0.18, profile: PROFILES.lance, nu: 5, nv: 1 }),
   petal: () => sheet({ width: 0.34, fold: 0.0, curve: -0.12, cup: 0.25, profile: PROFILES.petal, nu: 7, nv: 3 }),
   needles: () => needleTuft(26),
   sphere: () => new THREE.IcosahedronGeometry(1, 1),
-  // v5
-  strap: () => sheet({ width: 0.07, fold: 0.35, curve: 0.06, profile: (u) => Math.min(1, Math.sin(Math.PI * Math.min(u * 0.96 + 0.04, 1)) * 2.5) * (1 - 0.55 * u), nu: 7, nv: 1 }),
-  euca: () => sheet({ width: 0.2, fold: 0.04, curve: 0.18, profile: PROFILES.lance, nu: 6, nv: 1 }),
-  banyan: () => sheet({ width: 0.5, fold: 0.12, curve: 0.08, profile: PROFILES.oval }),
   fruit: () => fruitGeo(),
-  // v6 (bonsais)
   palm: () => palmGeo(5),
   palm7: () => palmGeo(7),
   hinoki: () => sheet({ width: 0.42, fold: 0.03, curve: 0.04, profile: (u) => (0.45 + 0.55 * Math.abs(Math.sin(u * Math.PI * 4.5))) * Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.97 + 0.03)), 0.55), nu: 18, nv: 1 }),
@@ -280,7 +271,7 @@ function asColor(c, fallback = 0x888888) {
   if (typeof c.r === 'number') return new THREE.Color(c.r, c.g, c.b);
   return new THREE.Color(c);
 }
-// fruto do baobá: cabinho fino em cima (origem = ponto de inserção) e cápsula ovalada pendurada
+// fruto (símbolo Y): cabinho fino em cima (origem = ponto de inserção) e cápsula ovalada pendurada
 function fruitGeo() {
   const pts = [new THREE.Vector2(0.012, 0), new THREE.Vector2(0.012, -0.55)];
   for (let i = 0; i <= 10; i++) { const t = i / 10, a = Math.PI * t; pts.push(new THREE.Vector2(Math.max(Math.sin(a) * 0.17, 0.003), -0.55 - 0.03 - (1 - Math.cos(a)) * 0.26)); }
@@ -316,7 +307,7 @@ const FX_V = `
 attribute float aFx; varying vec4 vFx;
 #endif
 `;
-const FX = { dragoeiro: { frag: 'bark' }, eucalipto: { frag: 'bark' }, cipreste: { frag: 'bark' }, junipero: { frag: 'bark' } };
+const FX = { cipreste: { frag: 'bark' }, junipero: { frag: 'bark' } };
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
@@ -370,17 +361,12 @@ vec3 lsVor(vec3 p){ // F1, F2, id da célula
   return vec3(sqrt(F1), sqrt(F2), id);
 }
 float lsHt; float lsRough; float lsEmis;
-#if defined(LS_FX_DRAGOEIRO) || defined(LS_FX_EUCALIPTO) || defined(LS_FX_CIPRESTE) || defined(LS_FX_JUNIPERO)
+#ifdef LS_FX
 uniform vec4 uFx; uniform vec4 uFx2;
-#endif
-#if defined(LS_FX_CIPRESTE) || defined(LS_FX_JUNIPERO)
-#define LS_DEAD
 varying vec4 vFx;
+#define LS_DEAD
 #endif
-#ifdef LS_FX_EUCALIPTO
-uniform vec3 uPal[5];
-#endif
-// tipos: 0 lisa (lenticelas), 1 sulcada (Voronoi esticado), 2 em placas, 3 raque estriada
+// tipos: 0 lisa (lenticelas), 1 sulcada (Voronoi esticado), 2 em placas, 3 estriada
 vec3 lsBark(vec3 base, vec3 nW){
   vec3 p = vBk + uSeedOff;
   float type = uBk.x, fw = length(fwidth(vBk));
@@ -412,7 +398,7 @@ vec3 lsBark(vec3 base, vec3 nW){
     float layer = smoothstep(0.38, 0.68, flake) * detail;                // lascas: camadas descascando dentro da placa
     h = plate * (0.55 + 0.3 * v.z + 0.08 * layer + 0.05 * flake);
     tint = mix(0.25, 1.0, plate) * (0.85 + 0.25 * layer) * (0.75 + 0.5 * v.z) * (0.9 + 0.2 * flake);
-  } else {                     // raque de samambaia: lisa, estrias ao longo do eixo
+  } else {                     // estriada: lisa, estrias ao longo do eixo
     float st = lsN(vec3(p.xy * 6.0, p.z * 0.25));
     h = 0.5 + 0.35 * (st - 0.5) + 0.1 * (n1 - 0.5);
     tint = 0.92 + 0.16 * st;
@@ -426,31 +412,6 @@ vec3 lsBark(vec3 base, vec3 nW){
   float hh = mix(0.55 + 0.05 * (n1 - 0.5), h, m);
   lsRough = mix(0.72, 0.95, m) + 0.05 * (1.0 - hh);
   lsEmis *= m * detail;
-#ifdef LS_FX_EUCALIPTO
-  { // v5: casca que descasca em placas verticais; cada placa amadurece verde → laranja → roxo → azul → vinho
-    vec3 q = vec3(p.xy * uFx.y, p.z * uFx.z) + uFx.w * vec3(lsN(p * 0.6), lsN(p * 0.6 + 3.1), 0.0);
-    vec3 v = lsVor(q); float e = v.y - v.x;
-    float age = clamp(vMt.x * uFx.x * (0.6 + 0.8 * v.z), 0.0, 1.0);        // quanto tempo a placa teve para mudar de cor
-    float stage = min(age * 4.0 * fract(v.z * 1.618 + uFx2.x * lsN(p * 0.15)), 3.999); // placas descascadas há pouco voltam a ser verdes
-    int si = int(stage); float sf = smoothstep(0.25, 0.75, fract(stage));
-    vec3 pc = mix(uPal[si], uPal[min(si + 1, 4)], sf);
-    float fib = lsN(vec3(p.xy * 7.0, p.z * 0.35));
-    pc *= 0.82 + 0.36 * fib;
-    float edge = (1.0 - smoothstep(0.0, 0.035 + aa, e)) * detail;
-    pc = mix(pc, pc * 0.55, edge * 0.5);
-    col = mix(base, pc, smoothstep(0.0, 0.12, vMt.y / uRmax));
-    hh = 0.62 - 0.3 * edge + 0.04 * fib; lsRough = 0.5 + 0.2 * edge;
-  }
-#endif
-#ifdef LS_FX_DRAGOEIRO
-  { // v5: escorridos de resina vermelha ("sangue de dragão")
-    float wound = smoothstep(0.66, 0.76, lsN(vec3(p.xy * 0.6, p.z * 0.3) + 5.0));      // ferimentos espalhados na casca
-    float streak = smoothstep(0.58, 0.7, lsN(vec3(p.xy * 3.2, p.z * 0.07) + 9.0) + 0.12 * lsN(p * 4.0)); // escorridos longos e finos
-    float drip = max(streak * smoothstep(0.45, 0.65, lsN(vec3(p.xy * 0.6, p.z * 0.12) + 5.0)), wound * 0.85) * smoothstep(0.15, 0.5, m) * uFx.x;
-    col = mix(col, vec3(0.22, 0.008, 0.012) * (0.75 + 0.5 * n1), drip);
-    hh = mix(hh, 0.8, drip); lsRough = mix(lsRough, 0.35, drip);
-  }
-#endif
 #ifdef LS_DEAD
   { // madeira morta: faixa em espiral, prata contínua com veios longos ao longo da torção
     // uFx = (cobertura 0–1 da volta, torção rad/unidade de arco, arco máximo, fase) · uFx2 = (raio relativo mínimo, —, legado, borda)
@@ -522,7 +483,7 @@ vec3 lsPerturb(vec3 sp, vec3 N, float hW, float fd){
   },
 };
 function patch(mat, kind, U, fx) {
-  const ch = CHUNKS[kind], fxc = fx ? FX[fx] : null;
+  const ch = CHUNKS[kind], fxc = fx ? (FX[fx] || { frag: 'bark' }) : null;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind;
     sh.uniforms.uWindDir = SHARED.uWindDir; sh.uniforms.uWindStr = SHARED.uWindStr;
@@ -533,7 +494,7 @@ function patch(mat, kind, U, fx) {
       sh.fragmentShader = f.head + sh.fragmentShader.replace('#include <color_fragment>', f.color).replace('#include <roughnessmap_fragment>', f.rough)
         .replace('#include <normal_fragment_maps>', f.normal).replace('#include <emissivemap_fragment>', f.emis);
     }
-    if (fxc) { // casca com efeito próprio (dragoeiro, eucalipto, cipreste, junípero)
+    if (fxc) { // casca com efeito próprio (madeira morta nos bonsais que definem fx)
       const def = `#define LS_FX\n#define LS_FX_${fx.toUpperCase()}\n`;
       sh.vertexShader = def + sh.vertexShader; sh.fragmentShader = def + sh.fragmentShader;
     }
@@ -677,7 +638,7 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
   geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(lives, 2));
   let count2 = count, mats2 = mats, cols2 = cols;
   // Jardim: no máximo 1 em cada 2 folhas, desenhadas √2 maiores para a silhueta continuar cheia.
-  // A redução forte (1/4) deixava sequoia, pinheiros e bonsais ralos na distância do jardim.
+  // A redução forte (1/4) deixava os bonsais ralos na distância do jardim.
   const thin = lod && lodScale < 0.75 && (kind === 'leaf' || kind === 'needles') && count > 2400;
   if (thin) {
     const keep = 2;
@@ -695,7 +656,6 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
   else if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   else {
     mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: kind === 'petal' ? 0.45 : 0.7, metalness: 0 });
-    if (sp.leafKind === 'willow' && kind === 'leaf') { mat.emissive = hsl(P.glowH, 0.9, 0.5); mat.emissiveIntensity = night ? 0.35 : 0.3; }
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
   patch(mat, 'inst', U, sp.fx);
@@ -710,16 +670,7 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
 }
 
 
-function humanFigure(h) {
-  const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.8 }), k = h / 1.8;
-  const add = (geo, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x * k, y * k, z * k); o.scale.setScalar(k); o.castShadow = true; g.add(o); };
-  add(new THREE.CylinderGeometry(0.07, 0.06, 0.85, 8), -0.1, 0.43, 0); add(new THREE.CylinderGeometry(0.07, 0.06, 0.85, 8), 0.1, 0.43, 0);
-  add(new THREE.CapsuleGeometry(0.17, 0.42, 4, 10), 0, 1.2, 0); add(new THREE.SphereGeometry(0.12, 12, 10), 0, 1.68, 0);
-  add(new THREE.CylinderGeometry(0.045, 0.04, 0.7, 6), -0.25, 1.15, 0); add(new THREE.CylinderGeometry(0.045, 0.04, 0.7, 6), 0.25, 1.15, 0);
-  return g;
-}
 globalThis.makePot = makePot;
-globalThis.humanFigure = humanFigure;
 globalThis.fruitGeo = fruitGeo;
 globalThis.GEOMS = GEOMS;
 
@@ -988,11 +939,7 @@ function gradientTex(stops) {
 }
 const THEMES = {
   day: { bg: gradientTex([[0, '#7fb2e5'], [0.55, '#cfe4ef'], [1, '#e9e3d0']]), fog: 0xdfe3d6, ground: 0x6a8a4c, soil: 0x4a3a2a, hemi: [0xdfefff, 0x4a3a28, 1.1], sun: [0xfff1d6, 2.7], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.95] },
-  night: { bg: gradientTex([[0, '#03040d'], [0.6, '#0c1030'], [1, '#1d1838']]), fog: 0x141433, ground: 0x10182a, soil: 0x0a0d18, hemi: [0x7080d0, 0x202040, 0.8], sun: [0x9fb4ff, 1.0], fill: 0.3, exp: 1.1, bloom: [0.6, 0.45, 0.85] },
-  // v5: cenários das raras
-  arido: { bg: gradientTex([[0, '#5d8fc4'], [0.55, '#bcd2dc'], [1, '#e8d8b8']]), fog: 0xe0d6c0, ground: 0x9a8058, soil: 0x7a5e3e, hemi: [0xeef4ff, 0x5a4630, 1.05], sun: [0xfff0d0, 2.9], fill: 0.5, exp: 1.0, bloom: [0.3, 0.4, 0.95] },
-  savana: { bg: gradientTex([[0, '#4d78b8'], [0.5, '#d9b98a'], [0.85, '#f0a060'], [1, '#f4c98c']]), fog: 0xe2c49a, ground: 0x9a8a48, soil: 0x7a5a32, hemi: [0xffe8cc, 0x5a4024, 1.05], sun: [0xffd8a0, 2.8], fill: 0.5, exp: 1.0, bloom: [0.35, 0.4, 0.94] },
-  // v6: cenários dos bonsais (fundos de estúdio e jardim)
+  // cenários dos bonsais (fundos de estúdio e jardim). `day` fica como reserva para uma espécie nova.
   preto: { bg: gradientTex([[0, '#000000'], [1, '#050505']]), fog: 0x000000, ground: 0x030303, soil: 0x030303, hemi: [0xffffff, 0x181818, 0.55], sun: [0xfff3e6, 3.1], fill: 0.55, exp: 1.0, bloom: [0.2, 0.4, 0.97] },
   estudio: { bg: gradientTex([[0, '#d9d9d9'], [0.6, '#cdcdcd'], [1, '#c2c2c2']]), fog: 0xc8c8c8, ground: 0xbdbdbd, soil: 0xb0b0b0, hemi: [0xffffff, 0x8a8a8a, 1.25], sun: [0xffffff, 2.2], fill: 0.75, exp: 1.0, bloom: [0.15, 0.4, 0.98] },
   terracota: { bg: gradientTex([[0, '#1a0805'], [0.5, '#5a2213'], [0.8, '#7a3218'], [1, '#3a150b']]), fog: 0x2a1008, ground: 0x2e140b, soil: 0x2e140b, hemi: [0xffcfae, 0x1a0804, 0.45], sun: [0xffe2c4, 3.6], fill: 0.22, exp: 1.0, bloom: [0.3, 0.4, 0.94] },
@@ -1020,7 +967,7 @@ composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
 function setTheme(name) {
-  const t = THEMES[name];
+  const t = THEMES[name] || THEMES.day;
   scene.background = t.bg; scene.fog = new THREE.Fog(t.fog, 30, 160);
   ground.material.color.set(t.ground); soil.material.color.set(t.soil);
   hemi.color.set(t.hemi[0]); hemi.groundColor.set(t.hemi[1]); hemi.intensity = t.hemi[2];
@@ -1065,24 +1012,41 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12, ty = 0.46 } = {})
    ===================================================================== */
 const $ = (id) => document.getElementById(id);
 const ui = { species: $('species'), seed: $('seed'), growth: $('growth') };
-for (const [label, ids] of [['Realistas', ORDER], ['Raras', RARE], ['Bonsais', BONSAI]]) {
-  const og = document.createElement('optgroup'); og.label = label;
-  for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = `${SPECIES[id].emoji}  ${SPECIES[id].name}`; og.appendChild(o); }
-  ui.species.appendChild(og);
+function gardenRows(ids) {
+  const n = ids.length;
+  if (n <= 4) return [ids.slice()];
+  const cols = Math.ceil(n / Math.ceil(n / 4));
+  const rows = [];
+  for (let i = 0; i < n; i += cols) rows.push(ids.slice(i, i + cols));
+  return rows;
 }
+function bonsaiPhrase(n = ALL.length) {
+  return n === 1 ? 'o bonsai' : `os ${n} bonsais`;
+}
+(function fillSpecies() {
+  const og = document.createElement('optgroup'); og.label = 'Bonsais';
+  for (const id of ALL) {
+    const sp = SPECIES[id]; if (!sp) continue;
+    const o = document.createElement('option'); o.value = id; o.textContent = `${sp.emoji}  ${sp.name}`; og.appendChild(o);
+  }
+  ui.species.appendChild(og);
+  const sub = $('subline');
+  if (sub) sub.textContent = `POC v8 · junções, ambiente, genoma e folhagem · ${ALL.length} ${ALL.length === 1 ? 'bonsai' : 'bonsais'}`;
+})();
 let plants = [], mode = 'single', anim = null, labels = [];
 let growMode = 'sim'; // v7: 'sim' (simulado) | 'ls' (L-System clássico, igual à v6)
 function setGrowMode(m) {
   growMode = m; $('gm-sim').classList.toggle('on', m === 'sim'); $('gm-ls').classList.toggle('on', m === 'ls');
   const id = ui.species.value;
   $('gmnote').textContent = m === 'ls' ? 'A gramática pura: a mesma planta da v6 para a mesma seed.'
-    : mode === 'single' && !SIMS[id] ? 'A samambaia não tem simulação: continua só L-System.' : 'Ano a ano: os galhos disputam espaço e luz, os sombreados caem; o slider escolhe o ano.';
+    : mode === 'single' && id && !SIMS[id] ? 'Esta espécie não tem simulação: continua só L-System.' : 'Ano a ano: os galhos disputam espaço e luz, os sombreados caem; o slider escolhe o ano.';
 }
 let follow = null;
 
-const WORDS = ['orvalho', 'musgo', 'aurora', 'raiz', 'brisa', 'semente', 'samba', 'ipê', 'jabuti', 'lua', 'cipó', 'trovão', 'sereno', 'pólen', 'arara', 'neblina', 'carvalho', 'vento', 'jardim', 'galáxia'];
+const WORDS = ['orvalho', 'musgo', 'aurora', 'raiz', 'brisa', 'semente', 'bonsai', 'ipê', 'jabuti', 'lua', 'cipó', 'trovão', 'sereno', 'pólen', 'arara', 'neblina', 'bordo', 'vento', 'jardim', 'galáxia'];
 const randomSeed = () => `${WORDS[Math.floor(Math.random() * WORDS.length)]}-${WORDS[Math.floor(Math.random() * WORDS.length)]}-${Math.floor(Math.random() * 1000)}`;
 
+function fallbackSpecies() { return (BONSAI.find((id) => SPECIES[id]) || ALL.find((id) => SPECIES[id]) || ''); }
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   genomeOverlay = parseGenomeHash(h.get('genoma'));
@@ -1148,16 +1112,15 @@ async function generate({ animate = true } = {}) {
       plants.push(pl); scene.add(pl.object);
       setTheme(pl.theme);
       const size = pl.box.getSize(new V3());
-      soil.scale.setScalar(pl.sp.years ? 0.001 : Math.max(size.x, size.z) * 0.32 + 0.5); // v6: bonsai tem vaso, sem mancha de terra
-      glowLight.intensity = id === 'salgueiro' ? 30 : 0;
-      if (id === 'salgueiro') { glowLight.color = hsl(pl.P.glowH, 0.9, 0.6); glowLight.position.set(0, size.y * 0.35, 0); glowLight.distance = size.y * 3; }
+      soil.scale.setScalar(pl.sp.years ? 0.001 : Math.max(size.x, size.z) * 0.32 + 0.5); // bonsai tem vaso, sem mancha de terra
+      glowLight.intensity = 0;
       frame(pl.box);
       $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`; $('capD').textContent = pl.sp.desc;
       showInfo(pl);
     } else {
-      // v7: três fileiras: bonsais na frente, realistas no meio e raras (as maiores) atrás; LOD menor nos tubos
+      // Fileiras equilibradas a partir de ALL (só os bonsais registrados). LOD menor nos tubos.
       setTheme('jardim'); glowLight.intensity = 0;
-      const gap = 2.6;
+      const gap = 2.2;
       const gopts = { lod: true, sim: growMode === 'sim' };
       const tGarden = performance.now();
       const pkgs = await buildGardenSkeletons(ALL, seed, gopts, { ...ENV }, genomeState());
@@ -1165,30 +1128,33 @@ async function generate({ animate = true } = {}) {
       const built = pkgs.map((pkg) => assemblePlant(pkg));
       const all = new THREE.Box3();
       let zRow = 0, prevDepth = 0;
-      const ROWS = [BONSAI, ORDER, RARE];
-      for (const ids of ROWS) {
-        const row = ids.map(id => built[ALL.indexOf(id)]);
-        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z) * (ids === BONSAI ? 1 : 0.85); });
-        const depth = Math.max(...row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z); }));
+      const rows = gardenRows(ALL);
+      rows.forEach((ids, ri) => {
+        const row = ids.map(id => built[ALL.indexOf(id)]).filter(Boolean);
+        if (!row.length) return;
+        const widths = row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z, 5.6); });
+        const depth = Math.max(...row.map(p => { const s = p.box.getSize(new V3()); return Math.max(s.x, s.z, 5.6); }));
         const totalW = widths.reduce((a, b) => a + b, 0) + gap * (row.length - 1);
         let x = -totalW / 2;
-        if (ids !== ROWS[0]) zRow -= (prevDepth + depth) * 0.5 + gap;
+        if (ri > 0) zRow -= (prevDepth + depth) * 0.5 + gap;
+        const front = ri === 0;
         row.forEach((pl, i) => {
           const cx = x + widths[i] / 2; x += widths[i] + gap;
-          const z = zRow - Math.abs(cx) * 0.12;
+          const z = zRow;
           pl.object.position.set(cx, 0, z); scene.add(pl.object);
           const b = pl.box.clone().translate(new V3(cx, 0, z)); all.union(b);
           const el = document.createElement('div'); el.className = 'glabel'; el.textContent = `${pl.sp.emoji} ${pl.sp.name}`;
           el.onclick = () => { ui.species.value = pl.id; setMode('single'); generate(); };
           $('labels').appendChild(el);
-          labels.push({ el, pos: new V3(cx, b.max.y + (ids === ROWS[0] ? 0.15 : 0.4), z), above: true });
+          labels.push({ el, pos: new V3(cx, front ? 0.05 : b.max.y + 0.35, z), above: !front });
         });
         prevDepth = depth;
-      }
+      });
       plants.push(...built);
       soil.scale.setScalar(0.001);
-      frame(all, { dir: new V3(0.1, 0.68, 1), pad: 0.98, ty: 0.22 }); // v5: alvo mais baixo, espaço para as etiquetas da frente acima da legenda
-      $('capT').textContent = '🌿 Jardim: as 14 espécies'; $('capD').textContent = `Mesma seed "${seed}", catorze espécies diferentes: bonsais na frente, realistas no meio e árvores raras atrás. Clique no nome para abrir a espécie.`;
+      frame(all, { dir: new V3(0.15, 0.55, 1), pad: 1.08, ty: 0.42 });
+      const n = ALL.length;
+      $('capT').textContent = `🌿 Bonsai Garden: ${bonsaiPhrase(n)}`; $('capD').textContent = `Seed “${seed}”. Clique no nome para abrir.`;
       showInfo(built[ALL.indexOf(ui.species.value)] || built[0]);
     }
     showStats(); writeHash();
@@ -1204,7 +1170,7 @@ function syncSlider() {
   if (pl && pl.sim) { const Y = pl.sim.years, y = Math.min(Y, Math.floor(Math.pow(g, 0.8) * (Y + 1.5))); $('gval').textContent = `ano ${y} de ${Y}` + (pl.sp.years ? ' de formação' : ''); } // v7: simulado: o slider é o ano
   else $('gval').textContent = pl && pl.sp.years ? `${Math.round(g * pl.P.years)} de ${pl.P.years} anos de formação` : Math.round(g * 100) + '%'; // v6: bonsai conta anos
 }
-function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver uma espécie' : '🌿 Ver todas as 14'; }
+function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden'); $('garden').textContent = m === 'garden' ? '🌱 Ver um bonsai' : `🌿 Ver todos os ${ALL.length}`; }
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
 
 $('gen').onclick = () => generate();
@@ -1251,7 +1217,7 @@ for (const [id, key] of [['windStr', 'windStr'], ['windAz', 'windAz'], ['sunAz',
 syncEnvUniforms();
 $('crossBtn').onclick = () => {
   const a = $('crossA').value.trim() || ui.seed.value, b = $('crossB').value.trim() || 'lindenmayer';
-  const id = mode === 'garden' ? 'carvalho' : ui.species.value;
+  const id = ui.species.value || fallbackSpecies();
   genomeApply = true;
   genomeOverlay = crossGenomes(genomeFromSeed(a, id, Rand), genomeFromSeed(b, id, Rand), `${a}×${b}::${id}`, Rand);
   ui.seed.value = childSeed(a, b);
@@ -1300,7 +1266,7 @@ function init() {
   const h = readHash();
   ui.seed.value = h.seed || 'lindenmayer';
   setGrowMode(h.cresc);
-  if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); ui.species.value = SPECIES[h.esp] ? h.esp : 'carvalho'; } setGrowMode(h.cresc); // v7: espécies removidas (exóticas) caem no carvalho
+  if (h.esp === 'jardim') setMode('garden'); else { setMode('single'); ui.species.value = SPECIES[h.esp] ? h.esp : fallbackSpecies(); } setGrowMode(h.cresc); // espécie removida ou desconhecida cai no primeiro bonsai
   const q = new URLSearchParams(location.search);
   if (q.has('age')) { generate({ animate: false }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
   else if (q.has('nogrow')) { generate({ animate: false }); } else generate();
