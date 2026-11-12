@@ -197,16 +197,26 @@ function emitBranch(id, P, yaw, ang, len, level, bag) {
   if (id === 'ficus' && bag.aerial > 0) {
     const drops = bag.aerial >= 2 && len > (P.branchLen || 0.5) * 0.7 ? 2 : 1;
     for (let d = 0; d < drops && bag.aerial > 0; d++) {
-      extra += `F(${n(0.26 + d * 0.04)})W(${n(0.2)},${n(0.05 + d * 0.12)},${n(d === 0 ? 0.17 : 0.1)})`;
+      extra += `F(${n(0.22 + d * 0.04)})W(${n(0.16)},${n(0.05 + d * 0.1)},${n(d === 0 ? 0.14 : 0.08)})`;
       bag.aerial--;
     }
   }
-  const safe = Math.max(0.04, len);
-  return `[/(${n(yaw)})&(${n(ang)})_(${n(level)})${extra}B(${n(safe)})]`;
+  const safe = Math.max(0.08, len);
+  const lead = Math.min(0.08, safe * 0.18);
+  // dois passos curtos saem do tronco; o _(level) no fim deixa o galho longo na horizontal, sem mergulhar no vaso
+  return `[/(${n(yaw)})&(14)F(${n(lead)})&(22)F(${n(lead)})_(${n(level)})${extra}B(${n(safe)})]`;
 }
 
 function emitJin(yaw) {
-  return `[J/(${n(yaw)})&(56)F(0.4)F(0.26)F(0.12)]`;
+  // o primeiro F fica com casca viva (o colar); o J só marca o galho fino
+  return `[J/(${n(yaw)})&(48)F(0.14)F(0.18)F(0.12)F(0.07)]`;
+}
+
+/** Almofada e dois tufos menores, para ler como nuvem e não como um ponto. */
+function cloud(P, sc) {
+  const s = Math.max(0.22, sc);
+  const arm = n(Math.min(0.12, 0.04 + s * 0.03));
+  return `${pad(P, s)}[+(32)&(14)F(${arm})${pad(P, s * 0.66)}][-(28)&(10)F(${arm})${pad(P, s * 0.48)}]`;
 }
 
 /** yaw 180 aponta para a câmera (+Z). No terço de baixo esse setor é proibido. */
@@ -244,33 +254,30 @@ function trunkChokkan(id, P, bio, r, bag) {
 }
 
 function trunkMoyogi(id, P, bio, r, bag) {
-  const segs = Math.max(5, Math.min(bio.conifer ? 8 : 7, bio.segs > 11 ? 8 : Math.max(bio.segs, 5)));
-  const phase = r.f() * 6.28;
-  const amp = Math.min(26, Math.max(16, (P.curve || P.bend || 34) * 0.62));
-  let ax = `^(${n(3.2)})`;
-  const bare = Math.max(1, Math.floor(segs * 0.28));
+  const seg = Math.max(bio.unit * (bio.conifer ? 0.9 : 1.2), 0.24);
+  const sign = r.chance(0.5) ? 1 : -1;
+  // três dobras que diminuem: o tronco cruza a vertical e o ápice volta para cima da base
+  const bends = [sign * (32 + r.f() * 6), -sign * (21 + r.f() * 4), sign * (11 + r.f() * 3)];
+  let ax = `^(${n(2.6)})`;
   let heading = 0;
-  for (let k = 0; k < segs; k++) {
-    const sCurve = Math.sin(6.2832 * (k / Math.max(segs - 1, 1)) * 1.05 + phase);
-    const target = amp * sCurve;
-    const turn = target - heading;
-    heading = target;
-    const depth = 1.1 + 1.4 * Math.cos(6.2832 * k / segs * 0.5 + phase);
-    ax += `+(${n(turn)})^(${n(Math.max(0.15, depth * 0.22))})F(${n(bio.unit * (1 - 0.26 * k / segs))})`;
-    if (k < bare) continue;
-    const u = k / segs;
-    const low = u < 0.34;
-    const outside = sCurve >= 0 ? 268 : 92;
-    const back = (k - bare) % 3 === 2;
-    const yaw = yawOffFront((back ? 6 : outside) + r.jit(12), low);
-    const bl = bio.branchLen * (1.02 - 0.5 * u) * (back ? 0.7 : 1);
-    ax += emitBranch(id, P, yaw, bio.bAngle * (back ? 0.78 : 0.94), bl, bio.level, bag);
-    if (id === 'junipero' && bag.jin > 0 && k % 3 === 1) {
-      bag.jin--;
-      ax += emitJin(yaw + 38);
+  bends.forEach((target, b) => {
+    for (let s = 0; s < 2; s++) {
+      const aim = heading + (target - heading) * (s === 0 ? 0.45 : 1);
+      const turn = aim - heading;
+      heading = aim;
+      ax += `+(${n(turn)})^(${n(0.4)})F(${n(seg * (1 - 0.07 * (b * 2 + s)))})`;
+      if (s !== 1) continue;
+      // o galho nasce do lado de fora da curva, quase na horizontal
+      const outside = heading >= 0 ? 96 : 264;
+      const bl = Math.min(bio.branchLen * (0.78 - 0.16 * b), seg * (3.4 - 0.55 * b));
+      ax += emitBranch(id, P, yawOffFront(outside + r.jit(8), b === 0), bio.bAngle * (b === 2 ? 0.7 : 0.88), Math.max(seg * 1.1, bl), bio.level * (b === 0 ? 0.85 : 1), bag);
+      if (id === 'junipero' && bag.jin > 0 && b === 1) {
+        bag.jin--;
+        ax += emitJin(outside + 40);
+      }
     }
-  }
-  ax += `^(${n(6.5)})+(${n(r.jit(5))})B(${n(bio.branchLen * 0.38)})`;
+  });
+  ax += `^(${n(4)})+(${n(-heading * 0.35)})B(${n(Math.min(bio.branchLen * 0.32, seg * 1.1))})`;
   return ax;
 }
 
@@ -304,35 +311,34 @@ function trunkCascade(id, P, bio, r, bag, full) {
   const u = 0.55 * s;
   const side = r.chance(0.5) ? 1 : -1;
   const az = (side > 0 ? 62 : 242) + r.f() * 28;
-  const padLen = Math.min(bio.branchLen * 0.16, u * 0.34, 0.2);
+  const bulk = Math.min(1.25, Math.max(0.72, u * 2.05));
   let ax = `^(${n(2.2)})/(${n(az)})`;
   ax += `F(${n(u * (full ? 0.86 : 1.05))})`;
-  ax += `[^(${n(22 + r.jit(4))})F(${n(u * 0.26)})B(${n(padLen)})]`;
+  ax += `[^(${n(18)})F(${n(u * 0.16)})${cloud(P, 0.55 * bulk)}]`;
   if (full) {
-    ax += `&(55)F(${n(u * 0.68)})`;
-    ax += `&(50)F(${n(u * 1.15)})`;
+    ax += `&(26)F(${n(u * 0.36)})&(24)F(${n(u * 0.36)})`;
+    ax += `&(26)F(${n(u * 0.5)})&(22)F(${n(u * 0.55)})${cloud(P, 1.05 * bulk)}`;
   } else {
-    // semi: corre na horizontal para fora da borda e a ponta desce até meio vaso
-    ax += `&(70)F(${n(u * 0.95)})`;
-    ax += `&(28)F(${n(u * 1.35)})`;
-    ax += `&(58)F(${n(u * 1.55)})`;
+    ax += `&(70)F(${n(u * 0.95)})${cloud(P, 0.9 * bulk)}`;
+    ax += `&(28)F(${n(u * 0.7)})${cloud(P, 0.72 * bulk)}F(${n(u * 0.65)})${cloud(P, 0.55 * bulk)}`;
+    ax += `&(58)F(${n(u * 0.85)})${cloud(P, 0.42 * bulk)}`;
   }
-  ax += `[^(7)_(0.94)F(${n(u * 0.2)})B(${n(padLen)})]`;
   const steps = full ? 5 : 0;
   if (full) ax += `~(${n(0.04)})$(${n(0.035)})&(24)F(${n(u * 0.42)})`;
   for (let j = 0; j < steps; j++) {
     const sign = (j % 2 ? -1 : 1) * side;
     const open = j % 2 === 0;
     const pitch = open ? -(14 + r.f() * 4) : (28 + r.f() * 5);
-    const step = u * 0.82 * (open ? 0.72 : 1);
-    ax += `_(0)+(${n(sign * (14 + r.jit(2)))})&(${n(pitch)})F(${n(step)})`;
-    ax += `[+(${n(sign * 46)})_(0.95)F(${n(u * 0.16)})B(${n(padLen)})]`;
-    if (id === 'junipero' && bag.jin > 0 && j === 1) {
+    const step = u * 0.78 * (open ? 0.72 : 1);
+    const sc = Math.max(0.45, 1.05 - j * 0.12) * bulk;
+    ax += `_(0)+(${n(sign * (12 + r.jit(2)))})&(${n(pitch)})F(${n(step * 0.55)})${cloud(P, sc)}F(${n(step * 0.45)})`;
+    ax += `[+(${n(sign * 38)})_(0.9)F(${n(u * 0.14)})${cloud(P, sc * 0.62)}]`;
+    if (id === 'junipero' && bag.jin > 0 && j === 2) {
       bag.jin--;
       ax += emitJin(az + sign * 36);
     }
   }
-  ax += `B(${n(padLen)})`;
+  ax += cloud(P, (full ? 0.48 : 0.4) * bulk);
   const phi = az * DEG;
   const reach = u * (full ? 2.15 : 1.45);
   const drop = u * (full ? 4.4 : 1.15);
@@ -561,7 +567,7 @@ export function potSpec({ id, styleId, sk, P, baseWidth, seed, family, Rand }) {
     const drop = Math.max(0, -m.minY);
     h = Math.max(diam * 1.4, Math.min(a * 1.05, Math.max(drop * 0.58, a * 0.72)));
     tall = true;
-    leg = Math.max(a * 0.85, -m.minY - h + 0.62);
+    leg = Math.max(a * 0.85, -m.minY - h + 1.15);
   } else if (styleId === 'han_kengai') {
     h = Math.max(diam * 1.15, a * 0.58);
     if (m.minY < -0.04) {
@@ -855,13 +861,18 @@ export function keepTrunkOutOfPot(sk, inst, pot) {
   const topA = pot.a * (pot.tall ? 1.08 : 1.02);
   const topB = pot.b * (pot.tall ? 1.08 : 1.02);
   const tableY = -pot.h;
+  const yHi = pot.tall ? 0.16 : 0.05;
+  const yLo = pot.tall ? 0.26 : 0.22;
+  const margin = pot.tall ? Math.min(0.3, Math.max(pot.a, pot.b) * 0.2) : 0;
   for (const key in inst) for (const it of inst[key]) {
-    if (!it.p || it.p.y > tableY + 0.05 || it.p.y < tableY - 0.22) continue;
+    if (!it.p || it.p.y > tableY + yHi || it.p.y < tableY - yLo) continue;
     const px = it.p.x - ox;
     const pz = it.p.z - oz;
     const e = (px / topA) ** 2 + (pz / topB) ** 2;
     if (e >= 1 || e < 1e-5) continue;
-    const s = Math.sqrt(1.06 / e);
+    const dist = Math.hypot(px, pz);
+    const edge = dist / Math.sqrt(e);
+    const s = (edge + margin) / dist;
     it.p.x = ox + px * s;
     it.p.z = oz + pz * s;
   }

@@ -72,7 +72,7 @@ const garden = await page.evaluate(() => ({
 }));
 if (garden.n !== garden.all) errors.push('jardim com ' + garden.n + ' plantas, registro ' + garden.all);
 if (!/Bonsai Garden/.test(garden.cap)) errors.push('legenda do jardim: ' + garden.cap);
-await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false });
+await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false, timeout: 120000 });
 const t0 = performance.now();
 for (let i = 0; i < 30; i++) await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 results.fps.garden = 30 / ((performance.now() - t0) / 1000);

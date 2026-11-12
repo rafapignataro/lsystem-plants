@@ -445,7 +445,7 @@ const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
 attribute vec3 aCp; attribute vec2 aB; attribute vec3 aN; attribute vec2 aCol; attribute float aBump; attribute vec3 aBk;
-uniform float uBkFreq; uniform float uMatT;
+uniform float uBkFreq; uniform float uMatT; uniform float uCollar;
 varying vec3 vBk; varying vec2 vMt;
 float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 1024, ii / 1024), 0).r; }
 ` + SWAY + FX_V,
@@ -458,7 +458,7 @@ float lsRad(float i){ int ii = int(i + 0.5); return texelFetch(uRad, ivec2(ii % 
         if (aCol.x > -1.5) { // colar: alarga a base do galho em direção ao raio do pai
           float rp = aCol.x < -0.5 ? r * 1.8 : lsRad(aCol.x);
           float w = exp(-aCol.y / max(1.5 * rp, 1e-5));
-          float rc = clamp(rp * 0.88, r, r * 2.8);
+          float rc = clamp(rp * uCollar, r, r * (1.15 + uCollar * 1.9));
           float r0 = r; r = mix(r, rc, w); flare = r / max(r0, 1e-6);
         }
       } else { // ponta ainda crescendo: anel colapsa na frente de crescimento
@@ -579,7 +579,13 @@ vec3 lsBark(vec3 base, vec3 nW){
     float band = smoothstep(cos(3.14159 * uFx.x) - 0.1, cos(3.14159 * uFx.x) + 0.1, c);
     float rel = vMt.y / uRmax;
     float dead = band * (1.0 - smoothstep(uFx.z * 0.85, uFx.z, arc)) * smoothstep(uFx2.x * 0.7, uFx2.x, rel);
-    dead = max(dead, step(0.5, vFx.w));                                  // jin: o galho inteiro morto
+    float jin = step(0.5, vFx.w);
+    // uFx2.z < 0: o jin não pinta o colar grosso, só o trecho fino
+    float jinMask = uFx2.z < 0.0 ? smoothstep(0.5, 0.26, rel) : 1.0;
+    dead = max(dead * (1.0 - jin), jin * jinMask);
+    // uFx2.y > 0: a faixa só começa depois do nebari, para não virar bloco na base
+    float started = uFx2.y <= 0.001 ? 1.0 : smoothstep(uFx2.y, uFx2.y + 0.42, arc);
+    dead *= started;
     dead *= smoothstep(0.05, 0.35, vMt.x);                               // a madeira morta é trabalhada com os anos
     float fiber = lsN(vec3(sp * 0.4, arc * 0.14, 4.0));                  // manchas longas ao longo do eixo
     float line = 0.5 + 0.5 * sin(sp * 2.3 + 1.1 * lsN(vec3(arc * 0.2, 1.7, sp * 0.12)));
@@ -914,7 +920,7 @@ function assemblePlant(pkg) {
     uMossC: { value: new THREE.Vector3().setFromColor(night ? hsl(BK.mossH, 0.55, 0.32) : hsl(BK.mossH, 0.5, 0.26)) },
     uGlowC: { value: new THREE.Vector3().setFromColor(P.glowH != null ? hsl(P.glowH, 0.9, 0.55) : new THREE.Color(0)).multiplyScalar(BK.glow || 0) },
     uSeedOff: { value: new THREE.Vector3(so.range(-500, 500), so.range(-500, 500), so.range(-500, 500)) },
-    uScale: { value: 1 }, uBkFreq: { value: 1 }, uMatT: { value: BK.mat } };
+    uScale: { value: 1 }, uBkFreq: { value: 1 }, uMatT: { value: BK.mat }, uCollar: { value: pkg.collar ?? 0.88 } };
   if (fxU) Object.assign(U, fxU);
   if (U.uPal?.value) U.uPal.value = U.uPal.value.map((v) => (v && v.isVector3 ? v : new THREE.Vector3(v.x, v.y, v.z)));
   const tTube0 = performance.now();
@@ -944,7 +950,7 @@ function assemblePlant(pkg) {
     group.add(mesh);
   };
   const deadwood = sp.fx === 'junipero' || sp.fx === 'cipreste';
-  const joints = deadwood ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40, rRef: rFull, skip: sp.skipJoint });
+  const joints = (deadwood || pkg.noKnuckle) ? null : buildJointMeshes(sk, rTube, null, { limit: opts.lod ? 16 : 40, rRef: rFull, skip: sp.skipJoint });
   if (joints) {
     const barkCol = sp.bark(P)[0];
     addPlain(joints.joints, asColor(barkCol), 0.88, true);

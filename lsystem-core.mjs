@@ -580,7 +580,15 @@ Object.assign(SPECIES, {
     bark: () => [hsl(14, 0.45, 0.27), hsl(60, 0.2, 0.32)],
     color(kind, it, P, r) { return hsl(P.needleH + r.jit(8), 0.42 + r.jit(0.08), 0.2 + r.jit(0.05)); },
     extra({ P, fxU }) {
-      fxU.uFx.value.set(P.dead, P.twist, 1e4, P.phase); fxU.uFx2.value.set(0.22, 0, 6, 0.12);
+      const styled = P._style && P._style !== 'moyogi';
+      if (styled) {
+        // faixa estreita (cerca de um terço da volta), só depois do nebari, e o jin não pinta o colar
+        fxU.uFx.value.set(0.3, 3.2, 1e4, P.phase);
+        fxU.uFx2.value.set(0.3, 0.85, -1, 0.08);
+      } else {
+        fxU.uFx.value.set(P.dead, P.twist, 1e4, P.phase);
+        fxU.uFx2.value.set(0.22, 0, 6, 0.12);
+      }
       return null;
     },
   },
@@ -931,10 +939,12 @@ Object.assign(SPECIES, {
     tube: {
       bump: (th, arc, g, main, P, rad) => {
         if (!main) {
-          if (!(g && g.y < 0.12)) return 1;
+          // engrossa só a raiz rente ao solo; abaixo do vaso o galho afunila até a ponta
+          if (!(g && g.y < 0.12 && g.y > -0.04)) return 1;
           return Math.max(1, Math.min(8, 0.085 / Math.max(rad || 0.085, 0.008)));
         }
-        const taper = 0.58 + 0.42 * Math.exp(-Math.max(0, arc - 0.35) / 3.4);
+        const fall = Math.max(0, arc - 0.85);
+        const taper = 0.16 + 0.84 * Math.exp(-fall / 1.25);
         return taper * (1 + P.plate * Math.sin(9 * th + 1.6 * arc + P.phase));
       },
     },
@@ -976,15 +986,17 @@ Object.assign(SPECIES, {
         rules: {
           C: (p, rr) => {
             const j = p[0];
-            if (j >= P.cascade) return pad(P, 0.95);
+            if (j >= P.cascade) return `F(${n(P.fall * 0.38)})Z(${n(P.padR * 0.7)},0.1,${Math.max(6, P.padN >> 1)},${n(P.leafS)})F(${n(P.fall * 0.22)})Z(${n(P.padR * 0.42)},0.06,${Math.max(4, P.padN >> 2)},${n(P.leafS)})`;
             const sign = j % 2 ? -1 : 1;
             const open = j % 2 === 0;
             const mag = P.zig * (1 - 0.04 * j);
-            const sc = 0.66 + (j % 3) * 0.1;
+            const sc = Math.max(0.5, 1.05 - j * 0.07);
             // passo par abre (o tronco sai um pouco); passo ímpar fecha além da vertical (volta em direção ao vaso). A queda fica ao lado do vaso.
             const pitch = open ? -(18 + rr.f() * 6) : (30 + rr.f() * 6);
             const step = P.fall * (open ? 0.72 : 0.98) * (0.94 + rr.f() * 0.08);
-            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step)})[+(${n(sign * 46)})_(0.96)F(${n(0.1 + rr.f() * 0.04)})${pad(P, sc)}]C(${j + 1})`;
+            const tuft = (scale) => `Z(${n(P.padR * scale)},${n(0.18 * Math.sqrt(scale))},${Math.max(8, Math.round(P.padN * scale * 0.45))},${n(P.leafS)})`;
+            const side = (ang, len, scale) => `[+(${n(ang)})_(0.92)&(${n(open ? 16 : -6)})F(${n(len)})${tuft(scale)}]`;
+            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step * 0.5)})${tuft(sc)}F(${n(step * 0.5)})${side(sign * 40, 0.16, sc * 0.72)}${side(sign * 68, 0.1, sc * 0.5)}C(${j + 1})`;
           },
         },
         finalize: { C: () => pad(P, 0.9) },
@@ -1417,7 +1429,8 @@ function crownSim(o) {
         const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v), z = q[2] + d * Math.sin(v) * Math.sin(u);
         const lowOk = P._style === 'kengai' || P._style === 'han_kengai';
         if (!lowOk && y < 0.15) return null;
-        if (lowOk && y < 0.22 && y > -0.4 && Math.hypot(x, z) < 0.55) return null;
+        // só o miolo do vaso; a cascata fora da borda continua
+        if (lowOk && y < 0.18 && y > -0.12 && Math.hypot(x, z) < 0.4) return null;
         return [x, y, z, yr(q[3]) * (o.ahead ?? 1)]; },
       markerYear: (p) => p[3],
       shadow: { vox: 0.55, q: 8, b: 1.1, a: 1, C: 1.5 },
@@ -1447,6 +1460,14 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     about: 'moyogi da gramática; galhos curtos fecham um domo; almofadas de flores pequenas abrem só nos anos finais',
     scaffold: (PP, def) => ({ axiom: def.axiom, rules: def.rules, iters: PP.iterations, seg: 0.22, time: (t) => t * 24 * 0.55 / (PP.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
     cfg: (PP, cl) => ({ shadow: { vox: 0.28, q: 4, b: 1.2, a: 1, C: 4 }, rp: 0.28, dk: 0.07, cone: 1.15, nMax: () => 2, lambda: () => 0.48, len: () => 0.034, xi: () => 0.5, trop: () => 0.03, maxTurn: 0.55,
+      sample: (rr) => {
+        const pts = cl.pts; if (!pts.length) return null;
+        const low = cl.lowPts || (cl.lowPts = pts.filter((p) => p[1] < 0.05));
+        const pool = rr.f() < 0.5 && low.length ? low : pts;
+        const q = pool[Math.floor(rr.f() * pool.length)];
+        const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = 0.1 * Math.cbrt(rr.f());
+        return [q[0] + d * Math.sin(v) * Math.cos(u), q[1] + d * Math.cos(v), q[2] + d * Math.sin(v) * Math.sin(u), 24 * q[3] / (PP.iterations + 1) * 0.7];
+      },
       phyllo: () => ({ type: 'alt', div: 137.5, angle: 48, p: 0.9 }), maxOrder: 6, maxIdle: 7,
       leaf: { kind: cl.kind, per: () => 3, pitch: 34, pitchJ: 16, keep: () => 6, size: PP.leafS * 0.9 }, shedT: () => 0.05 }),
   })(P, r, sp, ctx);
@@ -1502,7 +1523,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
 // kengai: a copa clássica fica abaixo do vaso. Os pontos com y < 0.15 não podem ser descartados,
 // e um alvo (P.attractor) puxa a brotação para baixo em vez da colonização só para cima.
 SIMS.pinheiro_negro = crownSim({
-  years: 24, ring: 0.86, dil: 0.14, markers: 1400, prune: { every: 2 }, pruneCell: 0.14, ahead: 0.28,
+  years: 24, ring: 0.86, dil: 0.14, markers: 2200, prune: { every: 2 }, pruneCell: 0.14, ahead: 0.45,
   about: 'kengai: o tronco da gramática é a cascata; os brotos ficam curtos dentro das almofadas e a poda corta o que sai delas',
   scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: P.iterations, seg: 0.34, time: (t) => t * 22 / (P.iterations + 1), syms: { Z: () => ({ ord: 2 }), C: () => ({ ord: 2 }) } }),
   cfg: (P, cl) => ({
@@ -1512,11 +1533,14 @@ SIMS.pinheiro_negro = crownSim({
     sample: (rr) => {
       const pts = cl.pts, yr = (t) => 24 * t / (P.iterations + 1);
       if (!pts.length) return null;
-      const q = pts[Math.floor(rr.f() * pts.length)];
-      const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = 0.06 * Math.cbrt(rr.f());
-      const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v) * 0.35, z = q[2] + d * Math.sin(v) * Math.sin(u);
-      if (y < 0.16 && y > -1.55 && Math.hypot(x, z) < 0.9) return null;
-      return [x, y, z, yr(q[3]) * 0.5];
+      const low = cl.lowPts || (cl.lowPts = pts.filter((p) => p[1] < -0.35));
+      const pool = rr.f() < 0.62 && low.length ? low : pts;
+      const q = pool[Math.floor(rr.f() * pool.length)];
+      const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1);
+      const d = (q[1] < -0.4 ? 0.18 : 0.11) * Math.cbrt(rr.f());
+      const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v) * 0.55, z = q[2] + d * Math.sin(v) * Math.sin(u);
+      if (y < 0.16 && y > -0.2 && Math.hypot(x, z) < 0.55) return null;
+      return [x, y, z, yr(q[3]) * 0.85];
     },
     leaf: { kind: 'needles', per: () => 14, pitch: 38, pitchJ: 26, keep: () => 10, needle: true },
     shedT: () => 0.05,
@@ -1727,6 +1751,11 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
       for (let i = 0; i < sk.N; i++) if (tmp[i] > rTube[i]) rTube[i] = tmp[i];
     }
   }
+  const styled = styleId !== sp.defaultStyle;
+  if (styled) {
+    const sc = sideBranchScale(sk, rFull, 0.6);
+    for (let i = 0; i < sk.N; i++) { rFull[i] *= sc[i]; rTube[i] *= sc[i]; }
+  }
   const tags = sp.tags ? sp.tags(sk) : null;
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
   applyGenomeToPlant(P, BK, W, genome, sp, applyGenes);
@@ -1745,6 +1774,8 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     W,
     genome,
     style: styleId,
+    noKnuckle: styled,
+    collar: styled ? 0.62 : 0.88,
     score: scoreTree(sk, style),
     rFull: Float32Array.from(rFull),
     rTube: Float32Array.from(rTube),
@@ -1759,6 +1790,42 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     night: sp.theme === 'night',
     timing: { ms: performance.now() - t0, lsMs: tLs - t0, skMs: tSk - tLs },
   };
+}
+
+/** Galho lateral no máximo `ratio` do raio do tronco no ponto em que sai. O eixo e o nebari não entram. */
+function sideBranchScale(sk, r, ratio) {
+  const { N, PAR, Y } = sk;
+  const kids = Array.from({ length: N }, () => []);
+  for (let i = 1; i < N; i++) if (PAR[i] >= 0) kids[PAR[i]].push(i);
+  const maxY = new Float32Array(Y);
+  const minY = new Float32Array(Y);
+  for (let i = N - 1; i >= 1; i--) {
+    const p = PAR[i];
+    if (p < 0) continue;
+    if (maxY[i] > maxY[p]) maxY[p] = maxY[i];
+    if (minY[i] < minY[p]) minY[p] = minY[i];
+  }
+  const main = new Int32Array(N).fill(-1);
+  for (let i = 0; i < N; i++) {
+    let best = -1;
+    let score = -Infinity;
+    const drop = minY[i] < -0.12;
+    for (const c of kids[i]) {
+      const s = drop ? -minY[c] : maxY[c];
+      if (s > score) { score = s; best = c; }
+    }
+    main[i] = best;
+  }
+  const scale = new Float32Array(N).fill(1);
+  for (let i = 1; i < N; i++) {
+    const p = PAR[i];
+    if (p < 0) continue;
+    const rootish = maxY[i] < 0.22 && Y[p] < 0.25;
+    if (i === main[p] || rootish) { scale[i] = scale[p]; continue; }
+    const cap = r[p] * scale[p] * ratio;
+    scale[i] = r[i] > 1e-8 ? Math.min(scale[p], cap / r[i]) : scale[p];
+  }
+  return scale;
 }
 
 export { genomeFromSeed, mergeGenome, applyGenomeToPlant, clusterFoliage, applyGravitySag };
