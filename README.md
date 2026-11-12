@@ -27,7 +27,9 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 | `cresc` | hash | `#especie=junipero&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico |
 | `seed` | hash ou query | `#especie=bordo&seed=rafael` | seed (qualquer texto) |
 | `genoma` | hash | `#especie=bordo&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |
-| `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1) |
+| `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1). No fim da idade a azaleia abre a flor |
+| `bloom` | query | `?bloom=0.6` | abre a árvore crescida com a flor nessa abertura (0 botão, 1 aberta) |
+| `florescer` | query | `?florescer` | abre crescida e corre a animação do botão **Ver florescer** |
 | `nogrow` | query | `?nogrow` | abre sem animação de crescimento, em 100% |
 | `norotate` | query | `?norotate` | desliga a auto-rotação |
 | `debug` | query | `?debug=rules` | mostra as medidas das regras de desenho da árvore atual (afunilamento, primeiro galho, cruzamentos, galhos em barra, copa, almofadas, espaço negativo) |

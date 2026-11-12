@@ -1282,7 +1282,7 @@ export function measureDesign(sk, radii, inst, design) {
   }
   let fH = 0, fMin = Infinity, fR = 0;
   const pts = [];
-  if (inst) for (const k of ['leaf', 'needles', 'petal']) for (const it of inst[k] || []) {
+  if (inst) for (const k of ['leaf', 'needles', 'petal', 'flower']) for (const it of inst[k] || []) {
     if (!it.p || (it.p.y < H * 0.12 && !drops)) continue;
     if (it.p.y > fH) fH = it.p.y;
     if (it.p.y < fMin) fMin = it.p.y;

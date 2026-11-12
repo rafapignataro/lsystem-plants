@@ -48,7 +48,7 @@ Faixas do modelo, medidas em 12 seeds (`realismo-0` … `realismo-11`), estilo m
 
 - **Filotaxia.** Folhas alternas, apertadas na ponta do broto curto. O ramo do ano não leva folha no meio.
 - **Dominância apical.** Moderada. Na satsuki a pinçagem repetida produz a ramificação miúda; o modelo faz isso com leques de raminhos na ponta, não com um eixo longo.
-- **Flor.** Terminal, no broto do ano, entre as folhas da ponta. Época: fim da primavera (o nome satsuki é o quinto mês). Funil de cinco pétalas. Uma mesma planta pode trazer uma segunda cor ou flor listrada; a seed sorteia isso.
+- **Flor.** Terminal, no broto do ano, entre as folhas da ponta. Época: fim da primavera (o nome satsuki é o quinto mês). Funil de cinco pétalas fundidas na base. Uma mesma planta pode trazer flores de padrões diferentes; a seed sorteia isso.
 - **Fruto.** Cápsula seca, depois da flor. O modelo mostra a planta em flor e não desenha a cápsula.
 - **Casca.** Lisa, com descamações finas, marrom-avermelhada a marrom-acinzentada. O tronco tem movimento, sem nó que pareça um calo.
 
@@ -56,7 +56,7 @@ Faixas do modelo, medidas em 12 seeds (`realismo-0` … `realismo-11`), estilo m
 
 - Casca: marrom-avermelhado, claro nas lascas, mais escuro no fundo.
 - Folha: verde-escuro, pouco saturado, com verniz.
-- Flor: a seed escolhe rosa, magenta, branco ou mescla (rosa, magenta e branco na mesma copa). Com probabilidade, parte das flores sai na segunda cor, ou pétalas alternadas ficam pálidas (a listra).
+- Flor: a seed escolhe rosa, magenta, branco ou mescla. O genoma em `flower-engine.mjs` (preset `satsuki`) pinta cada flor com um padrão real: sólida, listra ou flake sobre branco, fukurin (borda branca), mancha clara na garganta, ou garganta pontilhada. A saturação fica alta; branco é branco, não cinza.
 - Vaso: redondo ou oval, esmalte na cor complementar da flor.
 
 ## Realismo
@@ -65,14 +65,37 @@ Os critérios de `docs/nova-especie.md` valem todos. O que é próprio da azalei
 
 - A flor e o centro só existem numa ponta viva, com folha no mesmo nó, no pai ou num filho.
 - O símbolo `E` da gramática não espalha um domo de flores no ar. No simulado ele nem gera geometria; o vestir é que põe a flor na ponta.
-- Cada pétala e cada folha é sentada na casca do segmento do nó, com o giro em volta do raminho, para várias flores caberem na mesma ponta sem sair do galho.
+- A flor é uma malha só (pétalas, estames, pistilo, cálice). A origem é o pedicelo, sentado na casca da ponta. A face olha para cima e ao longo do raminho. Várias flores cabem na mesma ponta pelo giro em volta da casca.
+
+## Genoma da flor
+
+O preset `satsuki` em `flower-engine.mjs` limita o que a seed pode sortear. Comprimentos são relativos ao comprimento da pétala (1). A largura visual da flor aberta fica perto de 3–6 cm quando a folha está em 1–3 cm, sem mudar a faixa de `flowerSize` / `leafS` da ficha (1,35–1,62 no comprimento da instância).
+
+| Traço | Faixa |
+|---|---|
+| Pétalas | 5, fundidas na base num funil / sino aberto |
+| Forma da árvore | simples 78%, semidobra 9%, dobra 6%, hose-in-hose 7% |
+| Largura da pétala | 0,74–0,98 do comprimento |
+| Ponta | redonda 62%, entalhada 24%, aguda 14% |
+| Friso da margem | 0–0,045 |
+| Copo ao longo / de lado | expoente 1,05–1,45 · 0,12–0,28 |
+| Torção | −0,08–0,08 rad |
+| Sobreposição | 0,16–0,34 |
+| Abertura | 64–76° do eixo |
+| Tubo | raio 0,055–0,078 · fusão 0,16–0,24 |
+| Estames | 5–10, comprimento 0,88–1,14, curvados, com antera |
+| Pistilo | 1,14–1,4 vezes o estame, mais longo |
+| Sépalas | 0,22–0,32 do comprimento da pétala |
+| Padrões | sólida, listra, flake, fukurin, mancha na garganta, pontilhado |
+
+Cada árvore guarda quatro variantes de forma. Cor e padrão são por flor. A abertura (0 botão fechado, cálice visível; 1 flor aberta com estames estendidos) segue a idade no fim da linha do tempo, ou o botão **Ver florescer**, ou `?bloom=` / `?florescer`. As flores da mesma copa abrem com um pequeno atraso em volta do domo.
 
 ## Aceite
 
 Conferido nesta implementação:
 
 - As 12 seeds moyogi acima caem nas faixas da tabela.
-- `node scripts/compare-mass.mjs` mantém a azaleia acima do `main` em base, volume, folhagem e galhos (a folhagem subiu porque a flor passou a ser instância ancorada, e o piso de 90% continua folgado).
+- `node scripts/compare-mass.mjs` mantém a azaleia no mesmo nível do `main` em base, volume, folhagem e galhos. Cada flor conta como as 5 pétalas e o centro antigos, então a troca de malha não muda a massa.
 - `node scripts/check-realism.mjs --seeds 50` cobre os quatro estilos. Órfão, botânica, cano, carga, vaso, junta e solo têm de ficar em zero.
 - A grade de 12 seeds e o lado a lado com a Asahi-no-izumi acompanham o PR.
 
@@ -81,7 +104,8 @@ Conferido nesta implementação:
 Pendente. Limitações conhecidas, para a revisão e não como desculpa:
 
 - A foto de referência é uma árvore aberta e inclinada. O moyogi do modelo é o domo pedido na ficha. O lado a lado compara flor, folha, casca e a segunda cor, não a silhueta.
-- A listra é pétala sim, pétala não, não uma faixa desenhada no meio da pétala.
-- A cápsula não é modelada.
+- A listra, o flake, o fukurin, a mancha e o pontilhado são pintados na pétala. A garganta ainda mostra um pouco da malha onde as pétalas se encontram.
+- O sombreamento de pétala é uma aproximação de translucidez (luz que atravessa e um mínimo de cor), não transmissão física.
+- No jardim a flor é a malha lod: pétala com poucos triângulos e sem estames, para o quadro ficar perto do main. A árvore isolada usa a malha média. O estúdio de uma flor e as fotos de perto usam a malha cheia.
+- A cápsula continua de fora. O modo clássico ainda emite uma flor por símbolo `E`.
 - Nos estilos que não são o tradicional, o axioma é o do estilo; as flores continuam só na ponta viva, mas o contorno deixa de ser o domo do moyogi.
-- O modo clássico (`cresc=classico`) desenha uma flor por símbolo `E` da gramática. O caminho do produto é o simulado.

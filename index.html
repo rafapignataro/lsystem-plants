@@ -91,6 +91,7 @@
   <label class="l" for="growth">Idade da planta <span id="gval"></span></label>
   <input id="growth" type="range" min="0" max="1" step="0.001" value="1">
   <div class="row"><button id="replay">▶ Animar crescimento (muda → bonsai)</button></div>
+  <div class="row"><button id="bloom">🌸 Ver florescer</button></div>
   <div class="toggles">
     <label><input type="checkbox" id="rotate" checked> Auto-rotação</label>
     <label><input type="checkbox" id="wind" checked> Vento</label>
@@ -149,6 +150,7 @@ import {
   buildSkeletonPackage, deserializeInst, serializeInst, unpackWorkerPayload,
 } from './lsystem-core.mjs';
 import { STYLES, FRONT_VIEW, resolveStyle, enforceDesignRadii, measureDesign, designOf } from './style-engine.mjs';
+import { addFlowerMeshes, flowerBook, representFlower } from './flower-engine.mjs';
 
 const hsl = (h, s, l) => new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, THREE.MathUtils.clamp(s, 0, 1), THREE.MathUtils.clamp(l, 0, 1));
 
@@ -423,6 +425,7 @@ let activeGenome = null, genomeOverlay = null, genomeApply = false;
 const SHARED = {
   uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 },
   uWindDir: { value: new THREE.Vector3(1, 0, 0) }, uWindStr: { value: 1 },
+  uForceBloom: { value: -1 }, uSunDir: { value: new THREE.Vector3(0.4, 0.75, 0.45).normalize() },
 };
 const SWAY = /* glsl */`
 uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH; uniform float uTend;
@@ -974,7 +977,15 @@ function assemblePlant(pkg) {
   }
   let nInst = 0;
   const lodS = opts.lod ? 0.7 : 1;
-  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags, W.lod, lodS)); nInst += inst[k].length; }
+  for (const k in inst) {
+    if (!inst[k].length) continue;
+    if (k === 'flower') {
+      nInst += addFlowerMeshes(THREE, group, inst[k], P._flowerBook, opts.lod ? 'lod' : 'mid', { shared: SHARED, plant: U });
+      continue;
+    }
+    group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags, W.lod, lodS));
+    nInst += inst[k].length;
+  }
   const scale = sp.height / Math.max(rawH, rawW * 0.75);
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, oy, -cz);
@@ -1196,7 +1207,9 @@ if (SHOT) {
   composer.setPixelRatio(SHOT_HI ? 1.5 : 0.55);
 }
 
+let themeName = 'day';
 function setTheme(name) {
+  themeName = name;
   const t = THEMES[name] || THEMES.day;
   scene.background = t.bg; scene.fog = new THREE.Fog(t.fog, 30, 160);
   ground.material.color.set(t.ground); soil.material.color.set(t.soil);
@@ -1283,7 +1296,8 @@ function bonsaiPhrase(n = ALL.length) {
   const sub = $('subline');
   if (sub) sub.textContent = `POC v8 · junções, ambiente, genoma e folhagem · ${ALL.length} ${ALL.length === 1 ? 'bonsai' : 'bonsais'}`;
 })();
-let plants = [], mode = 'single', anim = null, labels = [];
+let plants = [], mode = 'single', anim = null, bloomAnim = null, labels = [];
+let flowerStudio = null;
 let growMode = 'sim'; // v7: 'sim' (simulado) | 'ls' (L-System clássico, igual à v6)
 function setGrowMode(m) {
   growMode = m; $('gm-sim').classList.toggle('on', m === 'sim'); $('gm-ls').classList.toggle('on', m === 'ls');
@@ -1327,7 +1341,12 @@ function writeHash() {
   const next = url.pathname + url.search + url.hash;
   if (location.pathname + location.search + location.hash !== next) history.replaceState(null, '', next);
 }
+function syncSunUniform() {
+  const d = envSunDir(ENV);
+  SHARED.uSunDir.value.set(d[0], d[1], d[2]);
+}
 function syncEnvUniforms() {
+  syncSunUniform();
   const wd = envWindDir(ENV); SHARED.uWindDir.value.set(wd[0], wd[1], wd[2]);
   SHARED.uWindStr.value = ($('wind').checked ? 1 : 0) * (ENV.windStr ?? 1);
   $('windV').textContent = ENV.windStr.toFixed(2); $('wazV').textContent = Math.round(ENV.windAz) + '°';
@@ -1335,6 +1354,7 @@ function syncEnvUniforms() {
 }
 function applySunFromEnv(center, rad) {
   const d = envSunDir(ENV);
+  SHARED.uSunDir.value.set(d[0], d[1], d[2]);
   sun.position.copy(center).add(new V3(d[0], d[1], d[2]).multiplyScalar(rad * 1.8));
   sun.target.position.copy(center);
   const sc = sun.shadow.camera; sc.updateProjectionMatrix();
@@ -1455,7 +1475,32 @@ async function generate({ animate = true } = {}) {
   $('busy').style.display = 'none';
 }
 
-function startGrowth() { anim = { t0: performance.now(), dur: 7000 }; SHARED.uGrowth.value = 0; }
+function startGrowth() {
+  anim = { t0: performance.now(), dur: 7000 };
+  bloomAnim = null;
+  SHARED.uForceBloom.value = -1;
+  SHARED.uGrowth.value = 0;
+  const b = $('bloom');
+  if (b) b.textContent = '🌸 Ver florescer';
+}
+function startBloom() {
+  anim = null;
+  SHARED.uGrowth.value = 1;
+  syncSlider();
+  bloomAnim = { t0: performance.now(), dur: 5600 };
+  SHARED.uForceBloom.value = 0;
+  const b = $('bloom');
+  if (b) b.textContent = '🌸 Florescendo…';
+}
+function setBloom(v) {
+  anim = null;
+  bloomAnim = null;
+  SHARED.uGrowth.value = 1;
+  SHARED.uForceBloom.value = v;
+  syncSlider();
+  const b = $('bloom');
+  if (b) b.textContent = '🌸 Ver florescer';
+}
 function syncSlider() {
   ui.growth.value = SHARED.uGrowth.value;
   const pl = mode === 'single' && plants[0], g = SHARED.uGrowth.value;
@@ -1484,7 +1529,16 @@ ui.style.onchange = () => {
 };
 $('garden').onclick = () => { setMode(mode === 'garden' ? 'single' : 'garden'); generate(); };
 $('replay').onclick = () => startGrowth();
-ui.growth.oninput = () => { anim = null; SHARED.uGrowth.value = +ui.growth.value; syncSlider(); };
+ui.growth.oninput = () => {
+  anim = null;
+  bloomAnim = null;
+  SHARED.uForceBloom.value = -1;
+  SHARED.uGrowth.value = +ui.growth.value;
+  const b = $('bloom');
+  if (b) b.textContent = '🌸 Ver florescer';
+  syncSlider();
+};
+$('bloom').onclick = () => startBloom();
 $('rotate').onchange = (e) => controls.autoRotate = e.target.checked;
 $('wind').onchange = (e) => { SHARED.uWind.value = e.target.checked ? 1 : 0; syncEnvUniforms(); };
 function renderGenes(g) {
@@ -1580,7 +1634,11 @@ function init() {
   fillStyles(ui.species.value, h.style);
   setGrowMode(h.cresc); // espécie removida ou desconhecida cai no primeiro bonsai
   const q = new URLSearchParams(location.search);
+  const bloomArg = q.has('bloom') ? THREE.MathUtils.clamp(+q.get('bloom'), 0, 1.4) : null;
+  const playBloom = q.has('florescer');
   if (q.has('age')) { generate({ animate: false }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
+  else if (bloomArg != null) { generate({ animate: false }).then(() => setBloom(bloomArg)); }
+  else if (playBloom) { generate({ animate: false }).then(() => startBloom()); }
   else if (q.has('nogrow')) { generate({ animate: false }); } else generate();
   if (q.has('norotate')) { controls.autoRotate = false; $('rotate').checked = false; }
 }
@@ -1589,7 +1647,7 @@ const clock = new THREE.Clock();
 const tmpV = new V3();
 let shotHold = false;
 function loop() {
-  if (shotHold) return;
+  if (shotHold || window.__lsysHold) return;
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
   SHARED.uTime.value += dt;
@@ -1597,6 +1655,15 @@ function loop() {
     const k = Math.min((performance.now() - anim.t0) / anim.dur, 1);
     SHARED.uGrowth.value = 1 - Math.pow(1 - k, 1.6);
     syncSlider(); if (k >= 1) anim = null;
+  }
+  if (bloomAnim) {
+    const k = Math.min((performance.now() - bloomAnim.t0) / bloomAnim.dur, 1);
+    SHARED.uForceBloom.value = k;
+    if (k >= 1) {
+      bloomAnim = null;
+      const b = $('bloom');
+      if (b) b.textContent = '🌸 Ver florescer';
+    }
   }
   const ageChanged = plants.some(pl => pl.lastAge !== SHARED.uGrowth.value);
   for (const pl of plants) pl.update(SHARED.uGrowth.value);
@@ -1681,7 +1748,7 @@ function aimFlower() {
   if (!pl) return null;
   pl.object.updateMatrixWorld(true);
   let mesh = null;
-  pl.object.traverse((o) => { if (o.isInstancedMesh && o.userData.kind === 'petal' && o.count > (mesh?.count || 0)) mesh = o; });
+  pl.object.traverse((o) => { if (o.isInstancedMesh && (o.userData.kind === 'flower' || o.userData.kind === 'petal') && o.count > (mesh?.count || 0)) mesh = o; });
   if (!mesh) return null;
   const mat = new THREE.Matrix4();
   const p = new THREE.Vector3();
@@ -1711,7 +1778,129 @@ function aimFlower() {
   renderer.render(scene, camera);
   return { x: best.x, y: best.y, z: best.z };
 }
-window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle, measureDesign, designOf, camera, controls, prepShot, aimFlower };
+function aimCanopy() {
+  shotHold = true;
+  sun.castShadow = false;
+  bloom.enabled = false;
+  const pl = plants[0];
+  if (!pl) return null;
+  const box = pl.box;
+  const size = box.getSize(new V3());
+  const target = new V3((box.min.x + box.max.x) / 2, box.min.y + size.y * 0.7, (box.min.z + box.max.z) / 2);
+  camera.fov = 30;
+  camera.near = 0.02;
+  camera.position.set(target.x + size.x * 0.16, target.y + size.y * 0.28, box.max.z + size.z * 0.85);
+  controls.target.copy(target);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+  controls.update();
+  renderer.setPixelRatio(1.25);
+  renderer.setSize(innerWidth, innerHeight, false);
+  renderer.render(scene, camera);
+  return { x: target.x, y: target.y, z: target.z };
+}
+function clearFlowerStudio() {
+  if (!flowerStudio) return;
+  if (flowerStudio.userData.restore) flowerStudio.userData.restore();
+  flowerStudio.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  flowerStudio.removeFromParent();
+  flowerStudio = null;
+  follow = null;
+}
+function showFlowerStudio(items, bloomValue = 1) {
+  clearFlowerStudio();
+  for (const pl of plants) pl.object.visible = false;
+  if ($('caption')) $('caption').style.display = 'none';
+  $('panel').classList.add('hidden');
+  $('panel').style.display = 'none';
+  if ($('toggle')) $('toggle').style.display = 'none';
+  applyViewOffset();
+  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(items.length))));
+  const rows = Math.ceil(items.length / cols);
+  flowerStudio = new THREE.Group();
+  const gap = 2.7;
+  items.forEach((it, i) => {
+    const P = it.P || SPECIES.azaleia.params(new Rand(`${it.seed}::azaleia::params`));
+    const book = flowerBook('satsuki', it.seed, P);
+    const rep = it.represent === false ? null : representFlower(book, 0);
+    const pick = rep || representFlower(book, i);
+    const variant = it.variant != null ? it.variant : pick.variant;
+    const holder = new THREE.Group();
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    holder.position.set((col - (cols - 1) / 2) * gap, 0, (row - (rows - 1) / 2) * gap);
+    const twig = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.022, 0.36, 8),
+      new THREE.MeshStandardMaterial({ color: 0x6d4a38, roughness: 0.82 }),
+    );
+    twig.position.y = -0.16;
+    holder.add(twig);
+    const inst = [{
+      p: { x: 0, y: 0, z: 0 },
+      y: { x: 0, y: 1, z: 0 },
+      z: { x: 1, y: 0, z: 0 },
+      s: 1,
+      life: [0, 1e9],
+      ...pick,
+      variant,
+    }];
+    addFlowerMeshes(THREE, holder, inst, book, 'hi', {
+      shared: SHARED,
+      plant: { uTend: { value: 8 }, uH: { value: 2 } },
+    });
+    flowerStudio.add(holder);
+  });
+  scene.add(flowerStudio);
+  const prevTheme = themeName;
+  const prevGround = ground.visible;
+  const prevSoil = soil.visible;
+  const prevBloom = bloom.enabled;
+  setTheme('estudio');
+  ground.visible = false;
+  soil.visible = false;
+  bloom.enabled = false;
+  if ($('toggle')) $('toggle').style.visibility = 'hidden';
+  flowerStudio.userData.restore = () => {
+    setTheme(prevTheme);
+    ground.visible = prevGround;
+    soil.visible = prevSoil;
+    bloom.enabled = prevBloom;
+    if ($('toggle')) { $('toggle').style.visibility = ''; $('toggle').style.display = ''; }
+    $('panel').style.display = '';
+  };
+  setBloom(bloomValue);
+  const box = new THREE.Box3().setFromObject(flowerStudio);
+  frame(box, { pad: 1.28, ty: 0.46, dir: new V3(0.2, 0.78, 1) });
+  camera.near = 0.02;
+  camera.fov = 30;
+  camera.updateProjectionMatrix();
+  follow = null;
+  renderer.render(scene, camera);
+  return { cols, rows };
+}
+function frameFill() {
+  $('panel').classList.add('hidden');
+  $('panel').style.display = 'none';
+  if ($('caption')) $('caption').style.display = 'none';
+  if ($('toggle')) $('toggle').style.display = 'none';
+  applyViewOffset();
+  const pl = plants[0];
+  if (!pl) return null;
+  frame(pl.box, { pad: 1.04, ty: 0.48, dir: new V3(0.16, 0.28, 1) });
+  camera.fov = 26;
+  camera.near = 0.02;
+  camera.updateProjectionMatrix();
+  follow = null;
+  shotHold = true;
+  renderer.render(scene, camera);
+  return true;
+}
+function renderStill() {
+  for (const pl of plants) if (pl.object.visible) pl.update(SHARED.uGrowth.value);
+  controls.update();
+  renderer.render(scene, camera);
+}
+window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle, measureDesign, designOf, camera, controls, prepShot, aimFlower, aimCanopy, frameFill, setBloom, startBloom, showFlowerStudio, clearFlowerStudio, renderStill, flowerBook };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>

@@ -51,6 +51,10 @@ A espécie só segue para a revisão quando tudo isto é verdade:
 - uma grade de 12 seeds, de frente, em que cada árvore é plausível;
 - um lado a lado com uma foto de referência da ficha.
 
+## Flor, quando a espécie floresce
+
+Quem tem flor declara `flowerPreset` no registo da espécie, apontando para uma chave de `FLOWER_PRESETS` em `flower-engine.mjs`. O preset é que limita pétalas, verticilos, estames, pistilo, cálice e os padrões de cor ao que a planta faz. A seed só sorteia dentro dessa faixa. A malha nasce no fio principal a partir do livro (`P._flowerBook`); o worker só transporta o livro e o índice da variante. Sem `flowerPreset`, o caminho antigo (pétalas avulsas) continua. A flor conta como as peças que substitui em `compare-mass` (`FLOWER_EQ`) e entra no `check-realism` como as outras: presa à ponta, sem entrar no galho, e virada para fora e para cima.
+
 ## 5. Revisão do dono
 
 O dono vê a ficha, a grade e o lado a lado. Sem o aceite dele a espécie não entra no jardim como pronta. Ajuste fino de cor pode acontecer aqui. Mudança de hábito volta para a ficha.

@@ -13,13 +13,14 @@ import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { BONSAI, SPECIES, buildSkeletonPackage } from '../lsystem-core.mjs';
+import { auditFlower } from '../flower-engine.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const SURFACE_TOL = 0.01;
 const PIPE_SLACK = 1.002;
 const LOAD_MAX = 9000;
-const FOLIAGE = ['leaf', 'needles', 'petal', 'center', 'fruit'];
+const FOLIAGE = ['leaf', 'needles', 'petal', 'center', 'fruit', 'flower'];
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -238,7 +239,7 @@ export function assess(pkg, limit = 6) {
       for (const c of kids[i] || []) if (leafNodes.has(c)) return true;
       return false;
     };
-    for (const k of ['petal', 'center']) {
+    for (const k of ['petal', 'center', 'flower']) {
       for (const it of pkg.inst[k] || []) {
         if (!it?.p || !alive(it)) continue;
         const i = it.node | 0;
@@ -249,10 +250,22 @@ export function assess(pkg, limit = 6) {
         if (trunk.has(i) && kids[i].length > 0) note('botany', k, `flor no tronco nó ${i}`);
         if (!leafNear(i)) note('botany', k, `flor longe das folhas nó ${i}`);
         if (kids[i].length > 0) note('botany', k, `flor fora da ponta nó ${i}`);
+        if (k === 'flower' && it.y) {
+          const p = sk.PAR[i];
+          const tx = sk.X[i] - sk.X[p], ty = sk.Y[i] - sk.Y[p], tz = sk.Z[i] - sk.Z[p];
+          const L = Math.hypot(tx, ty, tz) || 1;
+          const dx = (tx / L) * 0.4, dy = 0.84, dz = (tz / L) * 0.4;
+          const dn = Math.hypot(dx, dy, dz) || 1;
+          const dot = (it.y.x * dx + it.y.y * dy + it.y.z * dz) / dn;
+          if (it.y.y < 0.55 || dot < 0.9) note('botany', k, `flor não segue o raminho nó ${i}`);
+        }
       }
     }
+    for (const g of pkg.P?._flowerBook?.variants || []) {
+      for (const msg of auditFlower(g)) note('botany', 'flower', msg);
+    }
   } else {
-    for (const k of ['petal', 'center', 'fruit']) {
+    for (const k of ['petal', 'center', 'fruit', 'flower']) {
       const n = (pkg.inst[k] || []).filter((it) => it?.p && alive(it)).length;
       if (n) note('botany', k, `${n} peças numa espécie sem essa estrutura`);
     }
