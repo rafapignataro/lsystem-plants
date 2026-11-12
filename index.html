@@ -235,8 +235,8 @@ const GEOMS = {
       return Math.pow(Math.sin(Math.PI * Math.pow(t, 0.78)), 0.55);
     },
   }),
-  azalea: () => sheet({ width: 0.34, fold: 0.1, curve: 0.08, profile: (u) => Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.92 + 0.04)), 0.7) * (1 - 0.08 * u), nu: 6, nv: 2 }),
-  azaleaPetal: () => sheet({ width: 0.36, fold: 0.015, curve: -0.04, cup: 0.52, profile: (u) => { const t = Math.min(1, u * 0.96 + 0.02); const throat = 0.16 + 0.84 * Math.pow(Math.min(1, t / 0.42), 0.75); const tip = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.9 + 0.05)), 0.4); return throat * (0.42 + 0.58 * tip); }, nu: 8, nv: 3 }),
+  azalea: () => sheet({ width: 0.46, fold: 0.02, curve: 0.02, cup: 0.06, profile: (u) => Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.9 + 0.05)), 0.65), nu: 10, nv: 4 }),
+  azaleaPetal: () => sheet({ width: 0.42, fold: 0.006, curve: 0.02, cup: 0.46, profile: (u) => { const t = Math.min(1, u * 0.94 + 0.03); const throat = 0.34 + 0.66 * Math.pow(Math.min(1, t / 0.4), 0.6); const tip = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.82 + 0.08)), 0.7); return throat * (0.62 + 0.38 * tip); }, nu: 12, nv: 5 }),
 };
 // folha palmada do bordo: leque de lobos pontudos em volta do pecíolo, levemente côncava (origem = pecíolo, eixo +y)
 function palmGeo(lobes) {
