@@ -227,26 +227,27 @@ juvenil: B → Z pequeno, sem flores
 
 ## 🌲 Bonsai de Pinheiro-Negro em Cascata (`pinheiro_negro`)
 
-**Ideia:** *Pinus thunbergii* em **kengai** (cascata plena). O tronco sobe pouco acima da terra, arqueia sobre a borda e cai ao lado do vaso, em zigue-zague suave, até **abaixo da base**. A casca é áspera, em placas cinza-escuras. As agulhas são longas, rígidas e verde-escuro, em almofadas ao longo da queda, com um ápice pequeno recuado acima do vaso. O vaso é hexagonal, fundo e sem esmalte, quase preto, e fica num suporte alto de madeira para a cascata ter para onde cair.
+**Ideia:** *Pinus thunbergii* em **kengai** (cascata plena). O tronco sobe pouco acima da terra, arqueia sobre a borda e cai ao lado do vaso, em zigue-zague suave, até **abaixo da base**, afinando da base à ponta. A casca é de placas finas, alongadas e irregulares, cinza-escuras, com fissuras escuras (tipo 4, só desta espécie). As agulhas formam tufos densos verde-escuro nas pontas dos galhos, com um ápice pequeno recuado acima do vaso. O vaso é hexagonal, fundo e sem esmalte, quase preto, e fica num suporte alto de madeira para a cascata ter para onde cair.
 
 ```
-ω : nebari × 5–7   /(az) F(rise) [ ápice recuado ] &(bend1) F &(bend2) F [ almofada do joelho ]
+ω : nebari curto × 5–7 (no solo)   /(az) F(rise) [ ápice recuado ] &(bend1) F &(bend2) F [ almofada do joelho ]
      ~(droop) $(pull) &(bend3) F C(0)     alvo (P.attractor) abaixo do vaso
 C(j) → _(0) +(±zig) &(abre/fecha) F(fall) [ almofada na parte de fora ] C(j+1)     (j = cascade → almofada da ponta)
 ```
 
-`_(0)` reorienta o referencial sem mudar a direção, então o `+` é um zigue-zague horizontal enquanto o tronco já cai. O passo par abre a queda e o ímpar fecha, e o conjunto permanece ao lado do vaso. `~` e `$` puxam o tronco para baixo, em direção ao alvo.
+O nebari desta espécie não usa o helper compartilhado: cada raiz é um segmento só, quase na horizontal e sobre o solo, com `Q` moderado, para ficar presa à terra e não se misturar com os galhos. `_(0)` reorienta o referencial sem mudar a direção, então o `+` é um zigue-zague horizontal enquanto o tronco já cai. O passo par abre a queda e o ímpar fecha, e o conjunto permanece ao lado do vaso. `~` e `$` puxam o tronco para baixo, em direção ao alvo. O `tube.bump` do tronco principal afina o raio ao longo do arco.
 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 45–100 |
 | `cascade` | 6 segmentos |
+| `baseWidth` | 0.13 |
 | `bend1` / `len2` | 52–58° · 0.7–0.82 (o arco que passa a borda) |
 | `zig` / `fall` | 12–18° · 0.52–0.62 |
 | `droop` | 0.03–0.06 |
-| `roots` | 5–7 |
-| `padR` / `padH` / `padN` | 0.22–0.3 · 0.055–0.08 · 22–30 |
+| `roots` / `rootW` | 5–7 · 3.4–5.2 |
+| `padR` / `padH` / `padN` | 0.28–0.36 · 0.045–0.07 · 48–62 |
 
 Vaso hexagonal fundo, sem esmalte, quase preto, sobre um suporte alto. Cenário `estudio`. O enquadramento inclui o que fica abaixo do vaso.
 
-**Crescimento simulado:** o andaime é o kengai inteiro. As almofadas brotam para dentro da nuvem clássica, inclusive abaixo do vaso. Um alvo (`P.attractor`) puxa a brotação para baixo em vez da colonização só para cima, e a poda de formação (a cada 3 anos) segura as almofadas. A raiz do nebari continua no vaso; a cascata não é tratada como raiz.
+**Crescimento simulado:** o andaime é o kengai inteiro: um tronco que desce em zigue-zague, com galhos laterais curtos e nivelados terminando em almofada. Os brotos novos são curtos e ficam dentro da almofada; a poda (a cada 2 anos) corta o que sai dela. A raiz do nebari continua no vaso; a cascata não é tratada como raiz.
