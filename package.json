@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/rafapignataro/lsystem-plants/issues"
   },
-  "homepage": "https://github.com/rafapignataro/lsystem-plants#readme"
+  "homepage": "https://github.com/rafapignataro/lsystem-plants#readme",
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
 }

@@ -194,20 +194,31 @@ const wordToString = (w, max = 600) => {
 const GRAV = new Vec3(0, -1, 0);
 const UPV = new Vec3(0, 1, 0);
 // funil de np pétalas (azaleia): miolo pequeno, garganta de satsuki
-function emitFunnel(add, rng, pos, H, s, openDeg, np, life, centerScale = 0.09) {
+function emitFunnel(add, rng, pos, H, s, openDeg, np, life, centerScale = 0.09, meta = null) {
   const Hn = (H.clone ? H.clone() : new V3(H.x, H.y, H.z)).normalize();
   const Ln = new V3().crossVectors(UPV, Hn); if (Ln.lengthSq() < 1e-6) Ln.set(1, 0, 0); Ln.normalize();
   const Un = new V3().crossVectors(Hn, Ln);
   const open = openDeg * DEG, off = rng.f() * Math.PI * 2;
+  const tag = (it, petal) => {
+    if (!meta) return it;
+    if (meta.node != null) it.node = meta.node;
+    if (meta.tip) it.tip = 1;
+    if (meta.spin != null) it.spin = meta.spin;
+    if (meta.stripe) it.stripe = 1;
+    if (meta.sport) it.sport = 1;
+    if (meta.sportH != null) it.sportH = meta.sportH;
+    if (petal != null) it.petal = petal;
+    return it;
+  };
   for (let i = 0; i < np; i++) {
     const ang = off + (i / np) * Math.PI * 2 + rng.jit(0.05);
     const rad = Ln.clone().multiplyScalar(Math.cos(ang)).addScaledVector(Un, Math.sin(ang));
     const t = Ln.clone().multiplyScalar(-Math.sin(ang)).addScaledVector(Un, Math.cos(ang));
     const o = open + rng.jit(0.045);
     const dir = Hn.clone().multiplyScalar(Math.cos(o)).addScaledVector(rad, Math.sin(o)).normalize();
-    add('petal', { p: pos.clone(), y: dir, z: new V3().crossVectors(dir, t).normalize(), s: s * (0.94 + rng.f() * 0.12), life, layer: 0 });
+    add('petal', tag({ p: pos.clone(), y: dir, z: new V3().crossVectors(dir, t).normalize(), s: s * (0.94 + rng.f() * 0.12), life, layer: 0 }, i));
   }
-  add('center', { p: pos.clone().addScaledVector(Hn, s * 0.03), y: Hn.clone(), z: Un.clone(), s: s * centerScale, life });
+  add('center', tag({ p: pos.clone().addScaledVector(Hn, s * 0.03), y: Hn.clone(), z: Un.clone(), s: s * centerScale, life }));
 }
 export function interpret(word, sp, P, rng, cap) {
   const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0], BOOST = [], TIPW = [], JIN = [];
@@ -332,21 +343,12 @@ export function interpret(word, sp, P, rng, cap) {
         st.H.normalize(); st.L.crossVectors(UPV, st.H).normalize(); st.U.crossVectors(st.H, st.L); break;
       }
       case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
-      case 'E': { // almofada de flores em funil (azaleia satsuki): n flores num domo à frente da ponta
-        if (cap) { if (cap.syms.E) cap.out.push({ node: st.node, c: 'E', p: m.p, d: [st.H.x, st.H.y, st.H.z] }); break; }
-        const rx = p ? p[0] : 0.22, ry = p && p[1] != null ? p[1] : rx * 0.7, kk = p && p[2] != null ? p[2] | 0 : 7, s = p && p[3] != null ? p[3] : 0.12;
+      case 'E': { // uma flor de funil na ponta do galho (a casca, não um volume)
+        if (cap && cap.syms.E) { cap.out.push({ node: st.node, c: 'E', p: m.p, d: [st.H.x, st.H.y, st.H.z] }); break; }
+        const s = p ? p[0] : (P.flowerSize || 0.04);
         const base = life(m), lf = P.bloomAt != null ? [Math.max(base[0], P.bloomAt), base[1]] : base;
-        const np = P.petals || 5, open = P.open || 52;
-        const hx = st.H.x, hy = st.H.y, hz = st.H.z;
-        for (let i = 0; i < kk; i++) {
-          const a = rng.f() * 6.2832, rad = Math.sqrt(0.2 + 0.8 * rng.f()), top = Math.sqrt(Math.max(1 - rad * rad, 0));
-          const pos = new V3(
-            st.pos.x + Math.cos(a) * rad * rx * 0.42 + hx * rx * 0.18,
-            st.pos.y + ry * (0.06 + top * (0.5 + 0.3 * rng.f())) + Math.max(hy, 0) * ry * 0.1,
-            st.pos.z + Math.sin(a) * rad * rx * 0.42 + hz * rx * 0.18);
-          const Hh = new V3(Math.cos(a) * rad * 0.8 + hx * 0.5, 0.38 + top * 0.85 + Math.max(hy, 0) * 0.25, Math.sin(a) * rad * 0.8 + hz * 0.5).normalize();
-          emitFunnel(add, rng, pos, Hh, s * (0.88 + rng.f() * 0.28), open + rng.jit(4), np, lf, 0.085);
-        }
+        const face = st.H.clone(); face.y += 0.55; face.normalize();
+        emitFunnel(add, rng, st.pos.clone(), face, s, P.open || 46, P.petals || 5, lf, 0.08, { tip: 1, spin: rng.f() * 6.28 });
         break;
       }
       default: if (cap && cap.syms[m.c]) cap.out.push({ node: st.node, c: m.c, p: m.p, d: [st.H.x, st.H.y, st.H.z] }); // v7: gemas do andaime da simulação
@@ -843,61 +845,78 @@ Object.assign(SPECIES, {
   azaleia: {
     name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 0.72, years: true, float: 0,
     family: 'flowering', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'han_kengai', 'kengai'],
-    desc: 'Rhododendron indicum: tronco curto, casca marrom-avermelhada com descamações finas, ramificação miúda e floração em funis de cinco pétalas (rosa, magenta, branca ou as três). O estilo tradicional é o moyogi.',
-    baseWidth: 0.058, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [1.9, 2.1], G: 0.7, tip: 0.007, ring: 0.35, share: 0.55 },
+    desc: 'Rhododendron indicum: tronco curto e grosso, casca marrom-avermelhada com descamações finas, ramificação miúda e flores grandes na ponta dos ramos, entre as folhas. O estilo tradicional é o moyogi.',
+    baseWidth: 0.066, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [2.35, 2.7], G: 0.62, tip: 0.0035, ring: 0.24, share: 0.7 },
     params(r) {
-      const palette = r.pick(['rosa', 'magenta', 'branco', 'mescla']);
+      const palette = r.pick(['rosa', 'rosa', 'magenta', 'rosa', 'mescla', 'branco']);
       const tone = palette === 'magenta' ? { h: r.range(312, 328), s: r.range(0.7, 0.84), l: r.range(0.46, 0.56) }
         : palette === 'branco' ? { h: r.range(350, 16), s: r.range(0.03, 0.07), l: r.range(0.9, 0.94) }
-        : { h: r.range(336, 350), s: r.range(0.58, 0.74), l: r.range(0.64, 0.74) };
-      return {
-        iterations: 5, years: r.int(18, 45), segs: r.int(4, 5), segLen: r.range(0.11, 0.14), curve: r.range(22, 32), cycles: r.range(0.75, 1.05), phase: r.range(0, 6.28), lean: r.range(-5, 5),
-        roots: r.int(5, 7), rootW: r.range(3.4, 5), branchLen: r.range(0.16, 0.24), bAngle: r.range(48, 62), split: r.range(28, 40), ratio: r.range(0.4, 0.48), cont: r.range(0.42, 0.5), lift: r.range(10, 16),
-        padR: r.range(0.22, 0.28), padH: r.range(0.11, 0.15), padN: r.int(10, 14), leafS: r.range(0.022, 0.03), leafH: r.range(118, 132), leafSat: r.range(0.38, 0.52), leafL: r.range(0.16, 0.24),
-        flR: r.range(0.2, 0.26), flH: r.range(0.12, 0.16), flN: r.int(12, 15), flowerSize: r.range(0.028, 0.038), open: r.range(40, 48), petals: 5,
-        palette, petalH: tone.h, petalS: tone.s, petalL: tone.l, pot: r.chance(0.5) ? 'redondo' : 'retangular', bloomAt: 5.7,
+        : { h: r.range(336, 348), s: r.range(0.62, 0.8), l: r.range(0.52, 0.62) };
+      const sportH = palette === 'branco' ? r.range(332, 348)
+        : palette === 'magenta' ? r.range(350, 12)
+          : palette === 'mescla' ? r.range(300, 330)
+            : r.range(300, 322);
+      const out = {
+        iterations: 5, years: r.int(18, 45), segs: 6, segLen: r.range(0.072, 0.086), curve: r.range(12, 20), cycles: r.range(0.85, 1.15), phase: r.range(0, 6.28), lean: r.range(-6, 6),
+        roots: r.int(5, 7), rootW: r.range(1.6, 2.4), branchLen: r.range(0.34, 0.46), bAngle: r.range(62, 74), split: r.range(28, 40), ratio: r.range(0.56, 0.62), cont: r.range(0.58, 0.64), lift: r.range(18, 28),
+        padR: r.range(0.16, 0.22), padH: r.range(0.08, 0.12), padN: r.int(8, 12), leafS: r.range(0.03, 0.04), leafH: r.range(128, 140), leafSat: r.range(0.42, 0.58), leafL: r.range(0.1, 0.15),
+        flR: r.range(0.05, 0.07), flH: r.range(0.04, 0.06), flN: r.int(2, 4), flowerSize: r.range(0.04, 0.052), open: r.range(36, 46), petals: 5,
+        palette, petalH: tone.h, petalS: tone.s, petalL: tone.l, sport: r.chance(0.62), stripe: r.chance(0.48), sportH,
+        pot: r.chance(0.55) ? 'redondo' : 'oval', bloomAt: 5.7,
       };
+      // A flor fica entre 1,35 e 1,62 da folha. O sorteio antigo (0,040–0,052) só escolhe o ponto da faixa, para a seed não mudar o tronco.
+      const u = (out.flowerSize - 0.04) / 0.012;
+      out.flowerSize = out.leafS * (1.35 + Math.min(1, Math.max(0, u)) * 0.27);
+      return out;
     },
-    show: [['years', 'Anos de formação'], ['segs', 'Segmentos do tronco'], ['curve', 'Curva do tronco (S)', '°'], ['roots', 'Raízes do nebari'], ['branchLen', 'Comprimento dos galhos'], ['bAngle', 'Abertura dos galhos', '°'], ['split', 'Ângulo dos ramos', '°'], ['flN', 'Flores por ponta'], ['palette', 'Paleta'], ['pot', 'Vaso']],
+    show: [['years', 'Anos de formação'], ['segs', 'Segmentos do tronco'], ['curve', 'Curva do tronco (S)', '°'], ['roots', 'Raízes do nebari'], ['branchLen', 'Comprimento dos galhos'], ['bAngle', 'Abertura dos galhos', '°'], ['split', 'Ângulo dos ramos', '°'], ['flowerSize', 'Tamanho da flor'], ['palette', 'Paleta'], ['pot', 'Vaso']],
     build(P) {
       const r = new Rand('azaleia-axioma::' + P.phase);
-      const bloom = (sc = 1) => `E(${n(P.flR * sc)},${n(P.flH * Math.sqrt(sc))},${Math.max(2, Math.round(P.flN * sc))},${n(P.flowerSize)})`;
       let roots = '';
-      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(8))})&(${n(96 + r.f() * 4)})F(${n(0.045 * (0.7 + r.f() * 0.35))})Q(${n(P.rootW * (0.45 + r.f() * 0.3))})]`;
-      let ax = `!(1)${roots}/(${n(P.lean * 5)})&(${n(P.lean)})`, yaw = r.f() * 360;
-      const start = 1;
+      for (let i = 0; i < P.roots; i++) roots += `[/(${n(i * 360 / P.roots + r.jit(8))})&(${n(88 + r.f() * 4)})F(${n(0.06 * (0.75 + r.f() * 0.4))})Q(${n(P.rootW * (0.55 + r.f() * 0.4))})]`;
+      let ax = `!(1)${roots}/(${n(P.lean * 4)})&(${n(P.lean)})`, yaw = r.f() * 360;
       for (let k = 0; k < P.segs; k++) {
         const bend = P.curve * Math.cos(6.2832 * P.cycles * k / P.segs + P.phase);
-        ax += `/(${n(8 + r.jit(10))})&(${n(bend * 1.35)})F(${n(P.segLen * 0.68 * (1 - 0.16 * k / P.segs))})`;
-        if (k >= start) {
-          const u = (k - start) / Math.max(P.segs - start, 1);
-          const dome = Math.sqrt(Math.max(0.12, 1 - Math.pow((u - 0.42) / 0.58, 2)));
-          const ang = 48 + (P.bAngle - 20) * (1 - u * 0.35);
-          const len = P.branchLen * (0.55 + 0.7 * dome);
-          yaw += 52 + r.jit(10);
-          ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})~(${n(-0.02)})B(${n(len)})]`;
-          ax += `[/(${n(yaw + 118 + r.jit(12))})&(${n(ang * 0.88 + r.jit(3))})~(${n(-0.015)})B(${n(len * (0.78 + r.f() * 0.1))})]`;
-          ax += `[/(${n(yaw + 230 + r.jit(10))})&(${n(ang * 0.8)})~(${n(-0.01)})B(${n(len * 0.66)})]`;
+        ax += `/(${n(r.jit(7))})&(${n(bend * 0.55)})F(${n(P.segLen * (1 - 0.16 * k / P.segs))})`;
+        if (k >= 1) {
+          const u = (k - 1) / Math.max(P.segs - 1, 1);
+          const lobe = 0.82 + 0.22 * (0.5 + 0.5 * Math.sin(k * 1.7 + P.phase));
+          const ang = P.bAngle * (1.02 - 0.22 * u);
+          const len = P.branchLen * lobe * (1.2 - 0.55 * u);
+          const nB = u > 0.72 ? 3 : 4;
+          for (let b = 0; b < nB; b++) {
+            yaw += 360 / nB + r.jit(8);
+            const sc = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(b * 2.2 + k + P.phase));
+            ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})B(${n(len * sc)})]`;
+          }
         }
       }
-      ax += `^(${n(10 + r.jit(4))})B(${n(P.branchLen * 0.42)})`;
+      ax += `^(${n(10 + r.jit(3))})B(${n(P.branchLen * 0.46)})`;
+      const twig = (rr) => {
+        const nTw = 7;
+        let o = `F(${n(0.012)})`;
+        for (let i = 0; i < nTw; i++) {
+          o += `[/(${n(i * 51.4 + rr.jit(8))})&(${n(18 + rr.f() * 22)})F(${n(0.032 + rr.f() * 0.02)})L(${n(P.leafS)})E(${n(P.flowerSize)})]`;
+        }
+        return o;
+      };
       return {
         axiom: ax,
         rules: {
           B: (p, rr) => {
             const s = p[0];
-            if (s < 0.12) return `F(${n(Math.max(s * 0.22, 0.014))})` + pad(P, 0.48) + bloom(1.15);
-            return `F(${n(s * 0.22)})` + pad(P, 0.32) + `[+(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.3)})B(${n(s * P.ratio)})]^(${n(P.lift * 0.5)})/(${n(rr.jit(12))})B(${n(s * P.cont)})`;
+            if (s < 0.1) return twig(rr);
+            return `F(${n(s * 0.36)})[+(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.22)})B(${n(s * P.ratio)})][-(${n(P.split + rr.jit(4))})^(${n(P.lift * 0.18)})B(${n(s * (P.ratio - 0.04))})]^(${n(P.lift * 0.32)})B(${n(s * P.cont)})`;
           },
         },
-        finalize: { B: () => pad(P, 0.42) + bloom(1.2) },
-        juvenile: { B: () => pad(P, 0.42) }, juvenileLife: 1.45,
+        finalize: { B: (_p, rr) => twig(rr) },
+        juvenile: { B: (_p, rr) => twig(rr) }, juvenileLife: 1.45,
         display: [
-          `ω : nebari × ${P.roots}   tronco curto em S { &(${n(P.curve)}°·cos) F [ /(lado ±) &(${n(P.bAngle)}°→mais fechado no topo) ~(−0.04) B ] } × ${P.segs}   ápice B`,
-          `B(s) → F(0.26s) Z [ +(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] [ −(${n(P.split)}°) ^ B(${n(P.ratio)}s) ] ^(${n(P.lift)}°) B(${n(P.cont)}s)      (s < 0.12 → almofada de folhas + almofada de flores)`,
-          `final: B → almofada de folhas + E(domo de funis pequenos)   ·   as flores só abrem depois de t = ${n(P.bloomAt)} (estágios finais)`,
-          `E = ${P.flN} flores pequenas em funil de 5 pétalas, agrupadas, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco na mesma planta)' : ''}, folhas verde-escuras entre elas`,
-          `vaso ${P.pot} de barro sem esmalte, com musgo`,
+          `ω : nebari × ${P.roots}   tronco curto e grosso em S { &(${n(P.curve)}°·cos) F } × ${P.segs}   galhos a partir do 2º segmento, em três, no contorno do domo`,
+          `B(s) → F(0.36s) [ +(split) ^ B(${n(P.ratio)}s) ] [ −(split) ^ B ] [ ^(lift) B(${n(P.cont)}s) ]   (s < 0.09 → leque de raminhos)`,
+          `ponta: F F L E — folha e uma flor de funil na casca da ponta, não num volume`,
+          `flor grande em relação à folha, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco)' : ''}${P.sport ? ', com segunda cor em parte das flores' : ''}${P.stripe ? ', pétalas listradas' : ''}`,
+          `as flores abrem depois de t = ${n(P.bloomAt)}`,
           yearsTxt(P),
         ],
       };
@@ -914,12 +933,12 @@ Object.assign(SPECIES, {
       const THREE = globalThis.THREE;
       if (!THREE) return null;
       if (kind === 'leaf') {
-        const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.82, metalness: 0 });
-        m.emissive = new THREE.Color(0x24381c); m.emissiveIntensity = 0.28; m.shadowSide = THREE.FrontSide; return m;
+        const m = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.26, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.16 });
+        m.emissive = new THREE.Color(0x1a2c14); m.emissiveIntensity = 0.16; m.shadowSide = THREE.FrontSide; return m;
       }
       if (kind === 'petal') {
-        const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.72, metalness: 0 });
-        m.emissive = new THREE.Color(0xfff7f8); m.emissiveIntensity = 0.18; m.shadowSide = THREE.FrontSide; return m;
+        const m = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.48, metalness: 0, clearcoat: 0.28, clearcoatRoughness: 0.32 });
+        m.emissive = new THREE.Color(0xffe4ea); m.emissiveIntensity = 0.04; m.shadowSide = THREE.FrontSide; return m;
       }
       if (kind === 'center') return new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.5, metalness: 0 });
       return null;
@@ -927,9 +946,17 @@ Object.assign(SPECIES, {
     bark: () => [hsl(10, 0.52, 0.26), hsl(14, 0.4, 0.32)],
     color(kind, it, P, r) {
       const jh = r.jit(1), js = r.f(), jl = r.f();
-      if (kind === 'leaf') return hsl(P.leafH + jh * 7, P.leafSat + (js - 0.5) * 0.1, P.leafL + (jl - 0.5) * 0.05);
+      if (kind === 'leaf') return hsl(P.leafH + jh * 6, P.leafSat + (js - 0.5) * 0.08, P.leafL + (jl - 0.5) * 0.03);
+      if (it.sport && (kind === 'petal' || kind === 'center')) {
+        const h = it.sportH ?? P.sportH ?? 318;
+        if (kind === 'center') return hsl(h, 0.4, 0.36);
+        return hsl(h + jh * 2, 0.6, 0.66);
+      }
       const pal = azaleaPal(P, it.p);
       if (kind === 'center') return pal.white ? hsl(46, 0.42, 0.7) : hsl(pal.h + 6, Math.min(1, pal.s * 0.85), pal.l * 0.38);
+      if (kind === 'petal' && it.stripe && ((it.petal | 0) % 2 === 1)) {
+        return hsl(pal.h, Math.max(0.04, pal.s * 0.16), Math.min(0.96, pal.l + 0.22));
+      }
       return hsl(pal.h + jh * 2.2, Math.min(1, pal.s + (js - 0.5) * 0.05), Math.min(0.95, pal.l + (jl - 0.5) * 0.04));
     },
     extra() { return null; },
@@ -1459,67 +1486,62 @@ const bonsaiSim = (every) => crownSim({
 for (const id of ['bordo', 'pinheiro_branco', 'cipreste', 'junipero']) SIMS[id] = (P, r, sp, ctx) => bonsaiSim(id === 'bordo' ? 2 : 3)(P, r, sp, ctx);
 SIMS.azaleia = (P, r, sp, ctx) => {
   const S = crownSim({
-    years: 24, ring: 0.4, dil: 0.08, markers: 6200, prune: { every: 3 }, pruneCell: 0.16, ahead: 0.55, deadK: 0.08,
-    about: 'moyogi da gramática; galhos curtos fecham um domo; almofadas de flores pequenas abrem só nos anos finais',
-    scaffold: (PP, def) => ({ axiom: def.axiom, rules: def.rules, iters: PP.iterations, seg: 0.22, time: (t) => t * 24 * 0.55 / (PP.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
-    cfg: (PP, cl) => ({ shadow: { vox: 0.28, q: 4, b: 1.2, a: 1, C: 4 }, rp: 0.28, dk: 0.07, cone: 1.15, nMax: () => 2, lambda: () => 0.48, len: () => 0.034, xi: () => 0.5, trop: () => 0.03, maxTurn: 0.55,
-      sample: (rr) => {
-        const pts = cl.pts; if (!pts.length) return null;
-        const low = cl.lowPts || (cl.lowPts = pts.filter((p) => p[1] < 0.05));
-        const pool = rr.f() < 0.5 && low.length ? low : pts;
-        const q = pool[Math.floor(rr.f() * pool.length)];
-        const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = 0.1 * Math.cbrt(rr.f());
-        return [q[0] + d * Math.sin(v) * Math.cos(u), q[1] + d * Math.cos(v), q[2] + d * Math.sin(v) * Math.sin(u), 24 * q[3] / (PP.iterations + 1) * 0.7];
-      },
-      phyllo: () => ({ type: 'alt', div: 137.5, angle: 48, p: 0.9 }), maxOrder: 6, maxIdle: 7,
-      leaf: { kind: cl.kind, per: () => 3, pitch: 34, pitchJ: 16, keep: () => 6, size: PP.leafS * 0.9 }, shedT: () => 0.05 }),
+    years: 24, ring: 0.4, dil: 0.06, markers: 2800, prune: { every: 3 }, pruneCell: 0.12, ahead: 0.5, deadK: 0.08,
+    about: 'tronco curto e grosso; o domo é feito de raminhos; folhas e flores nascem na casca da ponta',
+    scaffold: (PP, def) => ({ axiom: def.axiom, rules: def.rules, iters: PP.iterations, seg: 0.12, time: (t) => t * 24 * 0.55 / (PP.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }), E: () => null } }),
+    cfg: (PP, cl) => ({ shadow: { vox: 0.22, q: 3, b: 1.15, a: 1, C: 3.2 }, rp: 0.22, dk: 0.05, cone: 1.1, nMax: () => 1, lambda: () => 0.42, len: () => 0.026, xi: () => 0.35, trop: () => 0.02, maxTurn: 0.4,
+      phyllo: () => ({ type: 'alt', div: 137.5, angle: 42, p: 0.55 }), maxOrder: 5, maxIdle: 5,
+      leaf: { kind: 'leaf', per: () => 2, pitch: 40, pitchJ: 12, keep: () => 2, size: PP.leafS }, shedT: () => 0.08 }),
   })(P, r, sp, ctx);
   const bloom = S.cfg.years * 0.66;
   S.dress = (push, R, rng) => {
-    const live = [];
-    for (const l of R.leaves) if (l.t1 > 1e8 && l.y > 0.12) live.push(l);
-    if (live.length < 8) return;
-    let cx = 0, cz = 0, maxY = 0;
-    for (const l of live) { cx += l.x; cz += l.z; if (l.y > maxY) maxY = l.y; }
-    cx /= live.length; cz /= live.length;
-    let maxR = 0.001;
-    for (const l of live) maxR = Math.max(maxR, Math.hypot(l.x - cx, l.z - cz));
-    const outer = [];
-    for (const l of live) {
-      const shell = Math.hypot(l.x - cx, l.z - cz) / maxR, top = l.y / Math.max(maxY, 1e-3);
-      if ((shell > 0.16 || top > 0.38) && top > 0.16) outer.push(l);
-    }
-    if (!outer.length) return;
-    let cy = 0; for (const l of live) cy += l.y; cy /= live.length;
-    const AZ = 36, EL = 12, bins = new Array(AZ * EL);
-    for (const l of outer) {
-      const vx = l.x - cx, vy = l.y - cy, vz = l.z - cz, h = Math.hypot(vx, vz);
-      const az = Math.floor(((Math.atan2(vz, vx) + Math.PI) / (Math.PI * 2)) * AZ) % AZ;
-      const el = Math.max(0, Math.min(EL - 1, Math.floor(((vy / (Math.hypot(h, vy) || 1) + 1) * 0.5) * EL)));
-      const rad = vx * vx + vy * vy + vz * vz, b = az + el * AZ;
-      if (!bins[b] || bins[b].rad < rad) bins[b] = { l, rad };
-    }
-    const gap = Math.max(0.02, P.flowerSize * 0.62);
-    const gap2 = gap * gap;
-    const placed = [];
-    const put = (l) => {
-      for (const q of placed) { const dx = q.x - l.x, dy = q.y - l.y, dz = q.z - l.z; if (dx * dx + dy * dy + dz * dz < gap2) return; }
-      placed.push(l);
-      const dir = new V3(l.x - cx, 0.35 + 0.5 * (l.y / Math.max(maxY, 1e-3)), l.z - cz);
-      if (dir.lengthSq() < 1e-8) dir.set(0, 1, 0);
-      dir.normalize();
-      const side = new V3(-dir.z, 0, dir.x); if (side.lengthSq() < 1e-8) side.set(1, 0, 0); side.normalize();
-      const up = new V3().crossVectors(side, dir).normalize();
-      const nFl = 10 + (rng.f() * 3 | 0), rad = 0.048 + rng.f() * 0.02;
-      for (let k = 0; k < nFl; k++) {
-        const a = (k / nFl) * 6.2832 + rng.f() * 0.3, u = rng.f(), rr = rad * Math.sqrt(u), lift = rad * (0.25 + 0.85 * Math.sqrt(Math.max(0, 1 - u)));
-        const pos = new V3(l.x, l.y, l.z).addScaledVector(dir, -0.008 + lift * 0.2).addScaledVector(side, Math.cos(a) * rr).addScaledVector(up, Math.sin(a) * rr * 0.7 + lift * 0.35);
-        const face = dir.clone(); face.y += 0.62; face.normalize();
-        emitFunnel(push, rng, pos, face, P.flowerSize * (1.05 + rng.f() * 0.3), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.08);
+    const kids = new Int32Array(R.N);
+    for (let i = 1; i < R.N; i++) if (R.PAR[i] >= 0) kids[R.PAR[i]]++;
+    const tips = [];
+    for (let i = 1; i < R.N; i++) if (!kids[i] && R.Y[i] > 0.06 && !(R.TD && R.TD[i] < 1e8)) tips.push(i);
+    if (!tips.length) return;
+    let cx = 0, cy = 0, cz = 0;
+    for (const i of tips) { cx += R.X[i]; cy += R.Y[i]; cz += R.Z[i]; }
+    cx /= tips.length; cy /= tips.length; cz /= tips.length;
+    let maxD = 1e-4;
+    const dist = tips.map((i) => {
+      const d = Math.hypot(R.X[i] - cx, (R.Y[i] - cy) * 0.8, R.Z[i] - cz);
+      if (d > maxD) maxD = d;
+      return d;
+    });
+    const have = new Uint16Array(R.N);
+    for (const l of R.leaves) if (l.t1 > 1e8 && l.node > 0) have[l.node]++;
+    const per = Math.max(1, Math.min(2, Math.ceil(1500 / tips.length)));
+    tips.forEach((i, idx) => {
+      const p = R.PAR[i];
+      const dx = R.X[i] - R.X[p], dy = R.Y[i] - R.Y[p], dz = R.Z[i] - R.Z[p];
+      const L = Math.hypot(dx, dy, dz) || 1;
+      const ux = dx / L, uy = dy / L, uz = dz / L;
+      const shell = dist[idx] / maxD;
+      const want = shell > 0.55 ? 4 : shell > 0.28 ? 3 : 2;
+      for (let k = have[i] || 0; k < want; k++) {
+        const ang = idx * 0.71 + k * 2.094;
+        const back = k === want - 1 ? 0.96 : 0.68;
+        const pos = new V3(R.X[p] + dx * back, R.Y[p] + dy * back, R.Z[p] + dz * back);
+        const yDir = new V3(ux * 0.25 + Math.cos(ang) * 0.35, 0.78, uz * 0.25 + Math.sin(ang) * 0.35).normalize();
+        const axis = new V3(ux, uy, uz);
+        let zDir = new V3().crossVectors(yDir, axis);
+        if (zDir.lengthSq() < 1e-6) zDir = new V3(-uy, ux, 0);
+        zDir.normalize();
+        push('leaf', { p: pos, y: yDir, z: zDir, s: P.leafS * (0.86 + rng.f() * 0.28), life: [0.2, 1e9], node: i, spin: ang });
       }
-    };
-    for (const b of bins) if (b && placed.length < 520) put(b.l);
-    for (let i = 0; i < outer.length && placed.length < 520; i++) put(outer[i]);
+      const nFl = shell > 0.48 ? per : Math.max(2, per - 1);
+      for (let k = 0; k < nFl; k++) {
+        const ang = idx * 0.41 + k * (6.2832 / nFl);
+        const pos = new V3(R.X[i], R.Y[i], R.Z[i]);
+        const sport = !!(P.sport && ((idx * 17 + k * 5) % 10) < 4);
+        const stripe = !!(P.stripe && ((idx * 13 + k * 3) % 10) < 5);
+        const face = new V3(ux * 0.4 + Math.cos(ang) * 0.12, 0.84, uz * 0.4 + Math.sin(ang) * 0.12).normalize();
+        emitFunnel(push, rng, pos, face, P.flowerSize * (0.94 + rng.f() * 0.12), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.072, {
+          node: i, tip: 1, spin: ang, stripe, sport, sportH: P.sportH,
+        });
+      }
+    });
   };
   return S;
 };
@@ -1690,6 +1712,242 @@ export function deserializeInst(inst) {
   return out;
 }
 
+const LOAD_MAX = 9000;
+const MASS_KINDS = ['leaf', 'needles', 'fruit', 'center'];
+
+function potFrame(pot, x, z) {
+  const rot = pot.rot || 0;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  const dx = x - (pot.ox || 0);
+  const dz = z - (pot.oz || 0);
+  return [dx * c - dz * s, dx * s + dz * c];
+}
+
+function fromPotFrame(pot, lx, lz) {
+  const rot = pot.rot || 0;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  return [(pot.ox || 0) + lx * c + lz * s, (pot.oz || 0) - lx * s + lz * c];
+}
+
+/** Raízes que quase tocam o solo sentam na superfície. Um galho que sobe não entra aqui. */
+function plantSurfaceRoots(sk) {
+  const { N, PAR, Y } = sk;
+  const maxY = new Float64Array(N);
+  for (let i = 0; i < N; i++) maxY[i] = Y[i];
+  for (let i = N - 1; i >= 1; i--) {
+    const p = PAR[i];
+    if (p >= 0 && maxY[i] > maxY[p]) maxY[p] = maxY[i];
+  }
+  for (let i = 1; i < N; i++) {
+    if (maxY[i] > 0.18) continue;
+    if (Y[i] > 0 && Y[i] < 0.05) Y[i] = 0;
+  }
+}
+
+/** Tira madeira de dentro do vaso e da mesa. Raiz funda sobe para o solo; queda que entra no vaso sai pela lateral. */
+function liftOutOfSolids(sk, pot) {
+  if (!pot) return;
+  const a = Math.max(pot.a || 0.2, 1e-4);
+  const b = Math.max(pot.b || 0.2, 1e-4);
+  const sh = pot.stand ? (pot.tall ? Math.min(pot.h * 0.08, 0.1) : pot.h * 0.22) : 0;
+  const slabTop = pot.stand ? -pot.h : 0;
+  const slabBot = slabTop - sh;
+  const hx = pot.a * (pot.tall ? 1.08 : 1.3);
+  const hz = pot.b * (pot.tall ? 1.08 : 1.35);
+  for (let i = 1; i < sk.N; i++) {
+    const y = sk.Y[i];
+    const [lx, lz] = potFrame(pot, sk.X[i], sk.Z[i]);
+    const e = (lx / a) ** 2 + (lz / b) ** 2;
+    if (y < -0.03 && y > -pot.h - 0.02 && e < 0.9) {
+      if (y < -0.08) {
+        const k = Math.sqrt(1.12 / Math.max(e, 1e-6));
+        const w = fromPotFrame(pot, lx * k, lz * k);
+        sk.X[i] = w[0];
+        sk.Z[i] = w[1];
+      } else sk.Y[i] = -0.008;
+    }
+    if (!pot.stand) continue;
+    const dx = sk.X[i] - (pot.ox || 0);
+    const dz = sk.Z[i] - (pot.oz || 0);
+    if (sk.Y[i] < slabTop + 0.01 && sk.Y[i] > slabBot - 0.01 && Math.abs(dx) < hx && Math.abs(dz) < hz) {
+      const px = hx / Math.max(Math.abs(dx), 1e-4);
+      const pz = hz / Math.max(Math.abs(dz), 1e-4);
+      if (px < pz) sk.X[i] = (pot.ox || 0) + Math.sign(dx || 1) * (hx + 0.03);
+      else sk.Z[i] = (pot.oz || 0) + Math.sign(dz || 1) * (hz + 0.03);
+    }
+  }
+  const inCavity = (x, y, z) => {
+    if (y >= -0.03 || y < -pot.h - 0.02) return false;
+    const [lx, lz] = potFrame(pot, x, z);
+    return (lx / a) ** 2 + (lz / b) ** 2 < 0.9;
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 1; i < sk.N; i++) {
+      const p = sk.PAR[i];
+      if (!(p >= 0)) continue;
+      let hit = false;
+      for (const t of [0.35, 0.65]) {
+        if (inCavity(
+          sk.X[p] + (sk.X[i] - sk.X[p]) * t,
+          sk.Y[p] + (sk.Y[i] - sk.Y[p]) * t,
+          sk.Z[p] + (sk.Z[i] - sk.Z[p]) * t,
+        )) hit = true;
+      }
+      if (hit && sk.Y[i] > -pot.h) sk.Y[i] = -0.008;
+      if (!pot.stand) continue;
+      let slab = false;
+      for (const t of [0.35, 0.65]) {
+        const x = sk.X[p] + (sk.X[i] - sk.X[p]) * t;
+        const y = sk.Y[p] + (sk.Y[i] - sk.Y[p]) * t;
+        const z = sk.Z[p] + (sk.Z[i] - sk.Z[p]) * t;
+        const dx = x - (pot.ox || 0);
+        const dz = z - (pot.oz || 0);
+        if (y < slabTop + 0.012 && y > slabBot - 0.012 && Math.abs(dx) < hx - 0.01 && Math.abs(dz) < hz - 0.01) slab = true;
+      }
+      if (slab) {
+        const dx = sk.X[i] - (pot.ox || 0);
+        const dz = sk.Z[i] - (pot.oz || 0);
+        const L = Math.hypot(dx, dz) || 1;
+        sk.X[i] += (dx / L) * 0.06;
+        sk.Z[i] += (dz / L) * 0.06;
+      }
+    }
+  }
+}
+
+/** Pai pelo menos tão grosso quanto o filho, e grosso o bastante para a folhagem que sustenta. */
+function applyLoad(sk, rFull, rTube, inst) {
+  const { N, PAR } = sk;
+  const kids = Array.from({ length: N }, () => []);
+  for (let i = 1; i < N; i++) if (PAR[i] >= 0 && PAR[i] < N) kids[PAR[i]].push(i);
+  for (let i = 1; i < N; i++) {
+    const p = PAR[i];
+    if (rFull[i] > 0 && p > 0 && !(rFull[p] > 0)) {
+      rFull[i] = 0;
+      if (rTube) rTube[i] = 0;
+    }
+  }
+  const area = new Float64Array(N);
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) for (const it of inst[k] || []) {
+    if (it.life && it.life[1] < 1e6) continue;
+    let i = it.node | 0;
+    if (!(i > 0 && i < N)) continue;
+    if (!(rFull[i] > 0)) {
+      let a = i;
+      let guard = 0;
+      while (a > 0 && !(rFull[a] > 0) && guard++ < N) a = PAR[a];
+      if (a > 0) it.node = i = a;
+    }
+    if (MASS_KINDS.includes(k) && i > 0 && rFull[i] > 0) area[i] += (it.s || 0.02) ** 2;
+  }
+  for (let i = N - 1; i >= 1; i--) {
+    const p = PAR[i];
+    if (p >= 0) area[p] += area[i];
+  }
+  for (let i = N - 1; i >= 0; i--) {
+    let need = area[i] > 0 ? Math.sqrt(area[i] / (LOAD_MAX * 0.96)) : 0;
+    for (const c of kids[i]) if (rFull[c] > need) need = rFull[c];
+    if (need > rFull[i]) {
+      rFull[i] = need;
+      if (rTube && rTube[i] < need) rTube[i] = need;
+    }
+  }
+}
+
+function seatOnBark(sk, radii, inst) {
+  const { N, PAR, X, Y, Z } = sk;
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) {
+    const arr = inst[k];
+    if (!arr) continue;
+    for (let n = 0; n < arr.length; n++) {
+      const it = arr[n];
+      if (!it?.p) continue;
+      const i = it.node | 0;
+      if (!(i > 0 && i < N)) continue;
+      const p = PAR[i];
+      if (!(p >= 0 && p < N)) continue;
+      if (!(radii[i] > 0) || !(radii[p] > 0)) continue;
+      const ax = X[i] - X[p], ay = Y[i] - Y[p], az = Z[i] - Z[p];
+      const L = Math.hypot(ax, ay, az);
+      if (!(L > 1e-6)) continue;
+      const ux = ax / L, uy = ay / L, uz = az / L;
+      const vx = it.p.x - X[p], vy = it.p.y - Y[p], vz = it.p.z - Z[p];
+      let t = (vx * ux + vy * uy + vz * uz) / L;
+      if (it.tip) t = Math.max(0.72, Math.min(1, t));
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+      const cx = X[p] + ux * L * t;
+      const cy = Y[p] + uy * L * t;
+      const cz = Z[p] + uz * L * t;
+      let rx = it.p.x - cx, ry = it.p.y - cy, rz = it.p.z - cz;
+      const axial = rx * ux + ry * uy + rz * uz;
+      rx -= ux * axial; ry -= uy * axial; rz -= uz * axial;
+      let rl = Math.hypot(rx, ry, rz);
+      if (rl < 1e-5) {
+        let px = -uy, py = ux, pz = 0;
+        if (px * px + py * py + pz * pz < 0.04) { px = -uz; py = 0; pz = ux; }
+        const pl = Math.hypot(px, py, pz) || 1;
+        px /= pl; py /= pl; pz /= pl;
+        const qx = uy * pz - uz * py, qy = uz * px - ux * pz, qz = ux * py - uy * px;
+        const ang = it.spin != null ? it.spin : n * 2.399963;
+        const cs = Math.cos(ang), sn = Math.sin(ang);
+        rx = px * cs + qx * sn; ry = py * cs + qy * sn; rz = pz * cs + qz * sn;
+        rl = Math.hypot(rx, ry, rz) || 1;
+      }
+      const rad = Math.max(0, radii[p] * (1 - t) + radii[i] * t);
+      it.p.x = cx + (rx / rl) * rad;
+      it.p.y = cy + (ry / rl) * rad;
+      it.p.z = cz + (rz / rl) * rad;
+    }
+  }
+}
+
+function dropBuriedFoliage(sk, inst, pot) {
+  const { N, PAR, Y } = sk;
+  const root = new Uint8Array(N);
+  const kids = Array.from({ length: N }, () => []);
+  for (let i = 1; i < N; i++) if (PAR[i] >= 0) kids[PAR[i]].push(i);
+  for (const c of kids[0] || []) {
+    let maxY = Y[c];
+    const stack = [c];
+    const seen = [];
+    while (stack.length) {
+      const i = stack.pop();
+      seen.push(i);
+      if (Y[i] > maxY) maxY = Y[i];
+      for (const k of kids[i]) stack.push(k);
+    }
+    if (maxY < 0.22) for (const i of seen) root[i] = 1;
+  }
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) {
+    const arr = inst[k];
+    if (!arr) continue;
+    inst[k] = arr.filter((it) => {
+      if (!it?.p) return false;
+      const i = it.node | 0;
+      if (i > 0 && i < N && root[i]) return false;
+      if (it.p.y < -0.03 && pot) {
+        const [lx, lz] = potFrame(pot, it.p.x, it.p.z);
+        const e = (lx / Math.max(pot.a || 0.2, 1e-4)) ** 2 + (lz / Math.max(pot.b || 0.2, 1e-4)) ** 2;
+        if (e < 0.92) return false;
+      }
+      return true;
+    });
+  }
+}
+
+/** Sentar a folhagem na casca, fechar o cano e tirar a madeira de dentro do vaso. */
+function enforcePhysical(sk, rFull, rTube, inst, pot) {
+  if (!sk || !rFull || !inst) return;
+  plantSurfaceRoots(sk);
+  liftOutOfSolids(sk, pot);
+  applyLoad(sk, rFull, rTube, inst);
+  seatOnBark(sk, rFull, inst);
+  dropBuriedFoliage(sk, inst, pot);
+}
+
 /** Skeleton + params for assemblePlant (main thread adds THREE meshes). */
 export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, genomeState = null) {
   const ENV = { ...ENV_DEFAULT, ...env };
@@ -1769,6 +2027,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     const k = 1.12;
     for (let i = 0; i < sk.N; i++) { rFull[i] *= k; if (rTube[i]) rTube[i] *= k; }
   }
+  enforcePhysical(sk, rFull, rTube, inst, pot);
   const rules = measureDesign(sk, rFull, inst, design);
   const tags = sp.tags ? sp.tags(sk) : null;
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
