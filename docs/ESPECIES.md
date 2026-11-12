@@ -144,12 +144,12 @@ Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário 
 
 ## 🍃 Bonsai de Olmo Chinês (`olmo_chines`)
 
-**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — três `F` quase sem `&` nem `/` — e perto de um terço da altura se abre em três anéis curtos (externo, médio, interno) mais um líder. Cada galho sai em leque e, depois de um trecho reto, `~(-lift)` curva para o céu: o tropismo age a cada `F`, então vários segmentos curtos fecham um domo. A ramificação é dicotômica, com um terceiro ramo para cima de vez em quando, e termina em folhas serrilhadas pequenas e uma almofada miúda, arejada o bastante para o desenho dos ramos aparecer na borda.
+**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — quatro `F` quase sem `&` nem `/`, mais alto e com taper — e alarga no solo (nebari). A divisão não é um nó só: cada galho nasce um `F` curto acima do anterior, com colar na casca, em três faixas (externa, média, interna) mais um líder. Depois de um trecho reto, `~(-lift)` curva para o céu e vários segmentos curtos fecham o domo. A ramificação fina é mais densa e termina em folhas serrilhadas pequenas.
 
 ```
-ω : nebari × raízes   tronco reto F × 3
-     anel externo × 8 a &(outerA)   F(0.065)   anel médio × 7 a &(midA)   F(0.05)   anel interno × 5 a &(innerA)   líder
-     galho: ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
+ω : nebari × raízes   tronco reto F × 4
+     F(rise) galho externo × 4 a &(outerA)   F(rise) médio × 3   F(rise) interno × 2   líder
+     galho: F curto (colar) ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
 B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → folhas + Z pequena)
 ```
 
@@ -158,11 +158,12 @@ B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 20–55 |
-| `segLen` | 0.22–0.26 |
-| `spokesA` / `outerA` | 8 · 44–54° |
-| `arm` / `lift` | 1.22–1.42 · 0.20–0.28 |
-| `split` | 22–30° |
-| `padN` / `leafS` | 5–7 · 0.028–0.038 |
+| `segLen` | 0.24–0.28 (4 segmentos) |
+| `spokesA` / `outerA` | 4 · 56–66° |
+| `arm` / `lift` | 1.40–1.58 · 0.11–0.16 |
+| `rise` | 0.058–0.078 (passo entre as saídas) |
+| `split` | 24–32° |
+| `padN` / `leafS` | 10–13 · 0.020–0.028 |
 
 Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cenário `estudio`.
 
