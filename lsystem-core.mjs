@@ -3,6 +3,9 @@ import {
   ENV_DEFAULT, genomeFromSeed, mergeGenome, applyGenomeToPlant, applyGravitySag, clusterFoliage, deflectRoots,
   envSunDir, envWindDir, makeSunShade, phototropismBias, lightGradientAt,
 } from './v8-engine.mjs';
+import {
+  STYLES, resolveStyle, composeStyled, potSpec, applyFront, keepTrunkOutOfPot, scoreTree,
+} from './style-engine.mjs';
 
 export const DEG = Math.PI / 180;
 /** Jardim só de bonsais.
@@ -384,7 +387,8 @@ const yearsTxt = (P) => `idade = anos de formação: o slider vai de 0 a ${P.yea
 Object.assign(SPECIES, {
   bordo: {
     name: 'Bonsai de Bordo Japonês', emoji: '🍁', height: 5.2, theme: 'preto', leafKind: 'palm', padUp: 0.35, years: true, float: 0,
-    desc: 'Acer palmatum em estilo moyogi (ereto informal): tronco liso cinza-claro em curva de S, base levemente alargada, galhos longos e abertos com ramos finos e nuvens densas de folhas palmadas vermelhas, mais larga que alta.',
+    family: 'deciduous', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'chokkan'],
+    desc: 'Acer palmatum: casca lisa cinza-clara, entrenós médios, ramificação dicotômica aberta e dominância apical moderada. Folhas palmadas vermelhas, de 5 ou 7 lobos, em nuvens largas. O estilo tradicional é o moyogi.',
     baseWidth: 0.3, leafRoll: 0, bump: 0.02, wood: { leo: [2.2, 2.4], G: 1.0, tip: 0.035, ring: 0.45, share: 0.8 },
     params(r) {
       return {
@@ -424,16 +428,13 @@ Object.assign(SPECIES, {
     geom: (kind, P) => kind === 'leaf' ? GEOMS[P.lobes === 7 ? 'palm7' : 'palm']() : null,
     bark: (P) => [hsl(35, 0.05, P.barkL), hsl(90, 0.25, 0.4)],
     color(kind, it, P, r) { return hsl(P.leafH + r.jit(8) + (r.chance(0.12) ? 14 : 0), P.leafSat + r.jit(0.06), P.leafL + r.jit(0.06)); },
-    extra({ group, sk, P, rng }) {
-      const { R } = skExtent(sk), a = Math.max(R * 0.42, 0.8);
-      const pot = makePot(group, { a, b: a * 0.68, h: a * 0.26, n: 2.4, lip: 0.05, taper: 0.1, color: hsl(0, 0, 0.07), rough: 0.35, moss: 0.55 }, rng);
-      return { floor: pot.floor, points: pot.points };
-    },
+    extra() { return null; },
   },
 
   pinheiro_branco: {
     name: 'Bonsai de Pinheiro-Branco', emoji: '🌲', height: 5, theme: 'estudio', padKind: 'needles', padUp: 0.75, years: true, float: 0,
-    desc: 'Pinus parviflora: tronco maciço, torcido e nodoso, cinza, com raízes expostas na superfície (nebari); almofadas horizontais de tufos de agulhas verde-vivo formando uma copa em domo larga, e um galho comprido que cai em cascata para fora da borda do vaso, oval, raso e marrom-acinzentado, com terra e musgo.',
+    family: 'conifer', defaultStyle: 'moyogi', styles: ['moyogi', 'chokkan', 'shakan', 'han_kengai', 'kengai'],
+    desc: 'Pinus parviflora: casca em placas cinza, tronco vigoroso e nodoso, entrenós curtos e almofadas horizontais de agulhas. Dominância apical forte. O estilo tradicional deste jardim é o moyogi, com um galho longo em cascata.',
     baseWidth: 0.5, bump: 0.05, wood: { leo: [1.9, 2.1], G: 1.4, tip: 0.04, ring: 0.6, share: 1.2 },
     tube: { bump: (th, arc, g, root, P) => root ? 1 + P.gnarl * (0.55 * Math.sin(3 * th + 2.1 * arc + P.phase) + 0.45 * Math.sin(5 * th - 1.4 * arc)) * (0.45 + 0.55 * Math.exp(-arc / 1.6)) : 1 },
     params(r) {
@@ -477,16 +478,13 @@ Object.assign(SPECIES, {
     },
     bark: () => [hsl(30, 0.05, 0.45), hsl(80, 0.2, 0.38)],
     color(kind, it, P, r) { return hsl(P.needleH + r.jit(8), 0.55 + r.jit(0.08), 0.33 + r.jit(0.06)); },
-    extra({ group, sk, P, rng }) {
-      const { R } = skExtent(sk), a = Math.max(R * 0.56, 1);
-      const pot = makePot(group, { a, b: a * 0.66, h: a * 0.2, n: 2.2, lip: 0.06, taper: 0.08, foot: 0.12, color: hsl(25, 0.1, 0.2), rough: 0.8, moss: 0.7, mound: a * 0.07 }, rng);
-      return { floor: pot.floor, points: pot.points };
-    },
+    extra() { return null; },
   },
 
   cipreste: {
     name: 'Bonsai de Cipreste Hinoki', emoji: '🎋', height: 7, theme: 'terracota', leafKind: 'hinoki', padUp: 0.9, years: true, float: 0, fx: 'cipreste',
-    desc: 'Chamaecyparis obtusa em estilo chokkan (ereto formal): tronco reto e escuro com uma faixa de madeira morta branca (shari) na frente da parte baixa, andares de almofadas densas que alternam de lado e diminuem até o topo, e vaso redondo de terracota com musgo.',
+    family: 'conifer', defaultStyle: 'chokkan', styles: ['chokkan', 'moyogi', 'shakan'],
+    desc: 'Chamaecyparis obtusa: casca fibrosa escura, entrenós curtos, ramificação em andares e uma faixa de madeira morta (shari) na parte baixa do tronco. Folhas em escamas. O estilo tradicional é o chokkan.',
     baseWidth: 0.26, leafRoll: 20, bump: 0.02, wood: { leo: [2.0, 2.2], G: 0.9, tip: 0.03, ring: 0.5, share: 0.8 },
     params(r) {
       return {
@@ -523,17 +521,18 @@ Object.assign(SPECIES, {
     },
     bark: () => [hsl(14, 0.3, 0.2), hsl(70, 0.2, 0.32)],
     color(kind, it, P, r) { return hsl(P.leafH + r.jit(8), 0.55 + r.jit(0.08), 0.31 + r.jit(0.05)); },
-    extra({ group, sk, P, rng, fxU }) {
-      const { H, R } = skExtent(sk), a = Math.max(H * 0.15, R * 0.3, 0.6);
+    extra({ sk, P, fxU }) {
+      let H = 0;
+      for (let i = 0; i < sk.N; i++) if (sk.Y[i] > H) H = sk.Y[i];
       fxU.uFx.value.set(P.shari, P.shariTwist, H * P.shariH, P.phase); fxU.uFx2.value.set(0.3, 0, 7, 0.18);
-      const pot = makePot(group, { a, b: a, h: a * 0.85, n: 2, lip: 0.07, taper: -0.02, bulge: 0.08, foot: 0.06, color: hsl(17, 0.55, 0.42), rough: 0.9, moss: 0.65, mound: a * 0.08 }, rng);
-      return { floor: pot.floor, points: pot.points };
+      return null;
     },
   },
 
   junipero: {
     name: 'Bonsai de Junípero', emoji: '🌀', height: 6, theme: 'zen', padKind: 'needles', padUp: 0.7, years: true, float: 0, fx: 'junipero',
-    desc: 'Juniperus: tronco que torce de forma dramática, com grandes faixas de madeira morta branca/prateada em espiral e uma veia viva fina marrom-avermelhada; copa densa verde-escura inclinada para um lado, alguns galhos mortos (jin), vaso retangular marrom sobre uma mesinha de madeira escura.',
+    family: 'conifer', defaultStyle: 'moyogi', styles: ['moyogi', 'chokkan', 'shakan', 'han_kengai', 'kengai'],
+    desc: 'Juniperus: casca fibrosa com grandes faixas de madeira morta e veia viva, entrenós médios, jin e copa densa de agulhas verde-escuras. Vigor alto. O estilo tradicional deste jardim é o moyogi dramático.',
     baseWidth: 0.42, bump: 0.03, wood: { leo: [1.9, 2.1], G: 1.3, tip: 0.035, ring: 0.6, share: 1.0 },
     tube: { bump: (th, arc, g, root, P) => root ? 1 + 0.16 * Math.sin(3 * (th - P.twist * arc - P.phase)) * Math.exp(-arc / 4) + 0.05 * Math.sin(7 * th - 2 * arc) : 1 },
     params(r) {
@@ -580,16 +579,15 @@ Object.assign(SPECIES, {
     tags(sk) { const t = new Float32Array(sk.N); if (sk.jin) for (const i of sk.jin) t[i] = 1; return t; },
     bark: () => [hsl(14, 0.45, 0.27), hsl(60, 0.2, 0.32)],
     color(kind, it, P, r) { return hsl(P.needleH + r.jit(8), 0.42 + r.jit(0.08), 0.2 + r.jit(0.05)); },
-    extra({ group, sk, P, rng, fxU }) {
-      const { R } = skExtent(sk), a = Math.max(R * 0.45, 0.9);
+    extra({ P, fxU }) {
       fxU.uFx.value.set(P.dead, P.twist, 1e4, P.phase); fxU.uFx2.value.set(0.22, 0, 6, 0.12);
-      const pot = makePot(group, { a, b: a * 0.62, h: a * 0.32, n: 7, lip: 0.04, taper: 0.05, foot: 0.1, color: hsl(22, 0.4, 0.27), rough: 0.85, moss: 0.5, stand: hsl(20, 0.3, 0.09) }, rng);
-      return { floor: pot.floor, points: pot.points };
+      return null;
     },
   },
   olmo_chines: {
     name: 'Bonsai de Olmo Chinês', emoji: '🍃', height: 5.6, theme: 'estudio', leafKind: 'elm', padUp: 0.5, years: true, float: 0, fx: 'olmo',
-    desc: 'Ulmus parvifolia em estilo hokidachi (vassoura): tronco reto com casca que descasca em manchas de cinza, laranja e bege; perto de um terço da altura ele se abre em muitos galhos que sobem e se espalham como uma vassoura invertida, com ramificação fina e um domo simétrico de folhas serrilhadas verde-claras, arejado o bastante para o desenho dos ramos aparecer na borda. Vaso oval raso, esmaltado, creme ou cinza-claro, com musgo.',
+    family: 'deciduous', defaultStyle: 'hokidachi', styles: ['hokidachi', 'chokkan', 'moyogi', 'shakan'],
+    desc: 'Ulmus parvifolia: casca que descasca em manchas de cinza, bege e laranja, entrenós curtos, ramificação fina e folhas serrilhadas. Dominância apical fraca na copa. O estilo tradicional é o hokidachi.',
     baseWidth: 0.115, leafRoll: 36, bump: 0.008, wood: { leo: [2.15, 2.35], G: 1.05, tip: 0.009, ring: 0.48, share: 0.9 },
     tube: {
       // o tronco não ramifica, então o raio de Leonardo é constante: o taper e o nebari vêm daqui
@@ -689,23 +687,17 @@ Object.assign(SPECIES, {
       const young = r.chance(0.24);
       return hsl(P.leafH + r.jit(7) + (young ? 10 : 0), (P.leafSat + r.jit(0.05)) * (young ? 0.85 : 1), P.leafL + r.jit(0.04) + (young ? 0.08 : 0));
     },
-    extra({ group, sk, P, rng, fxU }) {
-      const { R } = skExtent(sk), a = Math.max(R * 0.4, 1.02);
-      const cream = P.glaze < 0.62;
+    extra({ P, fxU }) {
       fxU.uFx.value.set(1.05 * P.barkMix, 0.62, 1, P.phase);
       fxU.uFx2.value.set(0.2, 0.5, 0.3, 0.06);
-      const pot = makePot(group, {
-        a, b: a * 0.72, h: a * 0.185, n: 2.2, lip: 0.055, taper: 0.05, foot: 0.04, bulge: 0.02,
-        color: cream ? hsl(36, 0.18, 0.84) : hsl(206, 0.05, 0.74),
-        rough: 0.18, metal: 0.08, moss: 0.74, mound: a * 0.05,
-      }, rng);
-      return { floor: pot.floor, points: pot.points };
+      return null;
     },
   },
   ficus: {
     name: 'Bonsai de Ficus', emoji: '🪴', height: 5.6, theme: 'estudio', leafKind: 'ficus', padUp: 0.84, years: true, float: 0, rootDrop: 1.05, noStones: true,
+    family: 'deciduous', defaultStyle: 'moyogi', styles: ['moyogi', 'chokkan', 'shakan', 'hokidachi'],
     leafRough: 0.26, leafCoat: 0.62, leafCoatRough: 0.18,
-    desc: 'Ficus retusa (figueira-ginseng) em estilo moyogi (ereto informal): tronco grosso e musculoso, de casca lisa cinza, com nebari forte e raízes aéreas que descem dos galhos baixos até o musgo; copa arredondada em almofadas densas de folhas ovais pequenas, verde-escuras e brilhantes, num vaso oval raso de esmalte azul-turquesa.',
+    desc: 'Ficus retusa: casca lisa cinza, tronco vigoroso, nebari forte e raízes aéreas. Folhas ovais pequenas, verde-escuras e brilhantes, entrenós médios. O estilo tradicional é o moyogi.',
     baseWidth: 0.24, leafRoll: 14, bump: 0.008, tubeMinSides: 22, potEllipse: { a: 1.05, b: 0.78 }, wood: { leo: [2.2, 2.4], G: 1.15, tip: 0.007, ring: 0.42, share: 0.62 },
     tube: {
       // horiz = |cos θ| é a lateral do tubo (Nn); sin θ é a vertical (Bn). Achatar = alargar os lados e baixar o dorso.
@@ -835,26 +827,12 @@ Object.assign(SPECIES, {
       const fresh = r.chance(0.12);
       return hsl(P.leafH + r.jit(4) + (fresh ? 8 : 0), (fresh ? 0.64 : P.leafSat) + r.jit(0.04), (fresh ? Math.min(0.32, P.leafL + 0.1) : P.leafL) + r.jit(0.015));
     },
-    extra({ group, sk, P, rng }) {
-      let rootR = 0, crownR = 0, H = 0;
-      for (let i = 0; i < sk.N; i++) {
-        const d = Math.hypot(sk.X[i], sk.Z[i]);
-        if (sk.Y[i] > H) H = sk.Y[i];
-        if (sk.Y[i] < 0.35) rootR = Math.max(rootR, d);
-        else if (sk.Y[i] > 0.7) crownR = Math.max(crownR, d);
-      }
-      const a = Math.max(rootR * 1.04, 0.72);
-      const pot = makePot(group, {
-        a, b: a * 0.72, h: Math.min(a * 0.2, 0.22), n: 2.15, lip: 0.05, taper: 0.03, bulge: 0.02, foot: 0.06,
-        color: hsl(P.potH, P.potS, P.potL), rough: 0.12, metal: 0.04, glaze: true, clearcoat: 1, clearcoatRough: 0.08,
-        moss: 0.88, mound: Math.min(a * 0.04, 0.06),
-      }, rng);
-      return { floor: pot.floor, points: pot.points };
-    },
+    extra() { return null; },
   },
   azaleia: {
     name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 2.4, years: true, float: 0,
-    desc: 'Rhododendron indicum em estilo moyogi (ereto informal): tronco curto e afinado, casca marrom-avermelhada levemente escamosa, ramificação fina que fecha uma copa em domo coberta de flores em funil de cinco pétalas — rosa, magenta ou brancas, e às vezes as três na mesma planta — com folhinhas verde-escuras aparecendo entre elas, num vaso de barro sem esmalte com musgo.',
+    family: 'flowering', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'han_kengai', 'kengai'],
+    desc: 'Rhododendron indicum: tronco curto, casca marrom-avermelhada com descamações finas, ramificação miúda e floração em funis de cinco pétalas (rosa, magenta, branca ou as três). O estilo tradicional é o moyogi.',
     baseWidth: 0.046, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [1.9, 2.1], G: 0.7, tip: 0.007, ring: 0.35, share: 0.55 },
     params(r) {
       const palette = r.pick(['rosa', 'magenta', 'branco', 'mescla']);
@@ -943,20 +921,12 @@ Object.assign(SPECIES, {
       if (kind === 'center') return pal.white ? hsl(46, 0.42, 0.7) : hsl(pal.h + 6, Math.min(1, pal.s * 0.85), pal.l * 0.38);
       return hsl(pal.h + jh * 2.2, Math.min(1, pal.s + (js - 0.5) * 0.05), Math.min(0.95, pal.l + (jl - 0.5) * 0.04));
     },
-    extra({ group, sk, P, rng }) {
-      const { R } = skExtent(sk);
-      const spread = Math.max(R * 2, 0.4), potW = spread * 2 / 3, round = P.pot === 'redondo', a = potW / 2;
-      const pot = globalThis.makePot(group, {
-        a, b: round ? a * 0.94 : a * 0.7, h: potW * (round ? 0.2 : 0.16), n: round ? 2 : 6.5,
-        lip: 0.04, taper: round ? 0.04 : 0.06, foot: 0.12, bulge: round ? 0.03 : 0,
-        color: hsl(18, 0.45, 0.23), rough: 0.95, moss: 0.75, mound: a * 0.1,
-      }, rng);
-      return { floor: pot.floor, points: pot.points };
-    },
+    extra() { return null; },
   },
   pinheiro_negro: {
-    name: 'Bonsai de Pinheiro-Negro em Cascata', emoji: '🌲', height: 6.4, theme: 'estudio', padKind: 'needles', padUp: 0.8, years: true, float: 0, below: true, stoneR: 0.48,
-    desc: 'Pinus thunbergii em kengai (cascata plena): o tronco sobe pouco, dobra na borda de um vaso hexagonal fundo e sem esmalte, quase preto, e desce em zigue-zague suave até abaixo da base do vaso, afinando da base à ponta. Casca em placas finas, alongadas e irregulares, cinza-escuras, com fissuras escuras. Tufos densos de agulhas rígidas verde-escuro nas pontas dos galhos, um ápice pequeno acima do vaso, e o vaso num suporte alto de madeira para a cascata ter para onde cair.',
+    name: 'Bonsai de Pinheiro-Negro', emoji: '🌲', height: 6.4, theme: 'estudio', padKind: 'needles', padUp: 0.8, years: true, float: 0, below: true, stoneR: 0.48,
+    family: 'conifer', defaultStyle: 'kengai', styles: ['kengai', 'han_kengai', 'chokkan', 'moyogi', 'shakan'],
+    desc: 'Pinus thunbergii: casca em placas finas e alongadas, cinza-escuras, agulhas rígidas verde-escuro e vigor alto, com nebari curto. O estilo tradicional deste jardim é o kengai.',
     baseWidth: 0.13, bump: 0.02, tubeMinSides: 16, wood: { leo: [2.05, 2.25], G: 0.95, tip: 0.05, ring: 0.42, share: 0.85 },
     tube: {
       bump: (th, arc, g, main, P, rad) => {
@@ -1030,31 +1000,35 @@ Object.assign(SPECIES, {
     },
     bark: () => [hsl(25, 0.06, 0.16), hsl(28, 0.05, 0.18)],
     color(kind, it, P, r) { return hsl(P.needleH + r.jit(4), 0.46 + r.jit(0.05), 0.11 + r.jit(0.025)); },
-    extra({ group, sk, inst, P, rng }) {
-      let minY = 0;
-      const touch = (y) => { if (y < minY) minY = y; };
-      for (let i = 0; i < sk.N; i++) touch(sk.Y[i]);
-      for (const k in inst) for (const it of inst[k]) touch(it.p.y);
-      const a = 0.86, h = a * 1.48;
-      const leg = Math.max(1.55, -Math.min(minY, -h - 0.4) - h + 0.48);
-      const phi = P.az * DEG;
-      const pot = makePot(group, {
-        a, b: a * 0.97, h, n: 2, sides: 6, lip: 0.07, taper: 0.05, foot: 0.05, rot: Math.PI / 2 - phi,
-        color: hsl(18, 0.2, 0.085), rough: 0.97, moss: 0.34, mound: a * 0.04,
-        stand: hsl(26, 0.46, 0.2), tall: true, leg,
-      }, rng);
+    extra({ group, P }) {
+      const pot = P._pot;
+      const a = pot?.a || 0.7;
+      const ox = pot?.ox || 0, oz = pot?.oz || 0;
+      const THREE = globalThis.THREE;
+      if (!THREE) return null;
       const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a554e, roughness: 1 });
       const rs = new Rand('pinheiro-negro-seixos::' + P.phase);
       for (let i = 0; i < 5; i++) {
-        const ang = rs.f() * 6.2832, rad = rs.range(0.1, a * 0.55), sr = rs.range(0.03, 0.065);
+        const ang = rs.f() * 6.2832, rad = rs.range(0.08, a * 0.58), sr = rs.range(0.03, 0.06);
         const s = new THREE.Mesh(new THREE.SphereGeometry(sr, 8, 6), stoneMat);
-        s.position.set(Math.cos(ang) * rad, sr * 0.22, Math.sin(ang) * rad);
+        s.position.set(ox + Math.cos(ang) * rad, sr * 0.22, oz + Math.sin(ang) * rad);
         s.scale.set(1, 0.58, 1); s.castShadow = s.receiveShadow = true; group.add(s);
       }
-      return { floor: pot.floor, points: pot.points };
+      return null;
     },
   },
 });
+for (const id of BONSAI) {
+  const sp = SPECIES[id];
+  if (!sp || sp._legacyBuild) continue;
+  const legacy = sp.build;
+  sp._legacyBuild = legacy;
+  sp.build = function buildWithStyle(P) {
+    const styleId = resolveStyle(sp, P && P._style);
+    if (!P || !P._style || styleId === sp.defaultStyle) return legacy.call(this, P);
+    return composeStyled(id, sp, P, styleId, legacy, Rand);
+  };
+}
 function azaleaPal(P, p) {
   const q = 4.2;
   let hsh = Math.imul(Math.round((p?.x || 0) * q), 73856093) ^ Math.imul(Math.round((p?.y || 0) * q), 19349663) ^ Math.imul(Math.round((p?.z || 0) * q), 83492791);
@@ -1441,7 +1415,10 @@ function crownSim(o) {
       sample: (rr) => { if (!pts.length) return null; const q = pts[Math.floor(rr.f() * pts.length)];
         const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1), d = dil * Math.cbrt(rr.f());
         const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v), z = q[2] + d * Math.sin(v) * Math.sin(u);
-        return y < 0.15 ? null : [x, y, z, yr(q[3]) * (o.ahead ?? 1)]; },
+        const lowOk = P._style === 'kengai' || P._style === 'han_kengai';
+        if (!lowOk && y < 0.15) return null;
+        if (lowOk && y < 0.22 && y > -0.4 && Math.hypot(x, z) < 0.55) return null;
+        return [x, y, z, yr(q[3]) * (o.ahead ?? 1)]; },
       markerYear: (p) => p[3],
       shadow: { vox: 0.55, q: 8, b: 1.1, a: 1, C: 1.5 },
       alpha: 2, nMax: () => 3, lambda: () => 0.55, xi: () => 0.4, trop: () => 0, len: () => 0.3,
@@ -1693,8 +1670,13 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   const t0 = performance.now();
   const sp = SPECIES[id];
   const P = sp.params(new Rand(`${seed}::${id}::params`));
+  const requested = opts && Object.prototype.hasOwnProperty.call(opts, 'style') ? opts.style : genomeOverlay?.estilo;
+  const styleId = resolveStyle(sp, requested);
+  P._style = styleId;
+  P._seed = seed;
   const applyGenes = !!(genomeState && genomeState.apply);
   const genome = mergeGenome(genomeFromSeed(seed, id, Rand), genomeOverlay);
+  genome.estilo = styleId;
   applyGenomeToPlant(P, null, null, genome, sp, applyGenes);
   const def = sp.build(P);
   const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P, ENV) : null;
@@ -1705,16 +1687,20 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   const tSk = performance.now();
   if (opts.lod && opts.cluster) clusterFoliage(inst);
   applyGravitySag(sk, ENV.gravity || 0);
+  const style = STYLES[styleId] || STYLES.moyogi;
+  applyFront(sk, inst, style);
+  if (style.keepsLowTrunk) sk.below = 1;
+  const pot = BONSAI.includes(id) ? potSpec({ id, styleId, sk, P, baseWidth: sp.baseWidth, seed, family: sp.family, Rand }) : null;
+  if (pot) keepTrunkOutOfPot(sk, inst, pot);
   const stones = [];
   if (!sp.noStones) {
     const rs = new Rand(`${seed}::${id}::stones`);
+    const limit = pot ? Math.min(pot.a, pot.b) * 0.78 : 1.2;
     for (let i = 0; i < 3; i++) {
-      const ang = rs.f() * Math.PI * 2, rad = rs.range(0.85, 1.7);
-      stones.push({ x: Math.cos(ang) * rad, z: Math.sin(ang) * rad, r: rs.range(0.1, 0.26) });
+      const ang = rs.f() * Math.PI * 2, rad = rs.range(limit * 0.28, limit * 0.82);
+      stones.push({ x: (pot?.ox || 0) + Math.cos(ang) * rad, z: (pot?.oz || 0) + Math.sin(ang) * rad, r: rs.range(0.08, 0.2) });
     }
   }
-  const pot = BONSAI.includes(id) ? (sp.potEllipse || { a: 0.7, b: 0.52 }) : null;
-  if (sp.below) sk.below = 1;
   deflectRoots(sk, stones, pot);
   const wr = new Rand(`${seed}::${id}::wood`);
   const lam = SIM && SIM.ring != null ? SIM.ring : sp.wood.ring ?? 0.5;
@@ -1758,6 +1744,8 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     tEnd,
     W,
     genome,
+    style: styleId,
+    score: scoreTree(sk, style),
     rFull: Float32Array.from(rFull),
     rTube: Float32Array.from(rTube),
     tags: tags ? Float32Array.from(tags) : null,
