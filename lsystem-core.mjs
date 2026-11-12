@@ -1713,7 +1713,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   const rng = new Rand(`${seed}::${id}::turtle`);
   let { sk, inst } = SIM || interpret(word, sp, P, rng);
   const tSk = performance.now();
-  if (opts.lod) clusterFoliage(inst);
+  if (opts.lod && opts.cluster) clusterFoliage(inst);
   applyGravitySag(sk, ENV.gravity || 0);
   const stones = [];
   const rs = new Rand(`${seed}::${id}::stones`);
