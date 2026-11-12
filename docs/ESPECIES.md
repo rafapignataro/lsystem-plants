@@ -29,7 +29,7 @@ Desde a v7 o padrão é o **crescimento simulado** (24 anos de formação, poda 
 
 Árvores **em miniatura e formadas por anos de poda**, cada uma num vaso. A forma não sai só de uma regra "natural" de crescimento: o axioma já desenha o **estilo** (a curva do tronco, os andares, a hélice), como um bonsaísta faria com arame, e as regras ramificam os galhos até virarem **almofadas de folhagem**. Cada espécie tem fluxos de RNG próprios (`seed::<id>::…`). Os ganchos estão em [ARQUITETURA §12](ARQUITETURA.md#12-bonsais-v6).
 
-Comum aos quatro:
+Comum aos bonsais:
 
 - **Nebari** (raízes de superfície): `nebari(r, k, len, w)` gera `k` cordões `[ /(360°/k·i ± jit) &(90°) F(len) /(±40°) +(±25°) F(len) Q(w) ]` que saem quase na horizontal da base. `Q(w)` dá um peso extra à ponta da raiz na regra de Leonardo, então as raízes ficam grossas e a base do tronco alarga (o raio da base continua sendo `baseWidth`).
 - **Almofada** `Z(rx, ry, n, s)`: `n` folhas/tufos de agulha distribuídos num domo achatado de raio `rx` e altura `ry`, viradas para cima (`padUp`). Cada folha nasce com um atraso aleatório de até 0,7 da vida do módulo, então a almofada "enche" aos poucos. `pad(P, k)` escala raio por `k`, altura por `√k` e número de folhas por `k²`.
@@ -141,3 +141,29 @@ B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s
 Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.
 
 **Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A hélice, o shari e os jin vêm do andaime.
+
+## 🍃 Bonsai de Olmo Chinês (`olmo_chines`)
+
+**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — três `F` quase sem `&` nem `/` — e perto de um terço da altura se abre em três anéis curtos (externo, médio, interno) mais um líder. Cada galho sai em leque e, depois de um trecho reto, `~(-lift)` curva para o céu: o tropismo age a cada `F`, então vários segmentos curtos fecham um domo. A ramificação é dicotômica, com um terceiro ramo para cima de vez em quando, e termina em folhas serrilhadas pequenas e uma almofada miúda, arejada o bastante para o desenho dos ramos aparecer na borda.
+
+```
+ω : nebari × raízes   tronco reto F × 3
+     anel externo × 8 a &(outerA)   F(0.065)   anel médio × 7 a &(midA)   F(0.05)   anel interno × 5 a &(innerA)   líder
+     galho: ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
+B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → folhas + Z pequena)
+```
+
+**Casca:** lisa, que descasca em manchas macias de cinza, bege e laranja (shader `fx: 'olmo'`), sem placas nem madeira morta. Os ramos finos ficam na cor jovem.
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 20–55 |
+| `segLen` | 0.22–0.26 |
+| `spokesA` / `outerA` | 8 · 44–54° |
+| `arm` / `lift` | 1.22–1.42 · 0.20–0.28 |
+| `split` | 22–30° |
+| `padN` / `leafS` | 5–7 · 0.028–0.038 |
+
+Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cenário `estudio`.
+
+**Crescimento simulado (v7):** andaime é o hokidachi inteiro; raminhos curtos enchem a casca do domo e a tesoura corta o que sai dele a cada 3 anos.
