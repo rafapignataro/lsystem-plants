@@ -1,0 +1,7 @@
+{
+  "method": "Chromium headless, SwiftShader, viewport 1100x820, sombras desligadas nos dois lados. A taxa é 8 frames ou 4 s, o que vier primeiro.",
+  "antes": { "azaleia": 64.9, "jardim": 67.6 },
+  "depois": { "azaleia": 59.3, "jardim": 66.1 },
+  "delta": { "azaleia": "-9%", "jardim": "-2%" },
+  "nota": "A árvore isolada desenha a malha média. O jardim desenha a malha lod, sem estames. As fotos de perto usam a malha hi. O passe de sombra das pétalas antigas não terminava no SwiftShader, por isso a comparação foi sem sombra nos dois lados."
+}

@@ -204,7 +204,7 @@ Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
 
 **Ideia:** *Rhododendron indicum* em estilo **moyogi** (ereto informal). O tronco é curto e grosso, com movimento, e afina da base até o pescoço; a casca é marrom-avermelhada, lisa, com descamações finas. A copa é um domo fechado de raminhos de verdade: folhas pequenas e brilhantes e flores grandes nascem na casca da ponta, não num volume solto. A ficha e as referências estão em `docs/especies/azaleia.md`.
 
-As flores são funis de **cinco pétalas** (`E`) presos ao nó do raminho. A seed escolhe a paleta — rosa, magenta, branca ou **mescla** — e pode sortear uma segunda cor ou pétalas listradas. Elas só abrem nos estágios finais. No simulado, o vestir coloca folha e flor só em pontas vivas; `enforcePhysical` senta cada instância na casca do segmento. A planta não recebe pedras soltas.
+As flores são funis de **cinco pétalas** gerados por `flower-engine.mjs` (preset `satsuki`) e presos à casca da ponta. A seed escolhe a paleta — rosa, magenta, branca ou **mescla** — e, em cada flor, um padrão: sólida, listra, flake, fukurin, mancha na garganta ou pontilhado. Estames, pistilo e cálice vão na mesma malha. Elas abrem no fim do crescimento, ou pelo botão **Ver florescer**. No simulado, o vestir coloca folha e flor só em pontas vivas; `enforcePhysical` senta o pedicelo na casca do segmento. A planta não recebe pedras soltas.
 
 ```
 ω : nebari curto × roots   tronco curto { &(curve·cos) F } × 6   galhos a partir do 2º segmento

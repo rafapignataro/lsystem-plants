@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { BONSAI, SPECIES, buildSkeletonPackage } from '../lsystem-core.mjs';
+import { FLOWER_EQ } from '../flower-engine.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mainDir = '/tmp/lsystem-plants-main';
@@ -77,6 +78,9 @@ function measure(pkg) {
   }
   let foliage = 0;
   for (const k of ['leaf', 'needles', 'petal', 'center']) foliage += (pkg.inst[k] || []).length;
+  // Uma flor paramétrica substitui o funil de 5 pétalas + centro. O peso
+  // mantém a conta comparável com o main, que ainda emite essas peças.
+  foliage += (pkg.inst.flower || []).length * FLOWER_EQ;
   const pts = [];
   for (const k of ['leaf', 'needles', 'petal']) for (const it of pkg.inst[k] || []) if (it.p) pts.push(it.p);
   const cell = Math.max(0.05, H / 18);

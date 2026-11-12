@@ -3,6 +3,7 @@ import {
   ENV_DEFAULT, genomeFromSeed, mergeGenome, applyGenomeToPlant, applyGravitySag, clusterFoliage, deflectRoots,
   envSunDir, envWindDir, makeSunShade, phototropismBias, lightGradientAt,
 } from './v8-engine.mjs';
+import { flowerBook, pickFlower } from './flower-engine.mjs';
 import {
   STYLES, resolveStyle, composeStyled, potSpec, applyFront, keepTrunkOutOfPot, scoreTree,
   designOf, shapeDesign, enforceDesignRadii, measureDesign,
@@ -220,6 +221,27 @@ function emitFunnel(add, rng, pos, H, s, openDeg, np, life, centerScale = 0.09, 
   }
   add('center', tag({ p: pos.clone().addScaledVector(Hn, s * 0.03), y: Hn.clone(), z: Un.clone(), s: s * centerScale, life }));
 }
+// O funil antigo consumia o RNG neste ritmo. A flor nova queima a mesma
+// quantidade para as folhas seguintes não mudarem de lugar.
+function burnFunnel(rng, np = 5) {
+  rng.f();
+  for (let i = 0; i < np; i++) { rng.jit(0.05); rng.jit(0.045); rng.f(); }
+}
+function bookFor(sp, P) {
+  if (!sp?.flowerPreset) return null;
+  if (!P._flowerBook) P._flowerBook = flowerBook(sp.flowerPreset, String(P._seed || ''), P);
+  return P._flowerBook;
+}
+function pushFlower(add, book, pos, face, side, scale, life, meta) {
+  const pick = pickFlower(book, meta.node | 0, meta.k | 0, pos, meta.center);
+  add('flower', {
+    p: pos, y: face, z: side, s: scale, life,
+    node: meta.node, tip: 1, spin: meta.spin,
+    variant: pick.variant, phase: pick.phase, pattern: pick.pattern, patSeed: pick.patSeed,
+    baseH: pick.baseH, baseS: pick.baseS, baseL: pick.baseL,
+    throatH: pick.throatH, throatS: pick.throatS, throatL: pick.throatL,
+  });
+}
 export function interpret(word, sp, P, rng, cap) {
   const X = [0], Y = [0], Z = [0], PAR = [-1], T0 = [0], T1 = [0], BOOST = [], TIPW = [], JIN = [];
   const inst = {};
@@ -343,12 +365,20 @@ export function interpret(word, sp, P, rng, cap) {
         st.H.normalize(); st.L.crossVectors(UPV, st.H).normalize(); st.U.crossVectors(st.H, st.L); break;
       }
       case 'N': add('needles', { p: st.pos.clone(), y: st.H.clone(), z: st.U.clone().applyAxisAngle(st.H, rng.f() * 6.28), s: p ? p[0] : 0.3, life: life(m) }); break;
-      case 'E': { // uma flor de funil na ponta do galho (a casca, não um volume)
+      case 'E': { // uma flor na ponta do galho (a casca, não um volume)
         if (cap && cap.syms.E) { cap.out.push({ node: st.node, c: 'E', p: m.p, d: [st.H.x, st.H.y, st.H.z] }); break; }
         const s = p ? p[0] : (P.flowerSize || 0.04);
         const base = life(m), lf = P.bloomAt != null ? [Math.max(base[0], P.bloomAt), base[1]] : base;
         const face = st.H.clone(); face.y += 0.55; face.normalize();
-        emitFunnel(add, rng, st.pos.clone(), face, s, P.open || 46, P.petals || 5, lf, 0.08, { tip: 1, spin: rng.f() * 6.28 });
+        const book = bookFor(sp, P);
+        if (book) {
+          const spin = rng.f() * 6.28;
+          let side = new V3().crossVectors(face, st.H);
+          if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+          side.normalize().applyAxisAngle(face, spin);
+          pushFlower(add, book, st.pos.clone(), face, side, s, lf, { node: st.node, k: st.node, spin });
+          burnFunnel(rng, P.petals || 5);
+        } else emitFunnel(add, rng, st.pos.clone(), face, s, P.open || 46, P.petals || 5, lf, 0.08, { tip: 1, spin: rng.f() * 6.28 });
         break;
       }
       default: if (cap && cap.syms[m.c]) cap.out.push({ node: st.node, c: m.c, p: m.p, d: [st.H.x, st.H.y, st.H.z] }); // v7: gemas do andaime da simulação
@@ -844,7 +874,7 @@ Object.assign(SPECIES, {
   },
   azaleia: {
     name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 0.72, years: true, float: 0,
-    family: 'flowering', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'han_kengai', 'kengai'],
+    family: 'flowering', flowerPreset: 'satsuki', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'han_kengai', 'kengai'],
     desc: 'Rhododendron indicum: tronco curto e grosso, casca marrom-avermelhada com descamações finas, ramificação miúda e flores grandes na ponta dos ramos, entre as folhas. O estilo tradicional é o moyogi.',
     baseWidth: 0.066, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [2.35, 2.7], G: 0.62, tip: 0.0035, ring: 0.24, share: 0.7 },
     params(r) {
@@ -915,7 +945,7 @@ Object.assign(SPECIES, {
           `ω : nebari × ${P.roots}   tronco curto e grosso em S { &(${n(P.curve)}°·cos) F } × ${P.segs}   galhos a partir do 2º segmento, em três, no contorno do domo`,
           `B(s) → F(0.36s) [ +(split) ^ B(${n(P.ratio)}s) ] [ −(split) ^ B ] [ ^(lift) B(${n(P.cont)}s) ]   (s < 0.09 → leque de raminhos)`,
           `ponta: F F L E — folha e uma flor de funil na casca da ponta, não num volume`,
-          `flor grande em relação à folha, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco)' : ''}${P.sport ? ', com segunda cor em parte das flores' : ''}${P.stripe ? ', pétalas listradas' : ''}`,
+          `flor grande em relação à folha, paleta ${P.palette}${P.palette === 'mescla' ? ' (rosa, magenta e branco)' : ''}${P.sport ? ', com esporte de cor' : ''}${P.stripe ? ', listra ou flake' : ''}`,
           `as flores abrem depois de t = ${n(P.bloomAt)}`,
           yearsTxt(P),
         ],
@@ -928,7 +958,7 @@ Object.assign(SPECIES, {
       if (kind === 'petal') return G.azaleaPetal ? G.azaleaPetal() : null;
       return null;
     },
-    noShadow(kind) { return kind === 'petal' || kind === 'center'; },
+    noShadow(kind) { return kind === 'petal' || kind === 'center' || kind === 'flower'; },
     instMaterial(kind) {
       const THREE = globalThis.THREE;
       if (!THREE) return null;
@@ -947,6 +977,7 @@ Object.assign(SPECIES, {
     color(kind, it, P, r) {
       const jh = r.jit(1), js = r.f(), jl = r.f();
       if (kind === 'leaf') return hsl(P.leafH + jh * 6, P.leafSat + (js - 0.5) * 0.08, P.leafL + (jl - 0.5) * 0.03);
+      if (kind === 'flower') return hsl(it.baseH ?? P.petalH, it.baseS ?? P.petalS, it.baseL ?? P.petalL);
       if (it.sport && (kind === 'petal' || kind === 'center')) {
         const h = it.sportH ?? P.sportH ?? 318;
         if (kind === 'center') return hsl(h, 0.4, 0.36);
@@ -1503,6 +1534,9 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     let cx = 0, cy = 0, cz = 0;
     for (const i of tips) { cx += R.X[i]; cy += R.Y[i]; cz += R.Z[i]; }
     cx /= tips.length; cy /= tips.length; cz /= tips.length;
+    let yLo = Infinity, yHi = -Infinity;
+    for (const i of tips) { if (R.Y[i] < yLo) yLo = R.Y[i]; if (R.Y[i] > yHi) yHi = R.Y[i]; }
+    const flowerCenter = { x: cx, y: cy, z: cz, low: yLo, span: Math.max(0.2, yHi - yLo) };
     let maxD = 1e-4;
     const dist = tips.map((i) => {
       const d = Math.hypot(R.X[i] - cx, (R.Y[i] - cy) * 0.8, R.Z[i] - cz);
@@ -1534,12 +1568,18 @@ SIMS.azaleia = (P, r, sp, ctx) => {
       for (let k = 0; k < nFl; k++) {
         const ang = idx * 0.41 + k * (6.2832 / nFl);
         const pos = new V3(R.X[i], R.Y[i], R.Z[i]);
-        const sport = !!(P.sport && ((idx * 17 + k * 5) % 10) < 4);
-        const stripe = !!(P.stripe && ((idx * 13 + k * 3) % 10) < 5);
         const face = new V3(ux * 0.4 + Math.cos(ang) * 0.12, 0.84, uz * 0.4 + Math.sin(ang) * 0.12).normalize();
-        emitFunnel(push, rng, pos, face, P.flowerSize * (0.94 + rng.f() * 0.12), P.open + rng.jit(2), P.petals || 5, [bloom, 1e9], 0.072, {
-          node: i, tip: 1, spin: ang, stripe, sport, sportH: P.sportH,
+        const sj = 0.94 + rng.f() * 0.12;
+        rng.jit(2);
+        const book = bookFor(sp, P);
+        let side = new V3().crossVectors(face, new V3(ux, uy, uz));
+        if (side.lengthSq() < 1e-6) side = new V3().crossVectors(face, UPV);
+        if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+        side.normalize().applyAxisAngle(face, ang);
+        pushFlower(push, book, pos, face, side, P.flowerSize * sj, [bloom, 1e9], {
+          node: i, k, spin: ang, center: flowerCenter,
         });
+        burnFunnel(rng, P.petals || 5);
       }
     });
   };
@@ -1830,7 +1870,7 @@ function applyLoad(sk, rFull, rTube, inst) {
     }
   }
   const area = new Float64Array(N);
-  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) for (const it of inst[k] || []) {
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit', 'flower']) for (const it of inst[k] || []) {
     if (it.life && it.life[1] < 1e6) continue;
     let i = it.node | 0;
     if (!(i > 0 && i < N)) continue;
@@ -1858,7 +1898,7 @@ function applyLoad(sk, rFull, rTube, inst) {
 
 function seatOnBark(sk, radii, inst) {
   const { N, PAR, X, Y, Z } = sk;
-  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) {
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit', 'flower']) {
     const arr = inst[k];
     if (!arr) continue;
     for (let n = 0; n < arr.length; n++) {
@@ -1921,7 +1961,7 @@ function dropBuriedFoliage(sk, inst, pot) {
     }
     if (maxY < 0.22) for (const i of seen) root[i] = 1;
   }
-  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit']) {
+  for (const k of ['leaf', 'needles', 'petal', 'center', 'fruit', 'flower']) {
     const arr = inst[k];
     if (!arr) continue;
     inst[k] = arr.filter((it) => {
@@ -1963,6 +2003,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   const genome = mergeGenome(genomeFromSeed(seed, id, Rand), genomeOverlay);
   genome.estilo = styleId;
   applyGenomeToPlant(P, null, null, genome, sp, applyGenes);
+  if (sp.flowerPreset) P._flowerBook = flowerBook(sp.flowerPreset, seed, P);
   const def = sp.build(P);
   const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P, ENV) : null;
   const { word, done, tEnd } = SIM || runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
