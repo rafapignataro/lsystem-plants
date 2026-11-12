@@ -22,7 +22,7 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 
 | Parâmetro | Onde | Exemplo | Efeito |
 |---|---|---|---|
-| `especie` | hash | `#especie=junipero` | bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`; ou `jardim` (todos juntos). Espécie desconhecida (inclusive as realistas, as raras e as exóticas removidas) abre o primeiro bonsai (`bordo`) |
+| `especie` | hash | `#especie=junipero` | bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`, `pinheiro_negro`; ou `jardim` (todos juntos). Espécie desconhecida (inclusive as realistas, as raras e as exóticas removidas) abre o primeiro bonsai (`bordo`) |
 | `cresc` | hash | `#especie=junipero&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico (idêntico à v6 para os bonsais que ficaram) |
 | `seed` | hash | `#especie=bordo&seed=rafael` | seed (qualquer texto) |
 | `genoma` | hash | `#especie=bordo&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |
@@ -41,6 +41,7 @@ O botão **🔗 Copiar link** gera o link da planta atual.
   - 🌲 **Pinheiro-Branco**: tronco maciço, torcido e com casca em placas, nebari exposto, almofadas horizontais de agulhas e um galho em cascata para fora do vaso oval raso;
   - 🎋 **Cipreste Hinoki**: estilo chokkan (ereto formal), andares que alternam de lado e diminuem até o topo, faixa de madeira morta (shari) na frente, vaso redondo de terracota;
   - 🌀 **Junípero**: tronco em hélice com grandes faixas de madeira morta branca em espiral e uma veia viva avermelhada, copa inclinada, galhos mortos (jin), vaso retangular sobre uma mesinha.
+  - 🌲 **Pinheiro-Negro em Cascata**: *Pinus thunbergii* em kengai; o tronco sobe pouco, dobra na borda de um vaso hexagonal fundo e quase preto e desce em zigue-zague até abaixo da base, com casca em placas cinza-escuras, almofadas de agulhas longas e um suporte alto de madeira. A brotação da cascata segue um alvo abaixo do vaso.
 - **Motor v8**: junções com malha de união; vento e sol ajustáveis; genoma de 9 genes + cruzamento; exportação PNG e glTF; cachos de folhagem e LOD no jardim.
 - **Crescimento simulado** (v7, padrão; botão "Crescimento: Simulado / L-System clássico"): o andaime (tronco e estilo do bonsai) vem da gramática da espécie e a copa cresce ano a ano por **colonização do espaço** (Runions et al. 2007: pontos de atração num envelope com a forma da espécie, raio de percepção, distância de morte) com **luz por sombra em voxels** e alocação de Borchert-Honda (Palubicki et al. 2009). Cada gema tem destino (cresce, dorme, vira flor ou morre); galhos sombreados **secam e caem** (autopoda); o tronco engrossa todo ano (modelo do cano / Leonardo, mais anéis anuais); há **poda de formação** periódica. O slider de idade mostra a estrutura daquele ano (com "ano X de Y"). Uma espécie sem entrada em `SIMS` continua só L-System.
 - Motor L-System com regras paramétricas, estocásticas e condicionais, passo final de "decomposição" (pontas → folhas/flores) e regras juvenis.

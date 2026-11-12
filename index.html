@@ -216,18 +216,26 @@ function palmGeo(lobes) {
 /* v6: vaso de bonsai procedural. Seção = superelipse (n = 2 oval/redondo, n alto = retangular com cantos arredondados),
    perfil = lábio da borda, parede (reta, inclinada ou bojuda), pé. Topo da terra em y = 0. */
 function superE(a, b, n, th) { const c = Math.cos(th), s = Math.sin(th); return [a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)]; }
-function potGeo({ a, b, h, n = 2, lip = 0.06, bulge = 0, taper = 0.12, foot = 0.08 }, M = 72) {
+// sides >= 5: polígono regular (6 = hexágono). Sem sides, a superelipse de antes.
+function potOutline(a, b, n, sides, th) {
+  if (!(sides >= 5)) return superE(a, b, n, th);
+  const seg = 6.283185307179586 / sides;
+  const phi = ((th % seg) + seg) % seg - seg / 2;
+  const rad = Math.cos(Math.PI / sides) / Math.max(0.25, Math.cos(phi));
+  return [a * rad * Math.cos(th), b * rad * Math.sin(th)];
+}
+function potGeo({ a, b, h, n = 2, lip = 0.06, bulge = 0, taper = 0.12, foot = 0.08, sides = 0 }, M = 72) {
   const prof = [[0.94, -0.06 * h], [0.94, 0.02 * h], [1 + lip, 0.02 * h], [1 + lip, -0.07 * h], [1, -0.1 * h]];
   for (let k = 1; k <= 6; k++) { const f = k / 6; prof.push([1 - taper * f + bulge * Math.sin(Math.PI * f), -0.1 * h - f * (0.9 - foot) * h]); }
   const last = prof[prof.length - 1][0];
   prof.push([last * 0.97, -h + foot * h * 0.4], [last * 0.88, -h], [0, -h]);
   const pos = [], idx = [];
-  for (const [r, y] of prof) for (let i = 0; i <= M; i++) { const [x, z] = superE(a * r, b * r, n, i / M * 6.2832); pos.push(x, y, z); }
+  for (const [r, y] of prof) for (let i = 0; i <= M; i++) { const [x, z] = potOutline(a * r, b * r, n, sides, i / M * 6.2832); pos.push(x, y, z); }
   for (let j = 0; j < prof.length - 1; j++) for (let i = 0; i < M; i++) { const p0 = j * (M + 1) + i, p1 = p0 + 1, q0 = p0 + M + 1, q1 = q0 + 1; idx.push(p0, q0, p1, p1, q0, q1); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 // terra com montinho e musgo (cor por vértice), dentro da borda do vaso
-function soilGeo({ a, b, n = 2 }, mound, moss, rng, M = 64, Rn = 14) {
+function soilGeo({ a, b, n = 2, sides = 0 }, mound, moss, rng, M = 64, Rn = 14) {
   const pos = [0, mound, 0], col = [], idx = [], ph = [rng.f() * 9, rng.f() * 9, rng.f() * 9];
   const cS = hsl(28, 0.35, 0.16), cM = hsl(95 + rng.jit(10), 0.38, 0.2), cM2 = hsl(85, 0.4, 0.25), tmp = new THREE.Color();
   // ruído de valor suave (fbm de 3 oitavas, eixos girados) — evita o padrão xadrez de sin·cos
@@ -239,7 +247,7 @@ function soilGeo({ a, b, n = 2 }, mound, moss, rng, M = 64, Rn = 14) {
   const colAt = (x, z) => { const v = noise(x / a * 2, z / b * 2); const m = THREE.MathUtils.smoothstep(v, 1 - moss - 0.05, 1 - moss + 0.1); tmp.copy(cS).lerp(v > 0.7 ? cM2 : cM, m); return [tmp.r, tmp.g, tmp.b, m]; };
   const c0 = colAt(0, 0); col.push(c0[0], c0[1], c0[2]);
   for (let k = 1; k <= Rn; k++) for (let i = 0; i < M; i++) {
-    const r = 0.94 * k / Rn, [x, z] = superE(a * r, b * r, n, i / M * 6.2832), c = colAt(x, z);
+    const r = 0.94 * k / Rn, [x, z] = potOutline(a * r, b * r, n, sides, i / M * 6.2832), c = colAt(x, z);
     pos.push(x, mound * (1 - Math.pow(k / Rn, 2)) - 0.01 + c[3] * 0.015 * Math.min(a, b), z); col.push(c[0], c[1], c[2]);
   }
   for (let i = 0; i < M; i++) idx.push(0, 1 + ((i + 1) % M), 1 + i);
@@ -250,19 +258,37 @@ function soilGeo({ a, b, n = 2 }, mound, moss, rng, M = 64, Rn = 14) {
 function makePot(group, o, rng) {
   const pot = new THREE.Mesh(potGeo(o), new THREE.MeshStandardMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.75, metalness: 0, side: THREE.DoubleSide }));
   const soil = new THREE.Mesh(soilGeo(o, o.mound ?? 0.05 * Math.min(o.a, o.b), o.moss ?? 0.5, rng), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  if (o.rot) { pot.rotation.y = o.rot; soil.rotation.y = o.rot; }
   for (const m of [pot, soil]) { m.castShadow = m.receiveShadow = true; group.add(m); }
   let floor = -o.h;
-  if (o.stand) { // mesa baixa de madeira escura
-    const wm = new THREE.MeshStandardMaterial({ color: asColor(o.stand, 0x2a1a10), roughness: 0.6 }), sh = o.h * 0.22, legH = o.h * 0.55;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(o.a * 2.6, sh, o.b * 2.7), wm); top.position.y = -o.h - sh / 2;
-    const parts = [top];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(o.a * 0.18, legH, o.b * 0.2), wm); l.position.set(sx * o.a * 1.12, -o.h - sh - legH / 2, sz * o.b * 1.15); parts.push(l); }
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(o.a * 2.4, sh * 0.5, o.b * 0.12), wm); rail.position.set(0, -o.h - sh - legH * 0.75, o.b * 1.15); parts.push(rail);
-    const rail2 = rail.clone(); rail2.position.z = -o.b * 1.15; parts.push(rail2);
-    for (const m of parts) { m.castShadow = m.receiveShadow = true; group.add(m); }
-    floor = -o.h - sh - legH;
+  if (o.stand) {
+    const wm = new THREE.MeshStandardMaterial({ color: asColor(o.stand, 0x2a1a10), roughness: o.tall ? 0.74 : 0.6 });
+    if (o.tall) { // suporte alto (takadai): o tampo mal passa do vaso e a cascata cai ao lado das pernas
+      const sh = Math.min(o.h * 0.08, 0.1), legH = o.leg ?? o.h * 1.7;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(o.a * 2.16, sh, o.b * 2.16), wm); top.position.y = -o.h - sh / 2;
+      const parts = [top], inset = 0.56, legT = Math.max(o.a * 0.1, 0.055);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(legT, legH, legT), wm);
+        l.position.set(sx * o.a * inset, -o.h - sh - legH / 2, sz * o.b * inset); parts.push(l);
+      }
+      const railY = -o.h - sh - legH * 0.62, rt = legT * 0.7, spanX = o.a * inset * 2, spanZ = o.b * inset * 2;
+      for (const [w, hh, d, x, y, z] of [[spanX, rt, rt, 0, railY, o.b * inset], [spanX, rt, rt, 0, railY, -o.b * inset], [rt, rt, spanZ, o.a * inset, railY, 0], [rt, rt, spanZ, -o.a * inset, railY, 0]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), wm); m.position.set(x, y, z); parts.push(m);
+      }
+      for (const m of parts) { m.castShadow = m.receiveShadow = true; group.add(m); }
+      floor = -o.h - sh - legH;
+    } else { // mesa baixa de madeira escura
+      const sh = o.h * 0.22, legH = o.h * 0.55;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(o.a * 2.6, sh, o.b * 2.7), wm); top.position.y = -o.h - sh / 2;
+      const parts = [top];
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(o.a * 0.18, legH, o.b * 0.2), wm); l.position.set(sx * o.a * 1.12, -o.h - sh - legH / 2, sz * o.b * 1.15); parts.push(l); }
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(o.a * 2.4, sh * 0.5, o.b * 0.12), wm); rail.position.set(0, -o.h - sh - legH * 0.75, o.b * 1.15); parts.push(rail);
+      const rail2 = rail.clone(); rail2.position.z = -o.b * 1.15; parts.push(rail2);
+      for (const m of parts) { m.castShadow = m.receiveShadow = true; group.add(m); }
+      floor = -o.h - sh - legH;
+    }
   }
-  const ex = o.stand ? 1.3 : 1.08;
+  const ex = o.tall ? 1.15 : o.stand ? 1.3 : 1.08;
   return { floor, points: [new V3(-o.a * ex, floor, -o.b * ex), new V3(o.a * ex, 0, o.b * ex)] };
 }
 function asColor(c, fallback = 0x888888) {
@@ -758,6 +784,7 @@ function assemblePlant(pkg) {
   if (pkg.stones) {
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6d675f, roughness: 1 });
     for (const s of pkg.stones) {
+      if (sp.stoneR && Math.hypot(s.x, s.z) > sp.stoneR) continue;
       const stone = new THREE.Mesh(new THREE.SphereGeometry(s.r, 12, 8), stoneMat);
       stone.position.set(s.x, s.r * 0.28, s.z);
       stone.scale.y = 0.62;
@@ -796,7 +823,8 @@ function assemblePlant(pkg) {
   };
   const imp = new THREE.Sprite(new THREE.SpriteMaterial({ map: impostorTex(), transparent: true, depthWrite: false }));
   imp.scale.set(Math.max(rawW, rawH * 0.65), rawH, 1);
-  imp.position.y = rawH * 0.48;
+  const localMid = (box.min.y + box.max.y) / 2 - oy;
+  imp.position.y = localMid < -0.15 ? localMid : rawH * 0.48;
   imp.visible = false;
   group.add(imp);
   pl.impostor = imp;
@@ -996,10 +1024,10 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12, ty = 0.46 } = {})
   const fov = camera.fov * DEG, aspect = (innerWidth - off.x) / innerHeight;
   const halfH = size.y / 2 / visH, halfW = Math.max(size.x, size.z) / 2;
   const dist = Math.max(halfH / Math.tan(fov / 2), halfW / (Math.tan(fov / 2) * aspect)) * pad + size.z * 0.5;
-  const target = center.clone(); target.y = size.y * ty;
+  const target = center.clone(); target.y = box.min.y + size.y * ty;
   camera.position.copy(target).addScaledVector(dir.clone().normalize(), dist);
   controls.target.copy(target); controls.update();
-  follow = { dist, ty: target.y, h: size.y, z: 1 };
+  follow = { dist, ty: target.y, base: box.min.y, h: size.y, z: 1 };
   // sombra cobre a planta
   const rad = Math.max(size.x, size.y, size.z) * 0.85 + 2;
   const sc = sun.shadow.camera; sc.left = -rad; sc.right = rad; sc.top = rad; sc.bottom = -rad; sc.near = 0.5; sc.far = rad * 5;
@@ -1292,7 +1320,7 @@ function loop() {
     const want = THREE.MathUtils.clamp((plants[0].curH || 0) / follow.h * 1.15, 0.22, 1);
     follow.z += (want - follow.z) * (anim ? 0.08 : 1);
     const d = camera.position.clone().sub(controls.target).normalize();
-    controls.target.y = follow.ty * follow.z; camera.position.copy(controls.target).addScaledVector(d, follow.dist * follow.z);
+    controls.target.y = follow.base < -0.05 ? follow.base + (follow.ty - follow.base) * follow.z : follow.ty * follow.z; camera.position.copy(controls.target).addScaledVector(d, follow.dist * follow.z);
   }
   for (const pl of plants) {
     if (!pl.foliage) continue;
