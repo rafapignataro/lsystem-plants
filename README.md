@@ -8,14 +8,15 @@ Plantas 3D geradas por **sistemas de Lindenmayer (L-Systems)** em **Three.js**, 
 
 A ideia original (do Rafael, anos atrás) era usar o formalismo do biólogo Aristid Lindenmayer para gerar plantas e transformá-las em **NFTs**: cada pessoa recebe uma *seed*, e a seed altera as partes do sistema (probabilidades das regras, ângulos, proporções, cores, idade…), de modo que cada pessoa tenha uma planta totalmente diferente, mas sempre reproduzível a partir da mesma seed.
 
-Este repositório é a POC dessa ideia: 14 espécies (5 realistas, 5 árvores raras e 4 bonsais), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta. Desde a v7, a copa pode ser **simulada ano a ano**: os galhos disputam espaço e luz (colonização do espaço + sombra em voxels), os sombreados caem e o tronco engrossa a cada ano; o L-System continua definindo o caráter de cada espécie.
+Este repositório é a POC dessa ideia: 14 espécies (5 realistas, 5 árvores raras e 4 bonsais), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta. Desde a v7, a copa pode ser **simulada ano a ano** (colonização do espaço, sombra, autopoda). Na **v8**, o foco é o **motor**: junções contínuas, ambiente interativo, genoma legível com cruzamento, folhagem em cachos e export NFT (PNG/glTF).
 
 ## Como rodar
 
-É um único arquivo, `index.html`, sem build. O Three.js (r170) é carregado do jsDelivr via *importmap*, então precisa de internet.
+Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem build. O Three.js (r170) vem do jsDelivr via *importmap* (precisa de internet).
 
 - Abra `index.html` direto no navegador, **ou**
 - sirva a pasta: `python3 -m http.server 8000` e acesse `http://localhost:8000/`.
+- Verificação headless (opcional): `npm i playwright && npx playwright install chromium && node scripts/verify-v8.mjs`.
 
 ## Parâmetros de URL
 
@@ -24,6 +25,7 @@ Este repositório é a POC dessa ideia: 14 espécies (5 realistas, 5 árvores ra
 | `especie` | hash | `#especie=carvalho` | realistas: `carvalho`, `pinheiro`, `samambaia`, `arbusto`, `salgueiro`; raras: `dragoeiro`, `baoba`, `eucalipto`, `figueira`, `sequoia`; bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`; ou `jardim` (as 14 juntas). Espécie desconhecida (inclusive as exóticas removidas na v7) abre o carvalho |
 | `cresc` | hash | `#especie=sequoia&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico (idêntico à v6) |
 | `seed` | hash | `#especie=pinheiro&seed=rafael` | seed (qualquer texto) |
+| `genoma` | hash | `#especie=carvalho&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |
 | `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1) |
 | `nogrow` | query | `?nogrow` | abre sem animação de crescimento, em 100% |
 | `norotate` | query | `?norotate` | desliga a auto-rotação |
@@ -46,6 +48,7 @@ O botão **🔗 Copiar link** gera o link da planta atual.
   - 🌲 **Pinheiro-Branco**: tronco maciço, torcido e com casca em placas, nebari exposto, almofadas horizontais de agulhas e um galho em cascata para fora do vaso oval raso;
   - 🎋 **Cipreste Hinoki**: estilo chokkan (ereto formal), andares que alternam de lado e diminuem até o topo, faixa de madeira morta (shari) na frente, vaso redondo de terracota;
   - 🌀 **Junípero**: tronco em hélice com grandes faixas de madeira morta branca em espiral e uma veia viva avermelhada, copa inclinada, galhos mortos (jin), vaso retangular sobre uma mesinha.
+- **Motor v8**: junções com malha de união; vento e sol ajustáveis; genoma de 9 genes + cruzamento; exportação PNG e glTF; cachos de folhagem e LOD no jardim.
 - **Crescimento simulado** (v7, padrão; botão "Crescimento: Simulado / L-System clássico"): o andaime (tronco, verticilos, estilo do bonsai) vem da gramática da espécie e a copa cresce ano a ano por **colonização do espaço** (Runions et al. 2007: pontos de atração num envelope com a forma da espécie, raio de percepção, distância de morte) com **luz por sombra em voxels** e alocação de Borchert-Honda (Palubicki et al. 2009). Cada gema tem destino (cresce, dorme, vira flor ou morre); galhos sombreados **secam e caem** (autopoda); o tronco engrossa todo ano (modelo do cano / Leonardo, mais anéis anuais); nos bonsais há **poda de formação** periódica. O slider de idade mostra a estrutura daquele ano (com "ano X de Y"). A samambaia continua só L-System.
 - Motor L-System com regras paramétricas, estocásticas e condicionais, passo final de "decomposição" (pontas → folhas/flores) e regras juvenis.
 - PRNG determinística (`cyrb128` → `sfc32`) com fluxos separados por finalidade: mesma seed + espécie = mesma planta.

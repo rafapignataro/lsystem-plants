@@ -4,10 +4,10 @@
 
 Os itens 1 (colonização do espaço + luz) e 2 (simulação de crescimento ano a ano) foram feitos na v7 ([ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7)). Ficaram anotados para depois:
 
-3. **Superfície única nas junções.** Trocar "tubo + colar" por uma superfície implícita perto das forquilhas (SDF dos segmentos com união suave `smin`, malhada por *marching cubes* / *dual contouring* só numa caixa em volta de cada junção, e costurada nos tubos), para o galho "brotar" do pai sem emenda. Com isso dá para **escavar madeira morta de verdade** (shari/jin com a forma subtraída do tronco, não só cor e relevo no shader).
-4. **Física e ambiente.** Vento dominante que deixa a copa assimétrica (gemas a barlavento crescem menos, galhos tortos para sotavento); **gravidade dobrando galhos longos e pesados** (flexão pela massa acumulada da subárvore, o pinheiro e o carvalho velho "assentam"); **fototropismo** (a direção de crescimento puxa para o lado mais claro da grade de luz, que já existe); **raízes** que crescem por colonização no solo desviando de pedras e do vaso.
-5. **Folhagem melhor e mais leve.** Folhas em **cachos nos raminhos visíveis** (um cartão com várias folhas por ponta, em vez de folhas soltas presas ao eixo); **LOD por distância** (cachos → *impostors* → só volume) para o jardim ficar fluido.
-6. **Seed como genoma legível.** A seed vira um "DNA" com genes nomeados (vigor, ângulo, densidade, cor, dominância apical…), mostrados no painel; **cruzamento** de duas plantas com herança desses genes (e mutação); **exportar glTF** da planta na idade escolhida.
+3. ~~**Superfície única nas junções.**~~ **v8**: esferas nas forquilhas grossas (tronco e andaime, sem teto de 4000 nós). No junípero e no cipreste a madeira morta é o veio contínuo do shader, como na v7. Não é um SDF contínuo em toda a copa.
+4. ~~**Física e ambiente.**~~ **v8**: vento, sol, gravidade e fototropismo no painel (desligados no padrão para não mudar a v7). Com eles ligados, a sombra da simulação segue o sol, a copa entorta e os galhos grossos vergam. Raízes desviam de pedras e ficam dentro do vaso.
+5. ~~**Folhagem melhor e mais leve.**~~ **v8**: a simulação inteira vai para Web Workers. No enquadramento do jardim a copa fica cheia (no máximo metade das folhas, desenhadas maiores). O impostor só aparece quando a planta ocupa menos de ~40 px. Cachos grandes no close-up foram retirados porque inchavam a copa.
+6. ~~**Seed como genoma legível.**~~ **v8**: nove genes, painel, cruzamento, mutação, hash `&genoma=`, PNG e glTF.
 
 ## Geometria e madeira
 

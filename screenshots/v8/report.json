@@ -1,0 +1,21 @@
+{
+  "errors": [],
+  "results": {
+    "builds": {
+      "carvalho": 261.39999999990687,
+      "junipero": 97.30000000004657,
+      "sequoia": 230.8000000002794,
+      "dragoeiro": 116.40000000037253
+    },
+    "determinism": {
+      "carvalho": true,
+      "junipero": true,
+      "sequoia": true,
+      "dragoeiro": true
+    },
+    "fps": {
+      "garden": 0.43783673863119216
+    }
+  },
+  "ok": true
+}

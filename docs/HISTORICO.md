@@ -2,6 +2,24 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v8: motor (revisão) (12/11/2026)
+
+- Visual padrão de novo alinhado à v7: genes só mudam a planta quando o usuário cruza, muta ou edita um controle. Gravidade e fototropismo começam em zero. A sombra simulada volta a cair na vertical até o sol sair do padrão.
+- Junções nas forquilhas grossas (inclui o carvalho), sem a malha que furava o junípero. Shari/jin entalhados no tubo.
+- Jardim montado em Web Workers (4): cerca de 2 s de CPU de esqueleto no headless, UI livre durante a simulação.
+- Madeira morta do junípero e do cipreste: o pontilhado vinha do shader (o mesmo da v7) — seno de ~27 ciclos por volta com ruído, e os picos viravam buracos no relevo. Agora o veio é longo, esticado no eixo do tronco, sem pontos. No jardim a folhagem não rareia na distância do enquadramento; o impostor só entra quando a planta fica minúscula na tela.
+- Raízes desviam de pedras e do vaso. LOD por distância (metade / quarto das folhas, depois impostor).
+- Painel de genoma: dois pais, filho, sliders com nomes em português, mutação.
+
+## v8: motor (primeira passagem) (12/11/2026)
+
+- **Junções**: malha de união nas forquilhas + escavação geométrica do shari nos bonsais (complementa o shader).
+- **Ambiente**: vento direcional (shader + simulação), sol direcional (sombras na grade), fototropismo, gravidade no esqueleto; controles no painel.
+- **Folhagem**: cachos por nó; LOD reforçado no jardim.
+- **Genoma legível**, cruzamento, mutação, export PNG/glTF, hash `&genoma=`.
+- **Arquivos**: `v8-engine.mjs`, `joint-worker.mjs`, `scripts/verify-v8.mjs`; screenshots em `screenshots/v8/`.
+- Compatibilidade: URLs v7 sem `genoma`; 14 espécies mantidas; modo clássico não exige byte-idêntico, mas regressão visual verificada por screenshots headless.
+
 ## v7: crescimento simulado e saída das exóticas (11/11/2026)
 
 Commit [`1033af9`](https://github.com/rafapignataro/lsystem-plants/commit/1033af96ed9f4b0107e7a2c0a9e4eefa8f7fa523), 21:20.

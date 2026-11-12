@@ -266,3 +266,11 @@ Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc
 
 **Por espécie**: ver o parágrafo "Crescimento simulado (v7)" de cada uma em [ESPECIES](ESPECIES.md). Limitações em [ROADMAP](ROADMAP.md#crescimento-simulado-v7).
 
+## 14. Motor v8 (engine)
+
+A montagem pesada (L-System ou simulação) roda em `plant-worker.mjs` (`buildSkeletonPackage` em `lsystem-core.mjs`). A thread principal só monta malhas Three.js. O jardim usa 4 workers em paralelo.
+
+Por padrão os genes são **mostrados** e não aplicados, a gravidade e o fototropismo começam em 0 e a sombra da simulação continua vertical — o visual padrão acompanha a v7. Cruzar, mutar ou mover um gene passa a aplicar o genoma (`&genoma=` no hash).
+
+Junções: esferas só nas forquilhas grossas (tronco e andaime, inclusive o carvalho), com material simples de casca. No junípero e no cipreste a madeira morta é um veio longo e contínuo no shader (`LS_DEAD`): a v7 pontilhava a faixa com um seno de alta frequência. Sem furos no tubo. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. No jardim a folhagem fica na densidade da v7 (no máximo 1 em cada 2 folhas, desenhadas maiores); o impostor só entra quando a planta ocupa menos de ~40 px.
+
