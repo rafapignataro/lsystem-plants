@@ -280,9 +280,19 @@ export function interpret(word, sp, P, rng, cap) {
         const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
         const tb = Math.max(m.t1 ?? 0, T1[st.node]) + (p && p[1] != null ? p[1] : 0.2);
         let par = st.node, x = st.pos.x, z = st.pos.z; const y0 = st.pos.y, a0 = X.length;
+        const olen = Math.hypot(x, z) || 1, ux = x / olen, uz = z / olen;
+        const yLand = Math.min(0.62, y0 * 0.42);
         for (let j = 1; j <= k; j++) {
           x += rng.jit(0.04); z += rng.jit(0.04);
-          X.push(x); Y.push(y0 * (1 - j / k)); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
+          const yLin = y0 * (1 - j / k);
+          let y = yLin;
+          if (yLin < yLand) {
+            const t = 1 - yLin / Math.max(yLand, 1e-4);
+            y = 0.045 * (1 - t);
+            x += ux * 0.32 * t;
+            z += uz * 0.32 * t;
+          }
+          X.push(x); Y.push(y); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
           par = X.length - 1;
         }
         // p[2] opcional: fração do tronco. Sem ele, o sorteio (e o RNG) continua o de antes.
@@ -581,15 +591,23 @@ Object.assign(SPECIES, {
     name: 'Bonsai de Olmo Chinês', emoji: '🍃', height: 5.6, theme: 'estudio', leafKind: 'elm', padUp: 0.5, years: true, float: 0, fx: 'olmo',
     desc: 'Ulmus parvifolia em estilo hokidachi (vassoura): tronco reto com casca que descasca em manchas de cinza, laranja e bege; perto de um terço da altura ele se abre em muitos galhos que sobem e se espalham como uma vassoura invertida, com ramificação fina e um domo simétrico de folhas serrilhadas verde-claras, arejado o bastante para o desenho dos ramos aparecer na borda. Vaso oval raso, esmaltado, creme ou cinza-claro, com musgo.',
     baseWidth: 0.115, leafRoll: 36, bump: 0.008, wood: { leo: [2.15, 2.35], G: 1.05, tip: 0.009, ring: 0.48, share: 0.9 },
-    tube: { bump: (th, arc, g, root, P) => root ? (1 + 0.1 * Math.exp(-arc / 0.14)) * (1 + 0.02 * Math.sin(2 * th + P.phase)) : 1 },
+    tube: {
+      // o tronco não ramifica, então o raio de Leonardo é constante: o taper e o nebari vêm daqui
+      bump: (th, arc, g, trunk, P) => {
+        const y = Math.max(g.y, 0);
+        if (!trunk) return y < 0.18 && arc < 0.4 ? 1 + 0.32 * Math.exp(-arc / 0.14) : 1;
+        const u = Math.min(1, y / Math.max(P.segLen * P.trunkSegs, 0.3));
+        return (1 + 0.72 * Math.exp(-y / 0.1)) * (1 - 0.46 * Math.pow(u, 0.85));
+      },
+    },
     params(r) {
       return {
-        iterations: 3, years: r.int(20, 55), trunkSegs: 3, segLen: r.range(0.22, 0.26), phase: r.range(0, 6.28),
-        spokesA: 7, spokesB: 6, spokesC: 5, outerA: r.range(54, 64), midA: r.range(34, 44), innerA: r.range(16, 24),
-        arm: r.range(1.38, 1.58), lift: r.range(0.16, 0.22), kick: r.range(2.4, 3.8),
-        split: r.range(22, 30), side: r.range(0.52, 0.58), cont: r.range(0.62, 0.68), segK: r.range(0.42, 0.5), tip: r.range(0.22, 0.28), fork3: r.range(0.34, 0.48),
-        roots: r.int(5, 7), rootW: r.range(7, 11),
-        padR: r.range(0.05, 0.068), padH: r.range(0.028, 0.04), padN: r.int(5, 7), leafS: r.range(0.028, 0.038),
+        iterations: 4, years: r.int(20, 55), trunkSegs: 4, segLen: r.range(0.24, 0.28), phase: r.range(0, 6.28),
+        spokesA: 4, spokesB: 3, spokesC: 2, outerA: r.range(56, 66), midA: r.range(34, 44), innerA: r.range(16, 24),
+        arm: r.range(1.4, 1.58), lift: r.range(0.11, 0.16), kick: r.range(2.2, 3.4), rise: r.range(0.058, 0.078),
+        split: r.range(24, 32), side: r.range(0.54, 0.62), cont: r.range(0.64, 0.72), segK: r.range(0.36, 0.44), tip: r.range(0.26, 0.32), fork3: r.range(0.5, 0.66),
+        roots: r.int(6, 8), rootW: r.range(11, 16),
+        padR: r.range(0.044, 0.058), padH: r.range(0.024, 0.034), padN: r.int(10, 13), leafS: r.range(0.02, 0.028),
         leafH: r.range(96, 116), leafSat: r.range(0.4, 0.58), leafL: r.range(0.34, 0.44),
         glaze: r.f(), barkMix: r.range(0.85, 1.15),
       };
@@ -610,7 +628,8 @@ Object.assign(SPECIES, {
       const spoke = (len) => {
         const a = P.split * (0.86 + r.f() * 0.18);
         // um trecho curto abre o raio; ~(-lift) curva o eixo para o céu e fecha o domo
-        let o = `~(0)` + chunks(len * 0.16, 2) + `~(${n(-P.lift)})`;
+        // F curto: o colar cobre a saída e o eixo deixa a casca antes de abrir o braço
+        let o = `~(0)F(${n(0.07)})` + chunks(len * 0.14, 2) + `~(${n(-P.lift)})`;
         // laterais quase sem tropismo: saia larga do domo; o eixo sobe e fecha o topo
         o += `[~(${n(-P.lift * 0.28)})+(${n(a + r.jit(4))})/(${n(r.jit(16))})B(${n(len * 0.74)})]`;
         o += `[~(${n(-P.lift * 0.28)})-(${n(a * (0.88 + r.f() * 0.16))})/(${n(r.jit(16))})B(${n(len * 0.68)})]`;
@@ -621,21 +640,21 @@ Object.assign(SPECIES, {
         o += `B(${n(len * 0.52)})`;
         return o;
       };
-      let ax = `!(1)${nebari(r, P.roots, 0.26, P.rootW)}`;
-      for (let k = 0; k < P.trunkSegs; k++) ax += `/(${n(r.jit(1.1))})&(${n(r.jit(0.45))})F(${n(P.segLen * (1 - 0.05 * k))})`;
-      const ring = (count, elev, len, yaw0) => {
+      let ax = `!(1)${nebari(r, P.roots, 0.36, P.rootW)}`;
+      for (let k = 0; k < P.trunkSegs; k++) ax += `/(${n(r.jit(0.5))})&(${n(k === 0 ? 0.3 : r.jit(0.28))})F(${n(P.segLen * (1 - 0.035 * k))})`;
+      // cada galho nasce um pouco acima do anterior, para o colar encontrar a casca sozinho
+      const emerge = (count, elev, len, yaw0) => {
         for (let i = 0; i < count; i++) {
-          const yaw = yaw0 + i * 360 / count + r.jit(5);
-          ax += `[/(${n(yaw)})&(${n(elev + r.jit(2))})` + spoke(len) + `]`;
+          ax += `F(${n(P.rise * (0.82 + r.f() * 0.36))})`;
+          const yaw = yaw0 + (i + 0.5) * (360 / count) + r.jit(2.5);
+          ax += `[/(${n(yaw)})&(${n(elev + r.jit(1.3))})` + spoke(len) + `]`;
         }
       };
       const yaw0 = r.f() * 20;
-      ring(P.spokesA, P.outerA, P.arm, yaw0);
-      ax += `F(0.065)`;
-      ring(P.spokesB, P.midA, P.arm * 0.94, yaw0 + 180 / P.spokesB);
-      ax += `F(0.05)`;
-      ring(P.spokesC, P.innerA, P.arm * 0.9, yaw0 + 180 / P.spokesC);
-      ax += `F(0.04)` + spoke(P.arm * 0.82);
+      emerge(P.spokesA, P.outerA, P.arm, yaw0);
+      emerge(P.spokesB, P.midA, P.arm * 0.9, yaw0 + 180 / P.spokesA);
+      emerge(P.spokesC, P.innerA, P.arm * 0.78, yaw0 + 90 / P.spokesC);
+      ax += `F(${n(P.rise * 0.7)})` + spoke(P.arm * 0.68);
       return {
         axiom: ax,
         rules: {
@@ -656,9 +675,9 @@ Object.assign(SPECIES, {
         finalize: { B: (p, rr) => elmTip(rr, p[0] || P.tip) },
         juvenile: { B: (p, rr) => elmTip(rr, (p[0] || P.tip) * 0.7) }, juvenileLife: 1.5,
         display: [
-          `ω : nebari × ${P.roots}   tronco reto F(${n(P.segLen)}) × ${P.trunkSegs}   (quase sem desvio: estilo hokidachi)`,
-          `     anel externo × ${P.spokesA} a &(${n(P.outerA)}°), médio × ${P.spokesB} a &(${n(P.midA)}°), interno × ${P.spokesC} a &(${n(P.innerA)}°)   líder central`,
-          `     cada galho: F reto (abre) ~(${n(-P.lift)}) F F ^(sobe) [ ±${n(P.split)}° B ]  — sai em leque e curva para o domo`,
+          `ω : nebari × ${P.roots}   tronco reto F(${n(P.segLen)}) × ${P.trunkSegs}   (quase sem desvio, afunila até a divisão)`,
+          `     vassoura em alturas escalonadas (F ${n(P.rise)}): externo × ${P.spokesA} a &(${n(P.outerA)}°), médio × ${P.spokesB} a &(${n(P.midA)}°), interno × ${P.spokesC} a &(${n(P.innerA)}°)   líder`,
+          `     cada galho: F curto (colar) ~(${n(-P.lift)}) F F ^(sobe) [ ±${n(P.split)}° B ]  — nasce na casca e curva para o domo`,
           `B(s) → F F [ ±(${n(P.split)}°) B(s·${n(P.side)}) ] [ ^(12°) B ] B(s·${n(P.cont)})    (s < ${n(P.tip)} → folhas serrilhadas + almofada pequena)`,
           `casca exfoliante em manchas de cinza, bege e laranja · vaso oval raso esmaltado`,
           yearsTxt(P),
@@ -687,30 +706,51 @@ Object.assign(SPECIES, {
     name: 'Bonsai de Ficus', emoji: '🪴', height: 5.6, theme: 'estudio', leafKind: 'ficus', padUp: 0.84, years: true, float: 0, rootDrop: 1.05, noStones: true,
     leafRough: 0.26, leafCoat: 0.62, leafCoatRough: 0.18,
     desc: 'Ficus retusa (figueira-ginseng) em estilo moyogi (ereto informal): tronco grosso e musculoso, de casca lisa cinza, com nebari forte e raízes aéreas que descem dos galhos baixos até o musgo; copa arredondada em almofadas densas de folhas ovais pequenas, verde-escuras e brilhantes, num vaso oval raso de esmalte azul-turquesa.',
-    baseWidth: 0.34, leafRoll: 14, bump: 0.01, tubeMinSides: 12, potEllipse: { a: 1.95, b: 1.48 }, wood: { leo: [2.2, 2.4], G: 1.35, tip: 0.008, ring: 0.48, share: 0.72 },
+    baseWidth: 0.24, leafRoll: 14, bump: 0.008, tubeMinSides: 22, potEllipse: { a: 1.05, b: 0.78 }, wood: { leo: [2.2, 2.4], G: 1.15, tip: 0.007, ring: 0.42, share: 0.62 },
     tube: {
+      // horiz = |cos θ| é a lateral do tubo (Nn); sin θ é a vertical (Bn). Achatar = alargar os lados e baixar o dorso.
       bump: (th, arc, g, trunk, P) => {
         const y = Math.max(g.y, 0);
-        // nebari: grossa no colar e afinando até a ponta. A aérea chega ao solo com arco longo e não entra aqui.
+        const horiz = Math.pow(Math.abs(Math.cos(th)), 0.5);
         if (!trunk) {
-          if (y < 0.4 && arc < 1.85) {
-            const u = Math.min(1, arc / 1.35);
-            return 1.1 + 1.15 * Math.pow(1 - u, 1.15);
+          if (arc > 1.5) {
+            if (y > 0.055) return 1;
+            const sink = Math.min(1, (0.055 - y) / 0.055);
+            const fade = Math.pow(1 - sink, 0.42);
+            const side = 1.15 + 1.1 * sink;
+            const vert = 1 - 0.86 * sink;
+            return Math.max(0.02, fade * (vert + (side - vert) * horiz));
           }
-          return 1;
+          // O shader alarga o colar até 2.8× e isso virava um cone. O divisor desfaz esse alargamento.
+          const d = Math.max(0, arc - 0.04);
+          const collar = 1 + 1.8 * Math.exp(-d / 0.34);
+          const u = Math.min(1.15, d / 0.68);
+          const dissolve = Math.pow(Math.max(0, 1 - Math.max(0, u - 0.58) / 0.32), 1.4);
+          const vary = 0.55 + 0.7 * Math.abs(Math.sin(g.x * 0.35 + g.z * 0.42 + P.phase));
+          const side = 4.4 * dissolve;
+          const vert = 0.7 * dissolve;
+          return Math.max(0.004, (vert + (side - vert) * horiz) * vary / Math.pow(collar, 0.72));
         }
-        const flare = P.flare * Math.exp(-y / P.flareH);
-        const lobes = 0.94 + 0.06 * Math.cos(P.lobes * th + P.phase);
-        const muscle = Math.sin(2 * th + arc * 1.05 + P.phase) * 0.65 + Math.sin(arc * 1.5 + 1.3) * 0.35;
-        return Math.max(0.9, 1 + flare * lobes + P.muscle * muscle * Math.exp(-y / 1.6));
+        const foot = Math.exp(-y / Math.max(0.1, P.flareH));
+        const slim = Math.exp(-y / 1.35);
+        const muscle = Math.sin(2 * th + arc * 0.9 + P.phase) * 0.55 + Math.sin(arc * 1.35 + 0.5) * 0.32;
+        return Math.max(0.38, (0.42 + 0.22 * slim) * (1 + P.flare * foot * 1.35) + P.muscle * muscle * Math.exp(-y / 2.1));
       },
+    },
+    skipJoint: (i, sk) => sk.Y[i] < 0.16,
+    capRoots(rad, sk) {
+      const cap = (rad[1] || rad[0] || 0.24) * 0.145;
+      if (!sk.tipw) return;
+      for (const [tip] of sk.tipw) {
+        for (let i = tip; i > 1; i = sk.PAR[i]) if (rad[i] > cap) rad[i] = cap;
+      }
     },
     params(r) {
       return {
-        iterations: 4, years: r.int(12, 40), segs: r.int(6, 7), segLen: r.range(0.48, 0.56), curve: r.range(14, 24), cycles: r.range(0.85, 1.15), phase: r.range(0, 6.28), lean: r.range(-9, 9),
-        roots: r.int(6, 8), rootW: r.range(22, 32), rootLen: r.range(1.15, 1.42), aerials: r.int(4, 5),
-        branchLen: r.range(0.62, 0.84), bAngle: r.range(42, 54), split: r.range(28, 40),
-        flare: r.range(0.05, 0.12), flareH: r.range(0.12, 0.2), lobes: r.int(5, 7), muscle: r.range(0.04, 0.08),
+        iterations: 4, years: r.int(12, 40), segs: r.int(7, 8), segLen: r.range(0.52, 0.6), curve: r.range(30, 46), cycles: r.range(0.85, 1.15), phase: r.range(0, 6.28), lean: r.range(-16, 16),
+        roots: r.int(6, 8), rootW: r.range(5, 9), rootLen: r.range(0.82, 1.02), aerials: r.int(4, 5),
+        branchLen: r.range(0.58, 0.78), bAngle: r.range(40, 52), split: r.range(28, 40),
+        flare: r.range(0.28, 0.46), flareH: r.range(0.1, 0.16), lobes: r.int(5, 7), muscle: r.range(0.04, 0.07),
         padR: r.range(0.56, 0.7), padH: r.range(0.32, 0.42), padN: r.int(72, 96), leafS: r.range(0.105, 0.132),
         leafH: r.range(126, 144), leafSat: r.range(0.62, 0.84), leafL: r.range(0.11, 0.16),
         barkH: r.range(28, 42), barkL: r.range(0.3, 0.38),
@@ -723,15 +763,20 @@ Object.assign(SPECIES, {
       const bare = 1;
       const nebariFicus = () => {
         let o = '';
+        const gap = 26 + r.f() * 24;
+        const span = 360 - gap;
+        const base = r.f() * 360;
         for (let i = 0; i < P.roots; i++) {
-          const L = P.rootLen * (i % 3 === 0 ? 1.1 : 0.72 + r.f() * 0.32);
-          const parts = 5;
-          let seg = `[/(${n(i * 360 / P.roots + r.jit(14))})&(${n(88.5 + r.f() * 1.6)})`;
+          const heavy = r.f();
+          const L = P.rootLen * (0.78 + heavy * 0.28);
+          const parts = 7;
+          const ang = base + (i + 0.5) * span / P.roots + r.jit(9);
+          let seg = `[/(${n(ang)})&(${n(87.5 + r.f() * 2)})`;
           for (let k = 0; k < parts; k++) {
-            if (k) seg += `/(${n(r.jit(12))})+(${n(r.jit(6))})&(${n(r.range(-0.4, 0.6))})`;
-            seg += `F(${n(L / parts * (1 - 0.08 * k))})`;
+            if (k) seg += `&(${n(k < 3 ? r.range(-0.15, 0.4) : r.range(1.7, 2.9))})+(${n((k % 2 ? 1 : -1) * r.range(7, 15))})/(${n(r.jit(5))})`;
+            seg += `F(${n(L / parts * (1 - 0.06 * k))})`;
           }
-          seg += `Q(${n(P.rootW * (0.82 + r.f() * 0.36))})]`;
+          seg += `Q(${n(P.rootW * (0.42 + heavy * 0.95))})]`;
           o += seg;
         }
         return o;
@@ -741,7 +786,7 @@ Object.assign(SPECIES, {
         if (aerialBox.n > 0 && u < 0.42) {
           const nDrop = aerialBox.n >= 2 && u < 0.2 ? 2 : 1;
           for (let d = 0; d < nDrop && aerialBox.n > 0; d++) {
-            const fat = d === 0 ? r.range(0.26, 0.38) : r.range(0.16, 0.24);
+            const fat = d === 0 ? r.range(0.13, 0.22) : r.range(0.08, 0.13);
             br += `F(${n(0.28 + r.f() * 0.08)})W(${n(0.2)},${n(0.04 + d * 0.14 + r.f() * 0.04)},${n(fat)})`;
             aerialBox.n--;
           }
@@ -753,7 +798,8 @@ Object.assign(SPECIES, {
       const aerialBox = { n: P.aerials };
       for (let k = 0; k < P.segs; k++) {
         const bend = P.curve * Math.cos(6.2832 * P.cycles * k / P.segs + P.phase);
-        ax += `&(${n(bend)})F(${n(P.segLen * (1 - 0.16 * k / P.segs))})`;
+        const sway = P.curve * 0.38 * Math.sin(6.2832 * (P.cycles * 0.5) * k / P.segs + P.phase);
+        ax += `+(${n(sway)})&(${n(bend)})/(${n(r.jit(3.5))})F(${n(P.segLen * (1 - 0.34 * k / P.segs))})`;
         if (k < bare) continue;
         const u = (k - bare) / Math.max(P.segs - bare, 1);
         yaw += 137 + r.jit(16);
@@ -775,7 +821,7 @@ Object.assign(SPECIES, {
         finalize: { B: (p) => pad(P, 0.9 + 0.2 * Math.min(p[0], 1.2)) },
         juvenile: { B: () => pad(P, 0.42) }, juvenileLife: 1.3,
         display: [
-          `ω : nebari × ${P.roots} (peso Q ${n(P.rootW)}, dedos no musgo)   tronco moyogi { &(${n(P.curve)}°·cos(2π·${n(P.cycles)}·k/${P.segs})) F } × ${P.segs}`,
+          `ω : nebari × ${P.roots} (peso Q ${n(P.rootW)}, línguas que somem no musgo)   tronco moyogi { &(${n(P.curve)}°·cos) +(balanço) F } × ${P.segs}`,
           `     galhos a partir do 2º segmento, em espiral áurea: [ /(137° ± 16°) &(${n(P.bAngle)}° → mais fechado no topo) B(L) ]`,
           `     raízes aéreas × ${P.aerials}: W(0.2, atraso, fração do tronco) nos galhos baixos — descem até o musgo`,
           `B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.55s) ] ^(16°) B(0.68s)   (s < 0.28 → almofada)`,
@@ -797,9 +843,9 @@ Object.assign(SPECIES, {
         if (sk.Y[i] < 0.35) rootR = Math.max(rootR, d);
         else if (sk.Y[i] > 0.7) crownR = Math.max(crownR, d);
       }
-      const a = Math.max(rootR * 1.28, crownR * 0.72, H * 0.26, 1.28);
+      const a = Math.max(rootR * 1.04, 0.72);
       const pot = makePot(group, {
-        a, b: a * 0.74, h: Math.min(a * 0.16, 0.32), n: 2.15, lip: 0.06, taper: 0.03, bulge: 0.03, foot: 0.08,
+        a, b: a * 0.72, h: Math.min(a * 0.2, 0.22), n: 2.15, lip: 0.05, taper: 0.03, bulge: 0.02, foot: 0.06,
         color: hsl(P.potH, P.potS, P.potL), rough: 0.12, metal: 0.04, glaze: true, clearcoat: 1, clearcoatRough: 0.08,
         moss: 0.88, mound: Math.min(a * 0.04, 0.06),
       }, rng);
@@ -1498,15 +1544,15 @@ SIMS.pinheiro_negro = crownSim({
 for (const id of BONSAI) if (!SIMS[id]) SIMS[id] = (P, r, sp, ctx) => bonsaiSim(3)(P, r, sp, ctx);
 // olmo: ramos curtos para a ramificação fina ficar na casca do domo (a poda padrão deixaria o hokidachi ralo no meio)
 SIMS.olmo_chines = crownSim({
-  years: 24, ring: 0.85, dil: 0.32, markers: 6400, prune: { every: 3 }, pruneCell: 0.18, ahead: 0.62,
+  years: 24, ring: 0.85, dil: 0.24, markers: 9800, prune: { every: 3 }, pruneCell: 0.15, ahead: 0.72,
   about: 'hokidachi: o tronco reto e a vassoura vêm da gramática; os raminhos finos enchem o domo e a tesoura corta o que sai dele a cada 3 anos',
-  scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: P.iterations, seg: 0.22, time: (t) => t * 24 * 0.48 / (P.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
+  scaffold: (P, def) => ({ axiom: def.axiom, rules: def.rules, iters: P.iterations, seg: 0.18, time: (t) => t * 24 * 0.52 / (P.iterations + 1), syms: { Z: () => ({ ord: 2 }), B: () => ({ ord: 2 }) } }),
   cfg: (P) => ({
-    shadow: { vox: 0.3, q: 4, b: 1.22, a: 0.65, C: 6.5 },
-    rp: 0.64, dk: 0.085, cone: 1.2, maxNodes: 18000,
-    nMax: () => 2, lambda: () => 0.5, len: () => 0.05, xi: () => 0.38, trop: () => 0.1, maxTurn: 0.55,
-    phyllo: () => ({ type: 'alt', div: 137.5, angle: 44, p: 0.88 }), maxOrder: 9, maxIdle: 8,
-    leaf: { kind: 'leaf', per: () => 3, pitch: 52, pitchJ: 30, keep: () => 5, size: P.leafS },
+    shadow: { vox: 0.28, q: 4, b: 1.18, a: 0.62, C: 6.2 },
+    rp: 0.66, dk: 0.08, cone: 1.15, maxNodes: 18000,
+    nMax: () => 2, lambda: () => 0.48, len: () => 0.04, xi: () => 0.36, trop: () => 0.1, maxTurn: 0.55,
+    phyllo: () => ({ type: 'alt', div: 137.5, angle: 42, p: 0.9 }), maxOrder: 9, maxIdle: 8,
+    leaf: { kind: 'leaf', per: () => 4, pitch: 44, pitchJ: 24, keep: () => 7, size: P.leafS },
     shedT: () => 0.03,
   }),
 });
