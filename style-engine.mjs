@@ -5,8 +5,10 @@
  * dominância apical, floração e vigor. O estilo guarda a linha do tronco,
  * o ápice, a proporção, a silhueta e o desenho das almofadas.
  *
- * Estágio 2 encaixa regras de desenho em DESIGN_RULES (applyDesignRules).
- * Estágio 3 encaixa a nota estética em scoreTree. Os dois hoje são identidade.
+ * Estágio 2: regras clássicas de desenho (DESIGN_RULES, designOf, shapeDesign,
+ * enforceDesignRadii, measureDesign). Cada regra é um número que o estilo
+ * (rules) e a espécie (design) podem afinar. A mesma (seed, espécie, estilo)
+ * continua determinística. Estágio 3 lê measureDesign e preenche scoreTree.
  */
 const DEG = Math.PI / 180;
 const n = (x) => +(+x).toFixed(3);
@@ -30,6 +32,7 @@ export const STYLES = {
     crown: 'triangle',
     pads: 'tiers',
     keepsLowTrunk: false,
+    rules: { taperRatio: 7.6, crownRatio: 0.66, firstBranch: 0.3, droop: 12, lift: 8, branchThin: 0.55 },
   },
   moyogi: {
     id: 'moyogi',
@@ -42,6 +45,7 @@ export const STYLES = {
     crown: 'irregular',
     pads: 'outside-bends',
     keepsLowTrunk: false,
+    rules: { taperRatio: 8, crownRatio: 0.74, firstBranch: 0.27, droop: 18, lift: 12, branchThin: 0.56 },
   },
   shakan: {
     id: 'shakan',
@@ -54,6 +58,7 @@ export const STYLES = {
     crown: 'slant',
     pads: 'counterweight',
     keepsLowTrunk: false,
+    rules: { taperRatio: 7.2, crownRatio: 0.8, firstBranch: 0.24, droop: 16, lift: 10, branchThin: 0.55 },
   },
   kengai: {
     id: 'kengai',
@@ -66,6 +71,7 @@ export const STYLES = {
     crown: 'cascade',
     pads: 'cascade-outside',
     keepsLowTrunk: true,
+    rules: { taperRatio: 9, crownRatio: 0.5, firstBranch: 0.16, droop: 20, lift: 10, cascade: true, branchThin: 0.5 },
   },
   han_kengai: {
     id: 'han_kengai',
@@ -78,6 +84,7 @@ export const STYLES = {
     crown: 'semi-cascade',
     pads: 'cascade-outside',
     keepsLowTrunk: true,
+    rules: { taperRatio: 8.4, crownRatio: 0.58, firstBranch: 0.18, droop: 16, lift: 10, cascade: true, branchThin: 0.52 },
   },
   hokidachi: {
     id: 'hokidachi',
@@ -90,16 +97,68 @@ export const STYLES = {
     crown: 'broom',
     pads: 'dome-fan',
     keepsLowTrunk: false,
+    rules: { taperRatio: 5.8, taperMin: 3.6, taperMax: 6.8, crownRatio: 1.08, firstBranch: 0.33, broom: true, alternate: false, splitAt: 0.33, branchThin: 0.66, flare: 1.55, collar: 0.22 },
   },
 };
 
-/** Regras de desenho do estágio 2. Cada função recebe o axioma e o contexto e pode devolver outra string. */
-export const DESIGN_RULES = [];
+const RULE_BASE = {
+  taperRatio: 8, taperMin: 6, taperMax: 10, flare: 1.42,
+  firstBranch: 0.28, firstMin: 0.22, firstMax: 0.36,
+  branchThin: 0.56, crownRatio: 0.72,
+  droop: 16, lift: 12, alternate: true, broom: false, cascade: false,
+  splitAt: 0.33, padScale: 1, collar: 0.52, visualBump: 1,
+  barGap: 0.045, frontBan: 0.34,
+};
+
+/**
+ * Parâmetros efetivos. O estilo traz a arquitetura; a espécie (design) afina
+ * biologia (flare, queda dos galhos, escala das almofadas). Vassoura e cascata
+ * não herdam a proporção de copa dos outros estilos.
+ */
+export function designOf(styleId, speciesId, speciesRules) {
+  const style = (STYLES[styleId] && STYLES[styleId].rules) || {};
+  const species = speciesRules || {};
+  const d = { ...RULE_BASE, ...style, ...species, styleId, speciesId };
+  if (style.broom) {
+    d.broom = true;
+    d.alternate = false;
+    d.cascade = false;
+    d.taperRatio = style.taperRatio;
+    d.taperMin = style.taperMin ?? 3.6;
+    d.taperMax = style.taperMax ?? 6.8;
+    d.crownRatio = style.crownRatio;
+    d.collar = style.collar ?? 0.22;
+    d.splitAt = style.splitAt ?? 0.33;
+    d.branchThin = style.branchThin ?? 0.66;
+  }
+  if (style.cascade) {
+    d.cascade = true;
+    d.broom = false;
+    d.crownRatio = style.crownRatio;
+    d.taperRatio = style.taperRatio ?? d.taperRatio;
+  }
+  d.conifer = speciesId === 'pinheiro_branco' || speciesId === 'pinheiro_negro' || speciesId === 'cipreste' || speciesId === 'junipero';
+  return d;
+}
+
+/** Regras nomeadas. `axiom` é opcional; o desenho de verdade está em shapeDesign e enforceDesignRadii. */
+export const DESIGN_RULES = [
+  { id: 'taper', param: 'taperRatio' },
+  { id: 'nebari', param: 'flare' },
+  { id: 'firstBranch', param: 'firstBranch' },
+  { id: 'branchOrder', param: 'branchThin' },
+  { id: 'movement', param: 'droop' },
+  { id: 'pads', param: 'padScale' },
+  { id: 'proportion', param: 'crownRatio' },
+  { id: 'broom', param: 'splitAt' },
+];
 
 export function applyDesignRules(axiom, ctx) {
   let out = axiom;
   for (const rule of DESIGN_RULES) {
-    const next = rule(out, ctx);
+    const fn = typeof rule === 'function' ? rule : rule.axiom;
+    if (!fn) continue;
+    const next = fn(out, ctx);
     if (typeof next === 'string' && next) out = next;
   }
   return out;
@@ -269,8 +328,14 @@ function trunkMoyogi(id, P, bio, r, bag) {
       if (s !== 1) continue;
       // o galho nasce do lado de fora da curva, quase na horizontal
       const outside = heading >= 0 ? 96 : 264;
-      const bl = Math.min(bio.branchLen * (0.78 - 0.16 * b), seg * (3.4 - 0.55 * b));
+      const bl0 = Math.min(bio.branchLen * (0.78 - 0.16 * b), seg * (3.4 - 0.55 * b));
+      const elm = id === 'olmo_chines';
+      const bl = elm ? Math.max(bl0 * 0.92, bio.branchLen * (0.62 - 0.1 * b)) : bl0;
       ax += emitBranch(id, P, yawOffFront(outside + r.jit(8), b === 0), bio.bAngle * (b === 2 ? 0.7 : 0.88), Math.max(seg * 1.1, bl), bio.level * (b === 0 ? 0.85 : 1), bag);
+      if (elm && b > 0) {
+        ax += emitBranch(id, P, yawOffFront(outside + 148, false), bio.bAngle * 0.78, bl * 0.78, bio.level, bag);
+        ax += emitBranch(id, P, yawOffFront(16 + b * 28, false), bio.bAngle * 0.7, bl * 0.58, bio.level, bag);
+      }
       if (id === 'junipero' && bag.jin > 0 && b === 1) {
         bag.jin--;
         ax += emitJin(outside + 40);
@@ -876,4 +941,365 @@ export function keepTrunkOutOfPot(sk, inst, pot) {
     it.p.x = ox + px * s;
     it.p.z = oz + pz * s;
   }
+}
+
+function treeExtent(sk) {
+  let H = 0.2, minY = 0;
+  for (let i = 0; i < sk.N; i++) {
+    if (sk.Y[i] > H) H = sk.Y[i];
+    if (sk.Y[i] < minY) minY = sk.Y[i];
+  }
+  return { H, minY };
+}
+
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function primariesOf(sk, info, ch) {
+  const out = [];
+  for (const ti of info.trunk) {
+    for (const c of ch[ti]) {
+      if (info.set.has(c)) continue;
+      if (sk.Y[ti] < 0.05 && sk.Y[c] < 0.16) continue;
+      let maxY = sk.Y[c], count = 0;
+      const stack = [c];
+      const seen = new Uint8Array(sk.N);
+      while (stack.length) {
+        const q = stack.pop();
+        if (seen[q]) continue;
+        seen[q] = 1;
+        count++;
+        if (sk.Y[q] > maxY) maxY = sk.Y[q];
+        for (const k of ch[q]) stack.push(k);
+      }
+      if (count < 3 || (maxY < 0.08 && sk.Y[ti] < 0.12)) continue;
+      out.push({
+        c, ti, y: sk.Y[ti], n: count, maxY,
+        yaw: Math.atan2(sk.Z[c] - sk.Z[ti], sk.X[c] - sk.X[ti]),
+      });
+    }
+  }
+  out.sort((a, b) => a.y - b.y);
+  return out;
+}
+
+/** Afasta galhos em barra, galhos da frente no terço de baixo, galhos por dentro da curva e raízes apontadas para a câmera. */
+export function shapeDesign(sk, inst, design) {
+  if (!sk || sk.N < 4 || !design) return;
+  const ch = childrenOf(sk);
+  const info = trunkChain(sk, ch, !!design.cascade);
+  const { H } = treeExtent(sk);
+  if (!design.broom && !design.cascade) {
+    const prim = primariesOf(sk, info, ch);
+    const gap = Math.max(0.03, H * (design.barGap || 0.045));
+    const heavy = Math.max(40, sk.N * 0.1);
+    for (let a = 0; a < prim.length; a++) {
+      for (let b = a + 1; b < prim.length; b++) {
+        if (Math.abs(prim[a].y - prim[b].y) > gap) continue;
+        if (Math.abs(angDiff(prim[a].yaw, prim[b].yaw)) < 2.35) continue;
+        if (prim[b].n > heavy) continue;
+        const dir = angDiff(prim[b].yaw, prim[a].yaw) >= 0 ? 1 : -1;
+        rotateSubtree(sk, inst, prim[b].c, sk.X[prim[b].ti], sk.Z[prim[b].ti], dir * 0.32, ch);
+        prim[b].yaw += dir * 0.32;
+      }
+    }
+    const yCut = H * (design.frontBan || 0.34);
+    for (const p of prim) {
+      if (p.n > heavy) continue;
+      if (p.y > yCut || p.y < H * 0.08) continue;
+      const d = angDiff(p.yaw, Math.PI / 2);
+      if (Math.abs(d) > 0.4) continue;
+      const dir = d >= 0 ? 1 : -1;
+      const delta = dir * 0.42 - d;
+      rotateSubtree(sk, inst, p.c, sk.X[p.ti], sk.Z[p.ti], delta, ch);
+      p.yaw += delta;
+    }
+    const trunk = info.trunk;
+    for (let k = 1; k < trunk.length - 1; k++) {
+      const prev = trunk[k - 1], here = trunk[k], next = trunk[k + 1];
+      const vx1 = sk.X[here] - sk.X[prev], vz1 = sk.Z[here] - sk.Z[prev];
+      const vx2 = sk.X[next] - sk.X[here], vz2 = sk.Z[next] - sk.Z[here];
+      const cross = vx1 * vz2 - vz1 * vx2;
+      if (Math.abs(cross) < 1e-4) continue;
+      const inx = -vz1 * Math.sign(cross), inz = vx1 * Math.sign(cross);
+      const inL = Math.hypot(inx, inz) || 1;
+      for (const c of ch[here]) {
+        if (info.set.has(c)) continue;
+        const dx = sk.X[c] - sk.X[here], dz = sk.Z[c] - sk.Z[here];
+        const h = Math.hypot(dx, dz);
+        if (h < 0.04) continue;
+        if ((dx * inx + dz * inz) / (h * inL) < 0.55) continue;
+        let count = 0;
+        const stack = [c];
+        const seen = new Uint8Array(sk.N);
+        while (stack.length) {
+          const q = stack.pop();
+          if (seen[q]) continue;
+          seen[q] = 1;
+          count++;
+          for (const k of ch[q]) stack.push(k);
+        }
+        if (count > heavy) continue;
+        rotateSubtree(sk, inst, c, sk.X[here], sk.Z[here], -Math.sign(cross) * 0.38, ch);
+      }
+    }
+  }
+  for (const c of ch[0] || []) {
+    let maxY = sk.Y[c];
+    const stack = [c];
+    const seen = new Uint8Array(sk.N);
+    while (stack.length) {
+      const i = stack.pop();
+      if (seen[i]) continue;
+      seen[i] = 1;
+      if (sk.Y[i] > maxY) maxY = sk.Y[i];
+      for (const k of ch[i]) stack.push(k);
+    }
+    if (maxY > 0.38) continue;
+    const yaw = Math.atan2(sk.Z[c], sk.X[c]);
+    const d = angDiff(yaw, Math.PI / 2);
+    if (Math.abs(d) > 0.34) continue;
+    const dir = d >= 0 ? 1 : -1;
+    rotateSubtree(sk, inst, c, 0, 0, dir * 0.5 - d, ch);
+  }
+}
+
+function chainLength(sk, trunk) {
+  let L = 0;
+  for (let k = 1; k < trunk.length; k++) {
+    const a = trunk[k - 1], b = trunk[k];
+    L += Math.hypot(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
+  }
+  return L;
+}
+
+function blendBroom(sk, rFull, rTube, design, ch, info) {
+  let best = info.trunk[0], bn = 0;
+  for (const ti of info.trunk) {
+    let nSide = 0;
+    for (const c of ch[ti]) if (!info.set.has(c) && sk.Y[c] > 0.05) nSide++;
+    if (nSide > bn) { bn = nSide; best = ti; }
+  }
+  if (bn < 3) return;
+  const rT = rFull[best] || 0.05;
+  const share = Math.min(design.branchThin || 0.66, Math.pow(1 / bn, 0.45));
+  const r0 = rT * Math.max(0.4, share);
+  for (const ti of info.trunk) {
+    if (Math.abs(sk.Y[ti] - sk.Y[best]) > Math.max(0.22, rT * 2.4)) continue;
+    for (const c of ch[ti]) {
+      if (info.set.has(c)) continue;
+      const chain = [c];
+      let i = c, guard = 0;
+      while (ch[i] && ch[i].length && guard++ < 6) {
+        i = ch[i][0];
+        chain.push(i);
+      }
+      const tip = rFull[chain[chain.length - 1]] || r0 * 0.35;
+      for (let k = 0; k < chain.length; k++) {
+        const t = chain.length === 1 ? 0 : k / (chain.length - 1);
+        const parent = sk.PAR[chain[k]];
+        const cap = (rFull[parent] || rT) * (design.branchThin || 0.66);
+        const target = Math.min(cap, r0 * (1 - t) + Math.min(tip, r0 * 0.85) * t);
+        if (target > rFull[chain[k]]) {
+          rFull[chain[k]] = target;
+          rTube[chain[k]] = Math.max(rTube[chain[k]], target);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Afunila só onde o tronco engrossa para cima. A base e o volume do tronco
+ * nunca ficam abaixo do que Leonardo já tinha dado: o que sai de cima volta
+ * para a base. Galhos não são afinados.
+ */
+export function enforceDesignRadii(sk, rFull, rTube, design) {
+  if (!sk || sk.N < 3 || !rFull || !rTube || !design) return;
+  const ch = childrenOf(sk);
+  const info = trunkChain(sk, ch, !!design.cascade);
+  const trunk = info.trunk;
+  if (trunk.length < 2) return;
+  const { H } = treeExtent(sk);
+  const vol = (arr) => {
+    let v = 0;
+    for (let t = 1; t < trunk.length; t++) {
+      const a = trunk[t - 1], b = trunk[t];
+      const len = Math.hypot(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
+      const r = (arr[a] + arr[b]) * 0.5;
+      v += r * r * len;
+    }
+    return v;
+  };
+  const baseOf = (arr) => {
+    let r = 0;
+    for (const i of trunk) {
+      if (sk.Y[i] >= 0 && sk.Y[i] <= Math.max(0.06, H * 0.1) && arr[i] > r) r = arr[i];
+    }
+    return r || arr[trunk[1]] || arr[trunk[0]] || 0;
+  };
+  const snap = Float32Array.from(rFull.subarray(0, sk.N));
+  const vol0 = vol(snap);
+  const base0 = baseOf(snap);
+  const flareEnd = Math.min(trunk.length - 1, Math.max(1, Math.round(trunk.length * 0.08)));
+  let prev = rFull[trunk[flareEnd]] || rFull[trunk[0]];
+  for (let t = flareEnd; t < trunk.length; t++) {
+    const i = trunk[t];
+    if (rFull[i] > prev) {
+      rFull[i] = prev;
+      if (rTube[i] > prev) rTube[i] = prev;
+    } else prev = rFull[i];
+  }
+  let guard = 0;
+  while (guard++ < 6 && (vol(rFull) < vol0 * 0.999 || baseOf(rFull) < base0 * 0.999)) {
+    const need = Math.max(vol0 / Math.max(vol(rFull), 1e-9), base0 / Math.max(baseOf(rFull), 1e-9));
+    const bump = Math.min(1.4, Math.sqrt(Math.max(need, 1)));
+    for (let t = 0; t <= flareEnd; t++) {
+      const i = trunk[t];
+      rFull[i] *= bump;
+      rTube[i] *= bump;
+    }
+  }
+  // A base é o ponto mais grosso. Se um galho passou da base (a escala de
+  // Leonardo usa o máximo global), a base sobe até esse máximo. Nunca desce.
+  let peak = 0;
+  for (let i = 0; i < sk.N; i++) if (rFull[i] > peak) peak = rFull[i];
+  const baseNow = baseOf(rFull);
+  if (peak > baseNow * 1.01 && baseNow > 0) {
+    const lift = Math.min(1.35, peak / baseNow);
+    for (let t = 0; t <= flareEnd; t++) {
+      const i = trunk[t];
+      rFull[i] *= lift;
+      rTube[i] *= lift;
+    }
+  }
+  if (design.broom) blendBroom(sk, rFull, rTube, design, ch, info);
+}
+
+function clusterPads(pts, H) {
+  if (!pts || pts.length < 8) return { padCount: 0, negativeSpace: 0 };
+  const cell = Math.max(0.045, H / 26);
+  const occ = new Set();
+  for (const p of pts) occ.add(`${Math.floor(p.x / cell)},${Math.floor(p.y / cell)},${Math.floor(p.z / cell)}`);
+  const seen = new Set();
+  let pads = 0;
+  const neigh = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (const key of occ) {
+    if (seen.has(key)) continue;
+    pads++;
+    const stack = [key];
+    seen.add(key);
+    let guard = 0;
+    while (stack.length && guard++ < 12000) {
+      const cur = stack.pop();
+      const [x, y, z] = cur.split(',').map(Number);
+      for (const d of neigh) {
+        const nk = `${x + d[0]},${y + d[1]},${z + d[2]}`;
+        if (occ.has(nk) && !seen.has(nk)) { seen.add(nk); stack.push(nk); }
+      }
+    }
+  }
+  const cols = new Map();
+  for (const key of occ) {
+    const [x, y, z] = key.split(',').map(Number);
+    const ck = `${x},${z}`;
+    let c = cols.get(ck);
+    if (!c) cols.set(ck, c = { min: y, max: y, n: 0 });
+    if (y < c.min) c.min = y;
+    if (y > c.max) c.max = y;
+    c.n++;
+  }
+  let span = 0, filled = 0;
+  for (const c of cols.values()) { span += c.max - c.min + 1; filled += c.n; }
+  return { padCount: pads, negativeSpace: span ? Math.max(0, 1 - filled / span) : 0 };
+}
+
+/** Medidas por regra, para o estágio 3 pontuar e para o modo ?debug=rules. */
+export function measureDesign(sk, radii, inst, design) {
+  const empty = {
+    taperRatio: 0, reverseTaper: 0, firstBranchRatio: 0, crossings: 0, barBranches: 0,
+    crownRatio: 0, padCount: 0, negativeSpace: 0,
+  };
+  if (!sk || sk.N < 3 || !radii) return empty;
+  const ch = childrenOf(sk);
+  const drops = !!(design && design.cascade);
+  const info = trunkChain(sk, ch, drops);
+  const { H } = treeExtent(sk);
+  let rBase = 0;
+  for (const i of info.trunk) {
+    if (sk.Y[i] >= 0 && sk.Y[i] <= Math.max(0.06, H * 0.1) && radii[i] > rBase) rBase = radii[i];
+  }
+  if (!(rBase > 0)) rBase = radii[info.trunk[1]] || radii[1] || 0.02;
+  const height = drops ? Math.max(chainLength(sk, info.trunk), H) : H;
+  const taperRatio = height / Math.max(2 * rBase * (design?.visualBump || 1), 1e-4);
+  let reverseTaper = 0, prev = -1;
+  for (const i of info.trunk) {
+    if (sk.Y[i] < 0.05) continue;
+    if (prev >= 0 && radii[i] > prev * 1.08) reverseTaper++;
+    prev = radii[i];
+  }
+  const prim = primariesOf(sk, info, ch);
+  let firstY = prim.length ? prim[0].y : H;
+  for (const p of prim) if (p.n > 8 && p.y < firstY) firstY = p.y;
+  const gap = Math.max(0.03, H * 0.04);
+  let barBranches = 0;
+  if (!design?.broom) {
+    for (let a = 0; a < prim.length; a++) for (let b = a + 1; b < prim.length; b++) {
+      if (Math.abs(prim[a].y - prim[b].y) > gap) continue;
+      if (Math.abs(angDiff(prim[a].yaw, prim[b].yaw)) > 2.5) barBranches++;
+    }
+  }
+  const samples = prim.map((p) => {
+    const pts = [];
+    let i = p.c, guard = 0, prevI = p.ti;
+    while (i >= 0 && guard++ < 10) {
+      pts.push([sk.X[i], sk.Y[i], sk.Z[i]]);
+      const kids = ch[i];
+      if (!kids || !kids.length) break;
+      let best = kids[0], bd = -1;
+      for (const k of kids) {
+        const d = Math.hypot(sk.X[k] - sk.X[prevI], sk.Z[k] - sk.Z[prevI]);
+        if (d > bd) { bd = d; best = k; }
+      }
+      prevI = i;
+      i = best;
+    }
+    return pts;
+  });
+  let crossings = 0;
+  const lim = Math.max(0.045, H * 0.03);
+  for (let a = 0; a < samples.length; a++) for (let b = a + 1; b < samples.length; b++) {
+    let hit = false;
+    for (let i = 1; i < samples[a].length && !hit; i++) for (let j = 1; j < samples[b].length && !hit; j++) {
+      const A = samples[a][i], B = samples[b][j];
+      if (Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) < lim) hit = true;
+    }
+    if (hit) crossings++;
+  }
+  let fH = 0, fMin = Infinity, fR = 0;
+  const pts = [];
+  if (inst) for (const k of ['leaf', 'needles', 'petal']) for (const it of inst[k] || []) {
+    if (!it.p || (it.p.y < H * 0.12 && !drops)) continue;
+    if (it.p.y > fH) fH = it.p.y;
+    if (it.p.y < fMin) fMin = it.p.y;
+    fR = Math.max(fR, Math.hypot(it.p.x, it.p.z));
+    pts.push(it.p);
+  }
+  const span = drops ? Math.max(0.2, fH - (Number.isFinite(fMin) ? fMin : 0)) : (fH > 0.05 ? fH : H);
+  const href = span;
+  const pads = clusterPads(pts, Math.max(href, 0.2));
+  return {
+    taperRatio: +taperRatio.toFixed(3),
+    reverseTaper,
+    firstBranchRatio: +(H > 0 ? firstY / H : 0).toFixed(3),
+    crossings,
+    barBranches,
+    crownRatio: +(href > 0 ? (fR * 2) / href : 0).toFixed(3),
+    padCount: pads.padCount,
+    negativeSpace: +pads.negativeSpace.toFixed(3),
+  };
 }

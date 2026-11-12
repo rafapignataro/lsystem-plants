@@ -49,6 +49,8 @@
   .glabel{position:fixed;transform:translate(-50%,0);font-size:13px;font-weight:600;padding:5px 10px;border-radius:999px;background:rgba(10,16,14,.6);border:1px solid var(--bd);white-space:nowrap;cursor:pointer;backdrop-filter:blur(6px)}
   .glabel:hover{border-color:var(--acc)}
   #err{position:fixed;inset:auto 0 0 0;background:#5a1010;color:#fff;padding:8px;font:12px monospace;display:none}
+  #ruleDebug{display:none;position:fixed;top:14px;right:14px;z-index:6;min-width:220px;padding:10px 12px;border-radius:12px;background:rgba(10,16,14,.82);border:1px solid var(--bd);font:12px/1.55 ui-monospace,Menlo,monospace;color:#d7eadc;pointer-events:none}
+  #ruleDebug b{color:var(--acc);font-weight:600}
   @media (max-width:700px){#panel{width:calc(100% - 28px);max-height:55%;top:auto;bottom:14px}#caption{top:14px;bottom:auto;right:14px;max-width:70%}#caption h2{font-size:18px}#caption p{display:none}#toggle{top:auto;bottom:14px}}
 </style>
 <script type="importmap">
@@ -60,6 +62,7 @@
 </head>
 <body>
 <div id="app"></div>
+<div id="ruleDebug"></div>
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌿 Bonsai Garden</h1>
@@ -145,7 +148,7 @@ import {
   Rand, SPECIES, BARK, SIMS, ALL, BONSAI, hex, n, computeRadii, wordToString,
   buildSkeletonPackage, deserializeInst, serializeInst, unpackWorkerPayload,
 } from './lsystem-core.mjs';
-import { STYLES, FRONT_VIEW, resolveStyle } from './style-engine.mjs';
+import { STYLES, FRONT_VIEW, resolveStyle, enforceDesignRadii, measureDesign, designOf } from './style-engine.mjs';
 
 const hsl = (h, s, l) => new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, THREE.MathUtils.clamp(s, 0, 1), THREE.MathUtils.clamp(l, 0, 1));
 
@@ -979,14 +982,19 @@ function assemblePlant(pkg) {
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
   const sbuf = new Float32Array(sk.N);
+  const radScratch = new Float32Array(sk.N);
   const pl = {
     id, sp, P, def, word, done, W, BK, genome, rFull, sim: pkg.sim, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
+    rules: pkg.rules || null, design: pkg.design || null, style: pkg.style,
     theme: typeof sp.theme === 'function' ? sp.theme(P) : sp.theme,
     update(age) {
       if (age === this.lastAge) return;
       const t = performance.now();
       const T = Math.pow(age, 0.8) * tEnd;
-      computeRadii(sk, T, W, sbuf, radData); if (sp.capRoots) sp.capRoots(radData, sk); radTex.needsUpdate = true;
+      computeRadii(sk, T, W, sbuf, radData);
+      if (pkg.design) { radScratch.set(radData.subarray(0, sk.N)); enforceDesignRadii(sk, radData, radScratch, pkg.design); }
+      if (sp.capRoots) sp.capRoots(radData, sk);
+      radTex.needsUpdate = true;
       let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && !(sk.TD && sk.TD[i] <= T) && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
       this.curH = hy * inner.scale.x;
       this.lastAge = age; this.radUpdateMs = performance.now() - t;
@@ -1320,6 +1328,26 @@ function applySunFromEnv(center, rad) {
 }
 
 function fmtVal(v, unit) { if (typeof v === 'boolean') return v ? 'sim' : 'não'; if (typeof v === 'number') return (Number.isInteger(v) ? v : v.toFixed(unit === '°' ? 1 : 3)) + (unit || ''); return v; }
+function showRuleDebug(pl) {
+  const el = $('ruleDebug');
+  if (!el) return;
+  const on = new URLSearchParams(location.search).get('debug') === 'rules';
+  if (!on || !pl || !pl.rules) { el.style.display = 'none'; return; }
+  const m = pl.rules;
+  const lines = [
+    ['afunilamento', `${m.taperRatio.toFixed(2)} : 1`],
+    ['taper invertido', String(m.reverseTaper)],
+    ['1º galho', m.firstBranchRatio.toFixed(2)],
+    ['cruzamentos', String(m.crossings)],
+    ['galhos em barra', String(m.barBranches)],
+    ['copa / altura', m.crownRatio.toFixed(2)],
+    ['almofadas', String(m.padCount)],
+    ['espaço negativo', m.negativeSpace.toFixed(2)],
+  ];
+  el.innerHTML = lines.map(([k, v]) => `${k} <b>${v}</b>`).join('<br>');
+  el.style.display = 'block';
+  console.log('regras', pl.id, pl.style, m);
+}
 function showInfo(pl) {
   const { sp, P, def, W } = pl;
   const BK = pl.BK;
@@ -1367,6 +1395,7 @@ async function generate({ animate = true } = {}) {
       $('capT').textContent = `${pl.sp.emoji} ${pl.sp.name}`;
       $('capD').textContent = st ? `${pl.sp.desc} Estilo ${st.jp} ${st.name} (${st.pt}): ${st.desc}` : pl.sp.desc;
       showInfo(pl);
+      showRuleDebug(pl);
     } else {
       // Fileiras equilibradas a partir de ALL (só os bonsais registrados). LOD menor nos tubos.
       setTheme('jardim'); glowLight.intensity = 0;
@@ -1616,7 +1645,7 @@ function loop() {
 }
 let perfFps = 0, perfFrames = 0, perfT = performance.now();
 window.camera = camera; window.controls = controls; window.THREE = THREE;
-window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle };
+window.__lsys = { buildPlant, computeRadii, SPECIES, STYLES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand, resolveStyle, measureDesign, designOf };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>

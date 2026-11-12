@@ -5,6 +5,7 @@ import {
 } from './v8-engine.mjs';
 import {
   STYLES, resolveStyle, composeStyled, potSpec, applyFront, keepTrunkOutOfPot, scoreTree,
+  designOf, shapeDesign, enforceDesignRadii, measureDesign,
 } from './style-engine.mjs';
 
 export const DEG = Math.PI / 180;
@@ -667,14 +668,16 @@ Object.assign(SPECIES, {
           B: (p, rr) => {
             const s = p[0];
             if (s < P.tip) return elmTip(rr, s);
+            const broom = P._style !== 'moyogi';
+            const kick = broom ? P.kick : 1.8;
             const sp = P.split * (0.78 + rr.f() * 0.28);
             const seg = s * P.segK;
-            let o = `F(${n(seg * 0.45)})^(${n(P.kick * 0.35 + rr.jit(1))})F(${n(seg * 0.55)})`;
+            let o = `F(${n(seg * 0.45)})^(${n(kick * (broom ? 0.35 : 0.28) + rr.jit(1))})F(${n(seg * 0.55)})`;
             if (s < 0.55 && rr.chance(0.6)) o += leafStr(rr, P.leafS * 0.6, 46);
             o += `[+(${n(sp)})/(${n(rr.jit(16))})B(${n(s * P.side)})]`;
             o += `[-(${n(sp * (0.86 + rr.f() * 0.16))})/(${n(rr.jit(16))})B(${n(s * P.side * 0.94)})]`;
-            if (rr.chance(P.fork3)) o += `[^(${n(12 + rr.f() * 16)})/(${n(rr.jit(22))})B(${n(s * P.side * 0.72)})]`;
-            o += `^(${n(P.kick * 0.28)})B(${n(s * P.cont)})`;
+            if (rr.chance(P.fork3)) o += `[^(${n(broom ? 12 + rr.f() * 16 : 4)})/(${n(rr.jit(22))})B(${n(s * P.side * 0.72)})]`;
+            o += `^(${n(kick * (broom ? 0.28 : 0.16))})B(${n(s * P.cont)})`;
             return o;
           },
         },
@@ -838,10 +841,10 @@ Object.assign(SPECIES, {
     extra() { return null; },
   },
   azaleia: {
-    name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 2.4, years: true, float: 0,
+    name: 'Bonsai de Azaleia Satsuki', emoji: '🌸', height: 5, theme: 'zen', leafKind: 'azalea', padUp: 0.72, years: true, float: 0,
     family: 'flowering', defaultStyle: 'moyogi', styles: ['moyogi', 'shakan', 'han_kengai', 'kengai'],
     desc: 'Rhododendron indicum: tronco curto, casca marrom-avermelhada com descamações finas, ramificação miúda e floração em funis de cinco pétalas (rosa, magenta, branca ou as três). O estilo tradicional é o moyogi.',
-    baseWidth: 0.046, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [1.9, 2.1], G: 0.7, tip: 0.007, ring: 0.35, share: 0.55 },
+    baseWidth: 0.058, leafRoll: 16, bump: 0.012, stones: false, wood: { leo: [1.9, 2.1], G: 0.7, tip: 0.007, ring: 0.35, share: 0.55 },
     params(r) {
       const palette = r.pick(['rosa', 'magenta', 'branco', 'mescla']);
       const tone = palette === 'magenta' ? { h: r.range(312, 328), s: r.range(0.7, 0.84), l: r.range(0.46, 0.56) }
@@ -865,12 +868,12 @@ Object.assign(SPECIES, {
       const start = 1;
       for (let k = 0; k < P.segs; k++) {
         const bend = P.curve * Math.cos(6.2832 * P.cycles * k / P.segs + P.phase);
-        ax += `/(${n(8 + r.jit(10))})&(${n(bend)})F(${n(P.segLen * (1 - 0.34 * k / P.segs))})`;
+        ax += `/(${n(8 + r.jit(10))})&(${n(bend * 1.35)})F(${n(P.segLen * 0.68 * (1 - 0.16 * k / P.segs))})`;
         if (k >= start) {
           const u = (k - start) / Math.max(P.segs - start, 1);
           const dome = Math.sqrt(Math.max(0.12, 1 - Math.pow((u - 0.42) / 0.58, 2)));
-          const ang = 22 + (P.bAngle - 22) * (1 - u * 0.55);
-          const len = P.branchLen * (0.3 + 0.7 * dome);
+          const ang = 48 + (P.bAngle - 20) * (1 - u * 0.35);
+          const len = P.branchLen * (0.55 + 0.7 * dome);
           yaw += 52 + r.jit(10);
           ax += `[/(${n(yaw)})&(${n(ang + r.jit(3))})~(${n(-0.02)})B(${n(len)})]`;
           ax += `[/(${n(yaw + 118 + r.jit(12))})&(${n(ang * 0.88 + r.jit(3))})~(${n(-0.015)})B(${n(len * (0.78 + r.f() * 0.1))})]`;
@@ -935,7 +938,7 @@ Object.assign(SPECIES, {
     name: 'Bonsai de Pinheiro-Negro', emoji: '🌲', height: 6.4, theme: 'estudio', padKind: 'needles', padUp: 0.8, years: true, float: 0, below: true, stoneR: 0.48,
     family: 'conifer', defaultStyle: 'kengai', styles: ['kengai', 'han_kengai', 'chokkan', 'moyogi', 'shakan'],
     desc: 'Pinus thunbergii: casca em placas finas e alongadas, cinza-escuras, agulhas rígidas verde-escuro e vigor alto, com nebari curto. O estilo tradicional deste jardim é o kengai.',
-    baseWidth: 0.13, bump: 0.02, tubeMinSides: 16, wood: { leo: [2.05, 2.25], G: 0.95, tip: 0.05, ring: 0.42, share: 0.85 },
+    baseWidth: 0.138, bump: 0.02, tubeMinSides: 16, wood: { leo: [2.05, 2.25], G: 0.95, tip: 0.05, ring: 0.42, share: 0.85 },
     tube: {
       bump: (th, arc, g, main, P, rad) => {
         if (!main) {
@@ -996,7 +999,7 @@ Object.assign(SPECIES, {
             const step = P.fall * (open ? 0.72 : 0.98) * (0.94 + rr.f() * 0.08);
             const tuft = (scale) => `Z(${n(P.padR * scale)},${n(0.18 * Math.sqrt(scale))},${Math.max(8, Math.round(P.padN * scale * 0.45))},${n(P.leafS)})`;
             const side = (ang, len, scale) => `[+(${n(ang)})_(0.92)&(${n(open ? 16 : -6)})F(${n(len)})${tuft(scale)}]`;
-            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step * 0.5)})${tuft(sc)}F(${n(step * 0.5)})${side(sign * 40, 0.16, sc * 0.72)}${side(sign * 68, 0.1, sc * 0.5)}C(${j + 1})`;
+            return `_(0)+(${n(sign * mag + rr.jit(2))})&(${n(pitch)})F(${n(step * 0.5)})${tuft(sc * 0.28)}${side(sign * 32, 0.18, sc)}F(${n(step * 0.5)})${side(sign * 40, 0.16, sc * 0.72)}${side(sign * 68, 0.1, sc * 0.5)}C(${j + 1})`;
           },
         },
         finalize: { C: () => pad(P, 0.9) },
@@ -1712,7 +1715,9 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   if (opts.lod && opts.cluster) clusterFoliage(inst);
   applyGravitySag(sk, ENV.gravity || 0);
   const style = STYLES[styleId] || STYLES.moyogi;
+  const design = designOf(styleId, id, sp.design);
   applyFront(sk, inst, style);
+  shapeDesign(sk, inst, design);
   if (style.keepsLowTrunk) sk.below = 1;
   const pot = BONSAI.includes(id) ? potSpec({ id, styleId, sk, P, baseWidth: sp.baseWidth, seed, family: sp.family, Rand }) : null;
   if (pot) keepTrunkOutOfPot(sk, inst, pot);
@@ -1756,6 +1761,15 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     const sc = sideBranchScale(sk, rFull, 0.6);
     for (let i = 0; i < sk.N; i++) { rFull[i] *= sc[i]; rTube[i] *= sc[i]; }
   }
+  if (rTube === rFull) rTube = Float32Array.from(rFull);
+  enforceDesignRadii(sk, rFull, rTube, design);
+  // O moyogi do olmo ganha copa cheia (mais galhos). A escala de Leonardo
+  // usa o máximo global e afinaria a base; devolve a grossura do tronco.
+  if (id === 'olmo_chines' && styleId === 'moyogi') {
+    const k = 1.12;
+    for (let i = 0; i < sk.N; i++) { rFull[i] *= k; if (rTube[i]) rTube[i] *= k; }
+  }
+  const rules = measureDesign(sk, rFull, inst, design);
   const tags = sp.tags ? sp.tags(sk) : null;
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
   applyGenomeToPlant(P, BK, W, genome, sp, applyGenes);
@@ -1774,8 +1788,10 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     W,
     genome,
     style: styleId,
-    noKnuckle: styled,
+    noKnuckle: styled || !!design.broom,
     collar: styled ? 0.62 : 0.88,
+    design,
+    rules,
     score: scoreTree(sk, style),
     rFull: Float32Array.from(rFull),
     rTube: Float32Array.from(rTube),
