@@ -200,6 +200,21 @@ const GEOMS = {
   palm: () => palmGeo(5),
   palm7: () => palmGeo(7),
   hinoki: () => sheet({ width: 0.42, fold: 0.03, curve: 0.04, profile: (u) => (0.45 + 0.55 * Math.abs(Math.sin(u * Math.PI * 4.5))) * Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.97 + 0.03)), 0.55), nu: 18, nv: 1 }),
+  // olmo chinês: oval serrilhada, mais larga no terço de baixo, ponta aguda
+  elm: () => sheet({ width: 0.4, fold: 0.045, curve: 0.04, profile: (u) => {
+    const t = Math.min(1, u * 0.97 + 0.015);
+    const body = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.78)), 0.62) * (1 - 0.3 * t);
+    const teeth = 0.82 + 0.18 * Math.abs(Math.sin((t * 13 - 0.2) * Math.PI));
+    return body * teeth;
+  }, nu: 26, nv: 2 }),
+  // ficus retusa: folha oval/obovada, coriácea, levemente côncava (o brilho pega na face)
+  ficus: () => sheet({
+    width: 0.34, fold: 0.035, curve: 0.02, cup: 0.16, nu: 7, nv: 2,
+    profile: (u) => {
+      const t = Math.min(1, Math.max(0, (u - 0.02) / 0.96));
+      return Math.pow(Math.sin(Math.PI * Math.pow(t, 0.78)), 0.55);
+    },
+  }),
   azalea: () => sheet({ width: 0.34, fold: 0.1, curve: 0.08, profile: (u) => Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.92 + 0.04)), 0.7) * (1 - 0.08 * u), nu: 6, nv: 2 }),
   azaleaPetal: () => sheet({ width: 0.36, fold: 0.015, curve: -0.04, cup: 0.52, profile: (u) => { const t = Math.min(1, u * 0.96 + 0.02); const throat = 0.16 + 0.84 * Math.pow(Math.min(1, t / 0.42), 0.75); const tip = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.9 + 0.05)), 0.4); return throat * (0.42 + 0.58 * tip); }, nu: 8, nv: 3 }),
 };
@@ -250,7 +265,10 @@ function soilGeo({ a, b, n = 2 }, mound, moss, rng, M = 64, Rn = 14) {
 }
 // monta vaso + terra (+ mesa) num grupo; devolve pontos para o enquadramento e a cota do fundo
 function makePot(group, o, rng) {
-  const pot = new THREE.Mesh(potGeo(o), new THREE.MeshStandardMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.75, metalness: 0, side: THREE.DoubleSide }));
+  const potMat = o.glaze
+    ? new THREE.MeshPhysicalMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.2, metalness: o.metal ?? 0.04, clearcoat: o.clearcoat ?? 0.8, clearcoatRoughness: o.clearcoatRough ?? 0.15, side: THREE.DoubleSide })
+    : new THREE.MeshStandardMaterial({ color: asColor(o.color), roughness: o.rough ?? 0.75, metalness: 0, side: THREE.DoubleSide });
+  const pot = new THREE.Mesh(potGeo(o), potMat);
   const soil = new THREE.Mesh(soilGeo(o, o.mound ?? 0.05 * Math.min(o.a, o.b), o.moss ?? 0.5, rng), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   for (const m of [pot, soil]) { m.castShadow = m.receiveShadow = true; group.add(m); }
   let floor = -o.h;
@@ -309,7 +327,7 @@ const FX_V = `
 attribute float aFx; varying vec4 vFx;
 #endif
 `;
-const FX = { cipreste: { frag: 'bark' }, junipero: { frag: 'bark' } };
+const FX = { cipreste: { frag: 'bark' }, junipero: { frag: 'bark' }, olmo: { frag: 'bark' } };
 const CHUNKS = {
   branch: {
     head: `uniform sampler2D uRad; uniform float uRmax; uniform vec3 uYoung;
@@ -366,6 +384,8 @@ float lsHt; float lsRough; float lsEmis;
 #ifdef LS_FX
 uniform vec4 uFx; uniform vec4 uFx2;
 varying vec4 vFx;
+#endif
+#if defined(LS_FX_CIPRESTE) || defined(LS_FX_JUNIPERO)
 #define LS_DEAD
 #endif
 // tipos: 0 lisa (lenticelas), 1 sulcada (Voronoi esticado), 2 em placas, 3 estriada
@@ -439,6 +459,27 @@ vec3 lsBark(vec3 base, vec3 nW){
     lsRough = mix(lsRough, 0.58, dead);
   }
 #endif
+#ifdef LS_FX_OLMO
+  { // casca lisa que descasca em manchas macias de cinza, bege e laranja (sem placas)
+    // uFx = (freq. na volta, freq. ao longo, força, fase)
+    vec3 q = vec3(p.xy * uFx.x, p.z * uFx.y) + uFx.w;
+    float nA = lsF(q * 0.7);
+    float nB = lsF(q * 1.35 + vec3(5.1, 2.4, 8.7));
+    float nC = lsN(q * 0.48 + vec3(3.0, 9.0, 1.4));
+    vec3 grey = vec3(0.55, 0.54, 0.51);
+    vec3 tan = vec3(0.72, 0.55, 0.32);
+    vec3 orange = vec3(0.76, 0.38, 0.14);
+    vec3 cream = vec3(0.84, 0.78, 0.66);
+    vec3 pc = mix(grey, tan, smoothstep(0.36, 0.64, nA));
+    pc = mix(pc, orange, smoothstep(0.52, 0.74, nB) * smoothstep(0.32, 0.68, nC));
+    pc = mix(pc, cream, smoothstep(0.6, 0.84, nA) * (1.0 - smoothstep(0.35, 0.7, nB)));
+    pc *= 0.94 + 0.08 * lsN(q * 2.1);
+    float barkMask = smoothstep(0.03, 0.1, vMt.y / uRmax) * smoothstep(0.12, 0.48, m);
+    col = mix(col, pc, clamp(barkMask * uFx.z, 0.0, 1.0));
+    hh = mix(hh, 0.52 + 0.05 * (nA - 0.5), barkMask);
+    lsRough = mix(lsRough, 0.52, barkMask);
+  }
+#endif
   // musgo nas faces viradas para cima da madeira velha
   float up = nW.y + 0.55 * (lsF(p * 0.45 + 3.7) - 0.5);
   float moss = smoothstep(0.25, 0.65, up) * smoothstep(0.35, 0.8, m) * uBk2.z;
@@ -496,7 +537,7 @@ function patch(mat, kind, U, fx) {
       sh.fragmentShader = f.head + sh.fragmentShader.replace('#include <color_fragment>', f.color).replace('#include <roughnessmap_fragment>', f.rough)
         .replace('#include <normal_fragment_maps>', f.normal).replace('#include <emissivemap_fragment>', f.emis);
     }
-    if (fxc) { // casca com efeito próprio (madeira morta nos bonsais que definem fx)
+    if (fxc) { // casca com efeito próprio (madeira morta, ou a casca manchada do olmo)
       const def = `#define LS_FX\n#define LS_FX_${fx.toUpperCase()}\n`;
       sh.vertexShader = def + sh.vertexShader; sh.fragmentShader = def + sh.fragmentShader;
     }
@@ -534,6 +575,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
     const k = list.length - 1;
     const rel = rFull[list[1]] / rMaxFull;
     let R = rel > 0.3 ? 12 : rel > 0.12 ? 9 : rel > 0.04 ? 7 : rel > 0.015 ? 5 : 4;
+    if (sp.tubeMinSides) R = Math.max(R, sp.tubeMinSides);
     if (W.lod) R = Math.max(3, Math.round(R * 0.6)); // v5: jardim com menos lados (não mexe no consumo do RNG)
     const Sbase = rel > 0.12 ? 3 : rel > 0.03 ? 2 : 1;
     // ponto fantasma antes da junção: na direção do eixo do pai, para o galho sair tangente e curvar (forquilha suave)
@@ -656,8 +698,10 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 
   let mat = sp.instMaterial ? sp.instMaterial(kind, P) : null;
   if (mat) {}
   else if (kind === 'orb') mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  else {
-    mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: kind === 'petal' ? 0.45 : 0.7, metalness: 0 });
+  else if ((kind === 'leaf' || kind === 'needles') && sp.leafCoat) {
+    mat = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: sp.leafRough ?? 0.32, metalness: 0, clearcoat: sp.leafCoat, clearcoatRoughness: sp.leafCoatRough ?? 0.25 });
+  } else {
+    mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: sp.leafRough != null ? sp.leafRough : (kind === 'petal' ? 0.45 : 0.7), metalness: 0 });
     if (kind === 'center') { mat.emissive = new THREE.Color(0x553300); }
   }
   patch(mat, 'inst', U, sp.fx);

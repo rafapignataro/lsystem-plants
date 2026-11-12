@@ -22,7 +22,7 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 
 | Parâmetro | Onde | Exemplo | Efeito |
 |---|---|---|---|
-| `especie` | hash | `#especie=junipero` | bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`, `azaleia`; ou `jardim` (todos juntos). Espécie desconhecida (inclusive as realistas, as raras e as exóticas removidas) abre o primeiro bonsai (`bordo`) |
+| `especie` | hash | `#especie=junipero` | bonsais: `bordo`, `pinheiro_branco`, `cipreste`, `junipero`, `olmo_chines`, `ficus`, `azaleia`; ou `jardim` (todos juntos). Espécie desconhecida (inclusive as realistas, as raras e as exóticas removidas) abre o primeiro bonsai (`bordo`) |
 | `cresc` | hash | `#especie=junipero&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico (idêntico à v6 para os bonsais que ficaram) |
 | `seed` | hash | `#especie=bordo&seed=rafael` | seed (qualquer texto) |
 | `genoma` | hash | `#especie=bordo&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |

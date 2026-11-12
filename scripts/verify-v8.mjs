@@ -19,7 +19,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
-const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero'];
+const species = ['bordo', 'pinheiro_branco', 'cipreste', 'junipero', 'olmo_chines', 'ficus', 'azaleia'];
 const shots = join(root, 'screenshots/v8');
 await mkdir(shots, { recursive: true });
 
@@ -60,12 +60,12 @@ if (fallback.id !== 'bordo') errors.push('fallback esperado bordo, veio ' + fall
 if (!/Bonsai Garden/.test(fallback.title) || !/Bonsai Garden/.test(fallback.h1)) errors.push('título sem Bonsai Garden: ' + fallback.title + ' / ' + fallback.h1);
 
 await page.goto(`${base}?nogrow&norotate#especie=jardim&seed=rafael`, { waitUntil: 'domcontentloaded', timeout: 300000 });
-await waitPlant(5);
+await waitPlant(species.length);
 const garden = await page.evaluate(() => ({
   n: window.__lsys?.plants?.length || 0,
   cap: document.getElementById('capT')?.textContent || '',
 }));
-if (garden.n !== 5) errors.push('jardim com ' + garden.n + ' plantas');
+if (garden.n !== species.length) errors.push('jardim com ' + garden.n + ' plantas');
 if (!/Bonsai Garden/.test(garden.cap)) errors.push('legenda do jardim: ' + garden.cap);
 await page.screenshot({ path: join(shots, 'jardim.png'), fullPage: false });
 const t0 = performance.now();
