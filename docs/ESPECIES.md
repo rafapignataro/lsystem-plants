@@ -171,10 +171,10 @@ Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cen�
 
 ## 🪴 Bonsai de Ficus (`ficus`)
 
-**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco é grosso e musculoso, de casca lisa cinza com lenticelas; a curva é a mesma do bordo, `&(curva · cos(2π·ciclos·k/n + φ))`. O nebari não usa o helper compartilhado: são 6–8 dedos de cinco segmentos, quase na horizontal, com peso `Q` para engrossar, saindo de um colo curto (`F(0.04)`, o nó 1, de onde a raiz aérea mede a fração do tronco). Dos galhos baixos descem raízes aéreas `W(seg, atraso, fração)` até o musgo. A copa é um conjunto de almofadas arredondadas de folhas ovais pequenas, verde-escuras e brilhantes.
+**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco sobe em S (`&(curva · cos)` e um balanço lateral), largo só no colo e afinando logo acima, com casca lisa cinza e lenticelas. O nebari não usa o helper compartilhado: 6–8 raízes de sete segmentos saem do colo (`F(0.04)`, o nó 1), abrem um vão de um lado, descem até o musgo e o `tube.bump` as achata, varia a espessura e as apaga na ponta. As raízes aéreas `W` descem dos galhos baixos e, no fim, correm um pouco para fora sobre o solo, achatando até sumir. A copa é um conjunto de almofadas de folhas ovais pequenas, verde-escuras e brilhantes.
 
 ```
-ω : F(0.04)  nebari × raízes (5 F quase horizontais + Q)   tronco { &(curva·cos(…)) F } × n
+ω : F(0.04)  nebari × raízes (7 F, pitch desce no fim + Q)   tronco { +(balanço) &(curva·cos) F } × n
      a partir do 2º segmento, espiral áurea: [ /(137° ± 16°) &(abertura) B(L) ]
      no primeiro andar, um segundo galho do lado oposto
      raízes aéreas nos galhos baixos: F W(0.2, atraso, fração do tronco)
@@ -183,18 +183,18 @@ B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.5
        (s < 0.28 → almofada)
 ```
 
-`tube.bump` deixa o tronco quase liso (um flare curto na base e um músculo suave) e engrossa o nebari no colo, afinando até a ponta. A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, de esmalte azul-turquesa, com musgo e sem pedras (elas cairiam fora do vaso baixo).
+A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, pouco maior que o nebari, de esmalte azul-turquesa, com musgo e sem pedras.
 
 | Parâmetro | Faixa |
 |---|---|
 | `years` | 12–40 |
-| `segs` / `segLen` | 6–7 · 0.48–0.56 |
-| `curve` / `cycles` | 14–24° · 0.85–1.15 |
-| `roots` / `rootLen` / `rootW` | 6–8 · 1.15–1.42 · 22–32 |
+| `segs` / `segLen` | 7–8 · 0.52–0.60 |
+| `curve` / `cycles` | 30–46° · 0.85–1.15 |
+| `roots` / `rootLen` / `rootW` | 6–8 · 0.82–1.02 · 5–9 |
 | `aerials` | 4–5 |
-| `branchLen` / `bAngle` | 0.62–0.84 · 42–54° |
+| `branchLen` / `bAngle` | 0.58–0.78 · 40–52° |
 | `padR` / `padH` / `padN` | 0.56–0.7 · 0.32–0.42 · 72–96 |
-| `flare` / `muscle` | 0.05–0.12 · 0.04–0.08 |
+| `flare` / `flareH` / `muscle` | 0.28–0.46 · 0.10–0.16 · 0.04–0.07 |
 
 Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
 
