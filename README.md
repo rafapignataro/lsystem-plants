@@ -8,7 +8,7 @@ Plantas 3D geradas por **sistemas de Lindenmayer (L-Systems)** em **Three.js**, 
 
 A ideia original (do Rafael, anos atrás) era usar o formalismo do biólogo Aristid Lindenmayer para gerar plantas e transformá-las em **NFTs**: cada pessoa recebe uma *seed*, e a seed altera as partes do sistema (probabilidades das regras, ângulos, proporções, cores, idade…), de modo que cada pessoa tenha uma planta totalmente diferente, mas sempre reproduzível a partir da mesma seed.
 
-Este repositório é a POC dessa ideia: 14 espécies (5 realistas, 5 árvores raras e 4 bonsais), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta. Desde a v7, a copa pode ser **simulada ano a ano**; na **v8** o foco é o **motor**: junções contínuas, ambiente (vento/sol/gravidade/fototropismo), genoma legível com cruzamento, folhagem em cachos e export NFT (PNG/glTF). os galhos disputam espaço e luz (colonização do espaço + sombra em voxels), os sombreados caem e o tronco engrossa a cada ano; o L-System continua definindo o caráter de cada espécie.
+Este repositório é a POC dessa ideia: 14 espécies (5 realistas, 5 árvores raras e 4 bonsais), um motor L-System genérico, uma tartaruga 3D, geometria contínua de galhos com regra de Leonardo, casca procedural e animação de crescimento da muda até a planta adulta. Desde a v7, a copa pode ser **simulada ano a ano** (colonização do espaço, sombra, autopoda). Na **v8**, o foco é o **motor**: junções contínuas, ambiente interativo, genoma legível com cruzamento, folhagem em cachos e export NFT (PNG/glTF).
 
 ## Como rodar
 
