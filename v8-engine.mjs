@@ -261,7 +261,7 @@ function pushSphere(pos, nor, idx, cx, cy, cz, R, seg) {
   }
 }
 
-/** Esferas só nas forquilhas grossas (inclui o carvalho). Jin: cones lascados, malha à parte. */
+/** Esferas só nas forquilhas grossas (tronco e andaime). Jin: cones lascados, malha à parte. */
 export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
   const forks = thickForks(sk, rFull, opts.limit ?? 40);
   const pos = [], nor = [], idx = [];

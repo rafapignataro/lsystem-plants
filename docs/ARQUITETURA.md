@@ -7,7 +7,7 @@ Tudo vive em `index.html` (um `<script type="module">`), organizado em seções 
 3. Tartaruga 3D → esqueleto
 4. Geometrias base (folha, pétala, agulhas, esfera)
 5. Shaders (idade + vento + casca procedural)
-6. As 5 espécies realistas · 6c. As 5 árvores raras (v5) · 6d. Os 4 bonsais (v6) (a 6b, das exóticas, saiu na v7)
+6. Registro de espécies (vazio) · 6d. Bonsais (v6; realistas e raras saíram) (a 6b, das exóticas, saiu na v7; a 6c, das raras, saiu com o foco em bonsai)
 7a. v7: crescimento simulado (`SIM-BEGIN` … `SIM-END`: `growSim`, `simScaffold`, `buildSimSkeleton`, `SIMS`)
 7. Montagem (raios, tubos, instâncias)
 8. Cena, luz, céu, solo
@@ -53,7 +53,7 @@ a cada quadro: idade ─► computeRadii(T) ─► textura float de raios ─►
 - **Reescrita paralela** (`rewrite`): cada módulo é substituído pelo sucessor; símbolos sem regra são copiados.
 - **Tempo de desenvolvimento** (`stamp`): a iteração `i` ocupa a janela de tempo `[i, i+1]` (o axioma ocupa `[0, 1]`). Os `F` de um sucessor crescem em sequência dentro da janela (o k-ésimo `F` de `nF` ocupa `[i + k/nF, i + (k+1)/nF]`); os outros módulos recebem o tempo do `F` anterior.
 - **Regra identidade**: se o sucessor tem um único módulo com o mesmo símbolo (ex.: `F(l) → F(l·1.06)` ou `D(t) → D(t−1)`), o tempo é herdado: é o mesmo entrenó, só alongado.
-- **Regras juvenis** (`def.juvenile`): quando um ápice é reescrito, gera-se antes do sucessor um bloco `[ ... ]` com os órgãos juvenis (os `F`/`f` são descartados). Esses módulos nascem com o ápice (`t = m.t1`) e morrem em `i + juvenileLife`, que vale 1.15 por padrão (2.6 no carvalho, 2.2 no arbusto). São eles que dão folhas à muda.
+- **Regras juvenis** (`def.juvenile`): quando um ápice é reescrito, gera-se antes do sucessor um bloco `[ ... ]` com os órgãos juvenis (os `F`/`f` são descartados). Esses módulos nascem com o ápice (`t = m.t1`) e morrem em `i + juvenileLife`, que vale 1.15 por padrão. São eles que dão folhas à muda.
 - **Finalize**: após as iterações, um último `rewrite` com as regras `finalize` converte as pontas restantes (ápices) em folhas, flores, orbes ou báculos, na janela `[done+1, done+2]`.
 - Limites: se a próxima palavra passar de `MAX_MODULES = 140000`, a iteração para; `done` registra quantas rodaram. `tEnd = done + 3.0` é a idade máxima (100%).
 
@@ -127,7 +127,7 @@ Os raios vão para uma `DataTexture` float (`RedFormat`, 1024 de largura, 1 texe
 - Temas `day` / `night` (céu em gradiente, neblina, luzes, bloom); o salgueiro usa `night` e uma `PointLight` com a cor da luz.
 - Escala: cada planta é normalizada para a altura-alvo da espécie (`height`), considerando a largura (`max(altura, 0.75·largura)`).
 - Enquadramento: `frame()` ajusta a câmera ao bounding box e desloca a projeção (`setViewOffset`) para não ficar atrás do painel (no desktop, à direita; no celular, para cima). "Câmera segue" aproxima a câmera na muda e afasta conforme a planta cresce.
-- Jardim (v7): as 14 espécies em três fileiras (bonsais na frente, realistas no meio, raras atrás), tema `jardim` (crepúsculo), câmera mais alta, rótulos clicáveis projetados na tela (fileira da frente embaixo da planta, as de trás em cima da copa) e afastados por um passo guloso a cada quadro (ordenados por y, cada rótulo que encosta em outro desce até não encostar mais). As plantas do jardim são montadas com LOD (ver §11).
+- Jardim: os bonsais registrados (`ALL`) em fileiras de até 4, sem vaga vazia, tema `jardim` (crepúsculo), câmera um pouco mais alta, rótulos clicáveis projetados na tela (fileira da frente embaixo do vaso, as de trás em cima da copa) e afastados por um passo guloso a cada quadro (ordenados por y, cada rótulo que encosta em outro desce até não encostar mais). As plantas do jardim são montadas com LOD (ver §11).
 
 ## 8. Desempenho medido
 
@@ -141,7 +141,7 @@ Seed `lindenmayer`, v2, Chrome headless (SwiftShader) nesta máquina, `buildPlan
 | Arbusto | 12.476 | 990 | 332 | 31.122 | 57.338 | 1.762 folhas, 2.324 pétalas, 332 miolos | 30–55 ms | ~6 / ~5 / ~25 ms |
 | Salgueiro | 8.815 | 1.461 | 201 | 32.270 | 61.590 | 1.142 folhas, 365 orbes | 20–30 ms | ~5 / ~2 / ~15 ms |
 
-- Recalcular os raios para uma nova idade (`update`): 0,02–0,09 ms por planta (carvalho é o maior).
+- Recalcular os raios para uma nova idade (`update`): 0,02–0,09 ms por planta.
 - No modo Jardim as 10 são montadas juntas (soma das linhas acima e da tabela da v4 abaixo).
 - O FPS medido no headless (~1–2 fps) é limitado pela renderização por software e **não representa uma GPU real**; o FPS em GPU real ainda não foi medido (ver ROADMAP).
 - v3 (casca procedural): no mesmo headless, carvalho em tela cheia passou de ~940 para ~1130 ms por quadro (+20%), e o custo cresce com a área de tronco na tela. A montagem quase não muda (só um atributo a mais).
@@ -169,10 +169,10 @@ Tudo no fragment shader do `MeshStandardMaterial` dos galhos, via `onBeforeCompi
 
 | Tipo | Usado em | Altura `h` (0 = fundo da fenda, 1 = topo) |
 |---|---|---|
-| 0 lisa | arbusto, salgueiro (liso / lenticelas luminosas) | fBm suave; **lenticelas**: Voronoi esticado em volta do galho (`p.z · 5`), pontinhos rebaixados em metade das células; podem emitir luz (`uGlowC`) |
-| 1 sulcada | carvalho (sulcada / reticulada), salgueiro (fissurada) | cristas `smoothstep(F2−F1)` com topo levemente achatado, variação por célula, fibras longitudinais (ruído esticado ao longo do eixo); fendas escuras |
-| 2 placas | pinheiro (placas largas / escamas), carvalho (escamosa) | cada célula é uma placa com altura e cor próprias; lascas internas (`fBm` com limiar) simulam camadas descascando; fendas escuras entre placas |
-| 3 raque | samambaia | lisa, com estrias finas ao longo do eixo |
+| 0 lisa | bordo | fBm suave; **lenticelas**: Voronoi esticado em volta do galho (`p.z · 5`), pontinhos rebaixados em metade das células; podem emitir luz (`uGlowC`) |
+| 1 sulcada | cipreste, junípero | cristas `smoothstep(F2−F1)` com topo levemente achatado, variação por célula, fibras longitudinais (ruído esticado ao longo do eixo); fendas escuras |
+| 2 placas | pinheiro-branco | cada célula é uma placa com altura e cor próprias; lascas internas (`fBm` com limiar) simulam camadas descascando; fendas escuras entre placas |
+| 3 estriada | livre (nenhum bonsai atual) | lisa, com estrias finas ao longo do eixo |
 
 ### Idade, cor e relevo
 
@@ -180,44 +180,27 @@ Tudo no fragment shader do `MeshStandardMaterial` dos galhos, via `onBeforeCompi
 - **Cor**: base = cor por vértice da v2 (verde jovem → casca, por galho). Madeira madura: `mix(base · lo, base · hi, tint)`, onde `tint` vem da altura e do id da célula, e escurece com a idade (até ×0.82). Resultado final `mix(base, madura, m)`.
 - **Relevo**: altura em unidades de mundo `h · min(depth · r_atual · escala, 0.06) · m`. A profundidade das fendas é proporcional ao raio atual: o tronco fica mais sulcado conforme engrossa. A normal é perturbada pelo método de Mikkelsen (*bump mapping* sem tangentes) com `dFdx/dFdy` da altura e da posição em espaço de vista (`lsPerturb`). A iluminação e as sombras recebidas continuam as do `MeshStandardMaterial`.
 - **Rugosidade**: 0.72 (jovem) → 0.95 (madura), mais áspera nas fendas; musgo = 1.
-- **Musgo** (`uBk2.z`, pela seed): normal em espaço de mundo (`(normal, 0) · viewMatrix`) com `y` acima de ~0.25–0.65 (com ruído), só em madeira com `m > ~0.35`, recortado por um fBm em manchas. Cor própria (matiz da seed; no salgueiro, a cor do brilho) e relevo fofo.
+- **Musgo** (`uBk2.z`, pela seed): normal em espaço de mundo (`(normal, 0) · viewMatrix`) com `y` acima de ~0.25–0.65 (com ruído), só em madeira com `m > ~0.35`, recortado por um fBm em manchas. Cor própria (matiz da seed) e relevo fofo.
 - **Antisserrilhado**: `fw = |fwidth(vBk)|` (células por pixel). As bordas das fendas alargam com `fw`; a cor volta para a média entre `fw` 0.15–0.55; o relevo some antes, entre 0.1–0.45, porque as derivadas de tela são calculadas em blocos de 2×2 pixels.
 
 ### Parâmetros por espécie
 
-Os valores estão em `BARK` (`index.html`) e em [ESPECIES.md](ESPECIES.md#casca-procedural-v3). O painel mostra a variante, a escala, a profundidade e o musgo.
+Os valores estão em `BARK` (`lsystem-core.mjs`) e em [ESPECIES.md](ESPECIES.md). O painel mostra a variante, a escala, a profundidade e o musgo.
 
 
 ## 10. Espécies exóticas (v4, removidas na v7)
 
-As 5 exóticas (cristal, medusa, cacto, neural, coral-fungo) e o que só elas usavam saíram na v7: efeitos `LS_FX_*` de medusa/neural/cacto/cristal/coral, o modo de fragment `own`, o atributo `aFxI`, as geometrias `shard`/`frill`/`cap`/`gill`, os símbolos `P` e `X` da tartaruga, as opções de tubo `straight`/`R`/`S`/`point`/`noCollar`/`ribs`, a luz `glow`, os cenários `gruta`/`abismo`/`deserto`/`vazio`/`floresta` e o `RoomEnvironment`. Ficaram os ganchos que as raras e os bonsais usam: `fx` com `frag: 'bark'` (dragoeiro, eucalipto, cipreste, junípero; atributo `aFx` + `vFx`), `tube.bump`, `float`, `tags`, `extra`/`tick`, `theme`, e o símbolo `$` (tropismo para um ponto). O código completo continua no commit `7a1a60b` (v4) e em qualquer versão até a v6.
+As 5 exóticas (cristal, medusa, cacto, neural, coral-fungo) e o que só elas usavam saíram na v7: efeitos `LS_FX_*` de medusa/neural/cacto/cristal/coral, o modo de fragment `own`, o atributo `aFxI`, as geometrias `shard`/`frill`/`cap`/`gill`, os símbolos `P` e `X` da tartaruga, as opções de tubo `straight`/`R`/`S`/`point`/`noCollar`/`ribs`, a luz `glow`, os cenários `gruta`/`abismo`/`deserto`/`vazio`/`floresta` e o `RoomEnvironment`. Ficaram os ganchos genéricos: `fx` com fragmento de casca, `tube.bump`, `float`, `tags`, `extra`/`tick`, `theme` e o símbolo `$` (tropismo para um ponto). O código completo continua no commit `7a1a60b` (v4) e em qualquer versão até a v6.
 
-## 11. Árvores raras (v5)
+## 11. Realistas e raras (removidas)
 
-Mesma regra da v4: todo gancho novo é opcional e, sem ele, o caminho de código é idêntico. As 10 espécies anteriores continuam **idênticas** (hash de palavra, esqueleto, raios, P/casca/regras/madeira, todos os atributos de geometria e matrizes/cores das instâncias para 10 espécies × 5 seeds, e screenshot pixel a pixel das 5 realistas).
+As 5 realistas e as 5 raras saíram junto com o que só elas usavam: casca arco-íris (`LS_FX_EUCALIPTO`, `uPal`), sangue de dragão (`LS_FX_DRAGOEIRO`), silhueta humana, folhas `oak`/`bush`/`fern`/`willow`/`strap`/`euca`/`banyan` e os cenários `night`, `arido` e `savana`. Ficou o motor genérico: `tube.bump`, símbolo `W` (raiz aérea), símbolo `Y` (fruto), `fx` com fragmento de casca e madeira morta (`LS_DEAD` para qualquer espécie com `fx`), `float`, `tags`, `extra`/`tick` e `$` (tropismo). O código das espécies continua no git, até o commit anterior a este foco em bonsai.
 
-| Novidade | Onde | Como |
-|---|---|---|
-| `tube.bump(θ, arco, anel, ehTronco, P)` | `buildTubes` | multiplica o relevo de cada vértice do anel (depois da conta antiga, então quem não tem o gancho não muda). `ehTronco` = cadeia que começa na raiz. Baobá: garrafa; sequoia: sapopemas; figueira: alargamento perto do chão. |
-| `W(seg)` raiz aérea | tartaruga | cadeia vertical de nós até `y = 0`, nascendo de `max(t1 do módulo, t1 do nó) + atraso` e descendo em `sp.rootDrop` iterações. Registra `{primeiro nó, ponta, toque no chão, fração f}` em `sk.boost`. |
-| Raízes engrossando | `computeRadii` | depois da passada de Leonardo, se `W.roots` existe: `r = max(r, rTronco · f · g^0,8)`, com `g` = 0 → 1 do toque no chão até o fim da vida. Fica fora de Leonardo de propósito: a raiz é um caminho de carga próprio, e somar o peso dela incharia o tronco. |
-| `Y(s)` fruto | tartaruga | instância `fruit` sempre para baixo (geometria de cabinho + cápsula, origem no ponto de inserção). |
-| Folhas novas | `GEOMS` | `strap` (fita estreita com quilha, dragoeiro), `euca` (lanceolada, eucalipto), `banyan` (oval larga, figueira), `fruit`. |
-| Casca do eucalipto | shader da casca, `#ifdef LS_FX_EUCALIPTO` | placas de Voronoi esticadas, estágio de cor por placa a partir da maturidade do nó, paleta `uPal[5]`. Ver ESPECIES. |
-| Sangue de dragão | shader da casca, `#ifdef LS_FX_DRAGOEIRO` | ferimentos (ruído grosso) + filetes verticais finos (ruído muito esticado em z), só na madeira madura, intensidade `uFx.x`. |
-| Escala humana | `extra` da sequoia | silhueta (pernas, corpo, cabeça, braços) com altura `alturaDaPlanta · 1,8 / alturaReal`, ao pé do tronco; entra no bounding box. |
-| Cenários | `THEMES` | `arido` (dragoeiro) e `savana` (baobá). |
-| `frame(..., { ty })` | câmera | altura do alvo configurável (o jardim usa 0,22 para sobrar espaço aos rótulos). |
-
-As duas casca-FX usam o modo `frag: 'bark'` da v4 (reusam o shader da v3 e só acrescentam um bloco antes do musgo), então a casca, o relevo e a iluminação continuam os mesmos.
-
-**LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas 30% maiores. As duas reduções acontecem **depois** de todo o consumo de RNG (o número de anéis não muda, e as cores das folhas são sorteadas antes do corte), então a planta do jardim é a mesma planta, só mais leve. 
-
-**Desempenho (seed `lindenmayer`, headless SwiftShader, só relativo):** carvalho 0,8 fps; dragoeiro 2,8; baobá 3,8; eucalipto 2,3; figueira 1,3; sequoia 2,3. Jardim com as 15 (com LOD): 0,5 fps e 360 mil vértices de tubo, contra 0,3 fps e 414 mil do jardim da v4 com 10 espécies (mesma máquina, mesma sessão). Montagem: dragoeiro ~45 ms, baobá ~15 ms, eucalipto ~80 ms, figueira 130–230 ms (3 mil nós, 14 mil folhas), sequoia ~55–80 ms; o jardim inteiro ~640 ms.
+**LOD do jardim:** `buildPlant(id, seed, { lod: true })` reduz os lados dos tubos (`R × 0,6`, mínimo 3) e, em tipos com mais de 2.500 folhas/agulhas, desenha metade delas maiores. As duas reduções acontecem **depois** de todo o consumo de RNG, então a planta do jardim é a mesma planta, só mais leve.
 
 ## 12. Bonsais (v6)
 
-Mesma regra das versões anteriores: todo gancho novo é opcional, e sem ele o caminho de código não muda. As 15 espécies anteriores continuam **idênticas** (hash completo de palavra, esqueleto, raios, casca e instâncias para 15 espécies × 5 seeds, e screenshot pixel a pixel das 5 realistas e das 5 raras contra a v5).
+Todo gancho novo é opcional, e sem ele o caminho de código não muda. Os quatro bonsais que ficaram (bordo, pinheiro-branco, cipreste, junípero) continuam com a mesma seed: o esqueleto, os raios e a casca não mudam.
 
 | Novidade | Onde | Como |
 |---|---|---|
@@ -227,25 +210,25 @@ Mesma regra das versões anteriores: todo gancho novo é opcional, e sem ele o c
 | `_(k)` nivelar | tartaruga | tira de `H` a componente vertical (k = 1: horizontal) e recompõe `L`/`U` com `U` para cima. É o "arame" do bonsai. |
 | Vaso | `potGeo`, `soilGeo`, `makePot` | loft de superelipse (raio `a × b`, expoente `n`, borda, barriga, afunilamento, pé); terra com monte e musgo por ruído de valor (3 oitavas, eixos girados, sem padrão xadrez) em cores por vértice; mesinha opcional. O topo da terra fica em `y = 0`. |
 | `ex.floor` | `buildPlant` | `extra()` pode devolver `floor` (cota do fundo do vaso/mesa); a planta é deslocada para que esse ponto fique no chão, e o vaso entra no bounding box (`points`). |
-| Madeira morta | shader da casca, `LS_DEAD` (definido para `LS_FX_CIPRESTE` e `LS_FX_JUNIPERO`) | faixa em espiral no ângulo do tubo: `uFx = (cobertura, torção, arco máximo, fase)`, `uFx2 = (raio relativo mínimo, —, freq. dos veios, borda)`. Jin por `vFx.w`. Só em madeira madura (`vMt.x`). Ver ESPECIES. |
+| Madeira morta | shader da casca, `LS_DEAD` (qualquer espécie com `fx`; hoje cipreste e junípero) | faixa em espiral no ângulo do tubo: `uFx = (cobertura, torção, arco máximo, fase)`, `uFx2 = (raio relativo mínimo, —, freq. dos veios, borda)`. Jin por `vFx.w`. Só em madeira madura (`vMt.x`). Ver ESPECIES. |
 | Anos de formação | `syncSlider` | espécies com `years: true` mostram "N de M anos de formação" no slider (só no modo de uma espécie). |
 | Folhas novas | `GEOMS` | `palm` (5 lobos), `palm7` (7 lobos), `hinoki` (escama serrilhada). |
 | Cenários | `THEMES` | `preto`, `estudio`, `terracota`, `zen`. O disco de chão some para bonsais (o vaso faz o papel). |
-| Jardim | `ROWS` | (v6) 4 fileiras: bonsais na frente (rótulos embaixo), depois exóticas, realistas e raras. Na v7: 3 fileiras (bonsais, realistas, raras). |
+| Jardim | `gardenRows(ALL)` | fileiras de até 4 bonsais, sem vaga vazia. A da frente leva o rótulo embaixo do vaso; as de trás, em cima da copa. |
 
-**Desempenho (headless SwiftShader, só relativo; seed padrão):** pinheiro-branco 1,5 fps, cipreste 1,0, junípero 2,0. Montagem: bordo ~150 ms (o mais pesado: ~30–38 mil folhas palmadas), pinheiro-branco ~50 ms, cipreste ~55–75 ms, junípero ~40 ms. Jardim com as 19 (com LOD): ~0,3 fps, ~390 mil vértices de tubo, montagem ~1 s.
+**Desempenho (headless SwiftShader, só relativo; seed padrão, medido quando o jardim ainda tinha as outras espécies):** pinheiro-branco 1,5 fps, cipreste 1,0, junípero 2,0. Montagem: bordo ~150 ms (o mais pesado: ~30–38 mil folhas palmadas), pinheiro-branco ~50 ms, cipreste ~55–75 ms, junípero ~40 ms.
 
 ## 13. Crescimento simulado (v7)
 
-Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc=classico` abre o clássico). No clássico nada muda: `buildPlant` só entra na simulação com `opts.sim` e `SIMS[id]` definido, e todos os ganchos novos são opcionais (o clássico é idêntico à v6 em hash completo, 14 espécies × 5 seeds). A samambaia não tem `SIMS` e é sempre clássica.
+Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc=classico` abre o clássico). No clássico nada muda: `buildPlant` só entra na simulação com `opts.sim` e `SIMS[id]` definido. Bonsai novo em `BONSAI` sem `SIMS` próprio recebe a poda padrão (a cada 3 anos). Espécie sem simulação fica só no L-System.
 
 **Ideia.** O L-System continua definindo o **caráter** da espécie (tronco, verticilos, dicotomia, ângulos, filotaxia, estilo do bonsai); a simulação decide **como a copa ocupa o espaço**, ano a ano. Isso resolve o que a gramática sozinha não resolve: galhos que se cruzam, folhas dentro da madeira, copas ralas ou com tufos, e o fato de a estrutura não reagir à sombra (galho de baixo nunca morria).
 
 **Fluxo** (`buildSimSkeleton`):
 
 1. `SIMS[id](P, rng, sp, {seed, id})` devolve `{ scaffold, cfg, ring, deadK, about, flower }`.
-2. **Andaime** (`simScaffold`): roda a gramática da espécie (só as regras estruturais, poucas iterações, fluxos `::sim-rules`/`::sim-turtle`) e interpreta com a tartaruga normal em modo captura: todo símbolo não terminal listado em `syms` (ex.: `B` do pinheiro, `A` do salgueiro, `Z`/`B` dos bonsais) vira uma **gema** com posição, direção e ordem. Entrenós longos são subdivididos (`seg`) para ter gemas axilares. O tempo do L-System vira anos (`time`). Nebari (`tipw`), jin e raízes aéreas (`boost`) passam adiante remapeados.
-3. **Pontos de atração**: `sample(rng)` sorteia pontos num envelope com a forma da espécie; `markerYear(p)` diz em que ano cada ponto fica disponível (o envelope cresce com a idade). Carvalho e sequoia têm envelope próprio (elipsoide com lobos; cone). As demais usam a fábrica `crownSim`: o envelope é a **nuvem de folhas da planta clássica da mesma seed** (`classicCloud`), dilatada (`dil`), e o ano de cada ponto é o nascimento de um ancestral (4 nós acima) da folha clássica mais próxima. Assim a silhueta característica fica (chorão, guarda-chuva, garrafa) e a simulação decide como os galhos a preenchem.
+2. **Andaime** (`simScaffold`): roda a gramática da espécie (só as regras estruturais, poucas iterações, fluxos `::sim-rules`/`::sim-turtle`) e interpreta com a tartaruga normal em modo captura: todo símbolo não terminal listado em `syms` (nos bonsais, `Z`/`B`/`C`/`D`) vira uma **gema** com posição, direção e ordem. Entrenós longos são subdivididos (`seg`) para ter gemas axilares. O tempo do L-System vira anos (`time`). Nebari (`tipw`), jin e raízes aéreas (`boost`) passam adiante remapeados.
+3. **Pontos de atração**: `sample(rng)` sorteia pontos num envelope; `markerYear(p)` diz em que ano cada ponto fica disponível (o envelope cresce com a idade). Os bonsais usam a fábrica `crownSim`: o envelope é a **nuvem de folhas da planta clássica da mesma seed** (`classicCloud`), dilatada (`dil`), e o ano de cada ponto é o nascimento de um ancestral (4 nós acima) da folha clássica mais próxima. A silhueta da gramática fica, e a simulação decide como os galhos a preenchem.
 4. **Laço anual** (`growSim`, fluxo `::grow`), para `y = 0 … anos−1`:
    - nós do andaime que nascem neste ano: matam os pontos perto, criam gemas axilares (`budsOn`) e liberam as gemas capturadas;
    - **espaço** (Runions et al. 2007): cada ponto ativo vai para a gema mais próxima dentro do raio de percepção `rp` e do cone (`cone`, rad) dela (grade de hash com célula = `rp`; teste feito por célula: `simAssign`); a gema recebe a contagem e a direção média;
@@ -262,7 +245,7 @@ Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc
 
 **Determinismo**: todo sorteio vem de `Rand` com fluxos próprios (`::sim`, `::grow`, `::sim-rules`, `::sim-turtle`, `::sim-inst`); a ordem de iteração é fixa (arrays, `Map` em ordem de inserção). Duas execuções dão o mesmo hash (14 × 5 seeds).
 
-**Desempenho medido** (Chrome headless + SwiftShader; montagem completa, média de 5 seeds com JIT aquecido / máximo): carvalho 169 / 229 ms; sequoia 80 / 97; pinheiro 96 / 124; arbusto 45 / 55; salgueiro 94 / 115; dragoeiro 39 / 44; baobá 22 / 27; eucalipto 88 / 141; figueira 100 / 116; bordo 190 / 256; pinheiro-branco 79 / 130; cipreste 80 / 92; junípero 52 / 77. A primeira montagem (JIT frio) fica entre ~150 e ~400 ms (bordo). Jardim (14, com LOD): ~1,1 s simulado contra ~0,44 s clássico, ~281 mil vértices e ~60 mil instâncias (contra ~255 mil e ~101 mil). Limites mantidos: `maxNodes` 20–22 mil, `MAX_INST` por tipo.
+**Desempenho medido na v7, com as espécies que depois saíram** (Chrome headless + SwiftShader; montagem completa, média de 5 seeds com JIT aquecido / máximo): carvalho 169 / 229 ms; sequoia 80 / 97; pinheiro 96 / 124; arbusto 45 / 55; salgueiro 94 / 115; dragoeiro 39 / 44; baobá 22 / 27; eucalipto 88 / 141; figueira 100 / 116; bordo 190 / 256; pinheiro-branco 79 / 130; cipreste 80 / 92; junípero 52 / 77. A primeira montagem (JIT frio) fica entre ~150 e ~400 ms (bordo). Jardim daquela versão (14, com LOD): ~1,1 s simulado contra ~0,44 s clássico. Limites mantidos: `maxNodes` 20–22 mil, `MAX_INST` por tipo.
 
 **Por espécie**: ver o parágrafo "Crescimento simulado (v7)" de cada uma em [ESPECIES](ESPECIES.md). Limitações em [ROADMAP](ROADMAP.md#crescimento-simulado-v7).
 
@@ -272,5 +255,5 @@ A montagem pesada (L-System ou simulação) roda em `plant-worker.mjs` (`buildSk
 
 Por padrão os genes são **mostrados** e não aplicados, a gravidade e o fototropismo começam em 0 e a sombra da simulação continua vertical — o visual padrão acompanha a v7. Cruzar, mutar ou mover um gene passa a aplicar o genoma (`&genoma=` no hash).
 
-Junções: esferas só nas forquilhas grossas (tronco e andaime, inclusive o carvalho), com material simples de casca. No junípero e no cipreste a madeira morta é um veio longo e contínuo no shader (`LS_DEAD`): a v7 pontilhava a faixa com um seno de alta frequência. Sem furos no tubo. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. No jardim a folhagem fica na densidade da v7 (no máximo 1 em cada 2 folhas, desenhadas maiores); o impostor só entra quando a planta ocupa menos de ~40 px.
+Junções: esferas só nas forquilhas grossas (tronco e andaime), com material simples de casca. No junípero e no cipreste a madeira morta é um veio longo e contínuo no shader (`LS_DEAD`): a v7 pontilhava a faixa com um seno de alta frequência. Sem furos no tubo. Raízes de superfície desviam de três pedras semeadas e, no bonsai, permanecem dentro da elipse do vaso. No jardim a folhagem fica na densidade da v7 (no máximo 1 em cada 2 folhas, desenhadas maiores); o impostor só entra quando a planta ocupa menos de ~40 px.
 

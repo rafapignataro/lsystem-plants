@@ -1,7 +1,7 @@
 {
   "name": "workspace",
   "version": "1.0.0",
-  "description": "Plantas 3D geradas por **sistemas de Lindenmayer (L-Systems)** em **Three.js**, com uma *seed* (texto) que define cada planta de forma única e determinística.",
+  "description": "Bonsai Garden: bonsais 3D gerados por sistemas de Lindenmayer (L-Systems) em Three.js, com uma seed que define cada planta de forma única e determinística.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
