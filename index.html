@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jardim L-System v7 · POC Three.js</title>
+<title>Jardim L-System v8 · POC Three.js</title>
 <style>
   :root{--bg:rgba(14,20,18,.72);--fg:#eef5ee;--mut:#9fb3a6;--acc:#7be0a1;--acc2:#3fae6a;--bd:rgba(255,255,255,.12)}
   *{box-sizing:border-box}
@@ -63,7 +63,7 @@
 <aside id="panel">
   <button id="hide" title="Esconder painel">✕</button>
   <h1>🌱 Jardim L-System</h1>
-  <p class="sub">POC v7 · Three.js · L-Systems com seed determinística + crescimento simulado (espaço, luz e autopoda) · 5 realistas + 5 árvores raras + 4 bonsais</p>
+  <p class="sub">POC v8 · motor (junções, ambiente, genoma, folhagem LOD) · 5 realistas + 5 raras + 4 bonsais</p>
 
   <label class="l" for="species">Espécie</label>
   <select id="species"></select>
@@ -91,6 +91,26 @@
     <label><input type="checkbox" id="follow" checked> Câmera segue</label>
   </div>
 
+  <details open><summary>Ambiente (v8)</summary>
+    <label class="l">Vento <span id="windV"></span></label>
+    <input id="windStr" type="range" min="0" max="2" step="0.01" value="1">
+    <div class="row"><label class="l" style="flex:1">Az vento <span id="wazV"></span></label><input id="windAz" type="range" min="0" max="360" step="1" value="55"></div>
+    <label class="l">Sol (sombra direcional) <span id="sunV"></span></label>
+    <div class="row"><input id="sunAz" type="range" min="0" max="360" step="1" value="130"><input id="sunEl" type="range" min="5" max="85" step="1" value="42"></div>
+    <label class="l">Gravidade / fototropismo</label>
+    <input id="gravStr" type="range" min="0" max="2" step="0.01" value="1">
+    <input id="photoStr" type="range" min="0" max="1" step="0.01" value="0.35">
+  </details>
+
+  <details open><summary>Genoma (DNA legível)</summary>
+    <table id="genome"></table>
+    <div class="row"><input id="crossA" type="text" placeholder="seed pai A" spellcheck="false"><input id="crossB" type="text" placeholder="seed pai B" spellcheck="false"></div>
+    <div class="row"><button id="crossBtn">🧬 Cruzar</button><button id="mutateBtn">✨ Mutação leve</button></div>
+    <p class="note">Os genes ajustam vigor, ramificação, densidade, cor… — mesmos genes + seed = mesma planta. Hash <code>&amp;genoma=</code> no link.</p>
+  </details>
+
+  <div class="row"><button id="snap">📷 PNG</button><button id="gltf">📦 glTF</button></div>
+
   <div id="dna"></div>
   <details open><summary>Parâmetros derivados da seed</summary><table id="params"></table></details>
   <details><summary>Regras do L-System</summary><pre id="rules"></pre></details>
@@ -110,6 +130,12 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import {
+  GENE_CATALOG, genomeFromSeed, parseGenomeHash, genomeToHash, mergeGenome, crossGenomes,
+  applyGenomeToPlant, genomeTableRows, applyGravitySag, clusterFoliage, buildJointMeshes,
+  ENV_DEFAULT, envSunDir, envWindDir, makeSunShade, phototropismBias, lightGradientAt,
+} from './v8-engine.mjs';
 
 const V3 = THREE.Vector3;
 const DEG = Math.PI / 180;
@@ -490,12 +516,22 @@ function fruitGeo() {
    Galhos: cada anel de vértices lê o raio atual dos nós numa textura float
    (recalculada na CPU pela regra de Leonardo para a idade corrente).
    ===================================================================== */
-const SHARED = { uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 } };
+const ENV = { ...ENV_DEFAULT };
+let activeGenome = null, genomeOverlay = null;
+const SHARED = {
+  uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 },
+  uWindDir: { value: new THREE.Vector3(1, 0, 0) }, uWindStr: { value: 1 },
+};
 const SWAY = /* glsl */`
 uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH; uniform float uTend;
+uniform vec3 uWindDir; uniform float uWindStr;
 vec3 lsSway(vec3 p){
-  float h = clamp(p.y / uH, 0.0, 1.2); float k = h * h * uWind * uH * 0.016;
-  return vec3(sin(uTime*1.3 + p.x*0.35 + p.z*0.2)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25, 0.0, cos(uTime*1.07 + p.z*0.33)*k*0.7);
+  float h = clamp(p.y / uH, 0.0, 1.2); float k = h * h * uWind * uWindStr * uH * 0.016;
+  vec3 w = normalize(uWindDir + vec3(0.001));
+  vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), w));
+  float ph = dot(p, w) * 0.35 + dot(p, side) * 0.2;
+  return side * (sin(uTime*1.3 + ph)*k + sin(uTime*2.9 + p.y*0.9)*k*0.25)
+       + w * (cos(uTime*1.07 + ph)*k*0.35);
 }
 `;
 /* v4+: efeitos de casca por espécie. Tudo atrás de #ifdef LS_FX: quem não tem fx compila o mesmo shader de antes.
@@ -712,6 +748,7 @@ function patch(mat, kind, U, fx) {
   const ch = CHUNKS[kind], fxc = fx ? FX[fx] : null;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uGrowth = SHARED.uGrowth; sh.uniforms.uTime = SHARED.uTime; sh.uniforms.uWind = SHARED.uWind;
+    sh.uniforms.uWindDir = SHARED.uWindDir; sh.uniforms.uWindStr = SHARED.uWindStr;
     Object.assign(sh.uniforms, U);
     sh.vertexShader = ch.head + sh.vertexShader.replace('#include <begin_vertex>', ch.begin).replace('#include <project_vertex>', ch.project);
     if (ch.frag && mat.isMeshStandardMaterial && (!fxc || fxc.frag === 'bark')) {
@@ -1529,7 +1566,7 @@ function simAssign(MX, MY, MZ, MT, yr, L, near, nn, BP, BC, rp2, c2) {
     if (best >= 0) { const D = Math.sqrt(bd) || 1, o = best * 4; BC[o] += 1; BC[o + 1] += bx / D; BC[o + 2] += by / D; BC[o + 3] += bz / D; }
   }
 }
-function growSim(C, rng) {
+function growSim(C, rng, env = ENV) {
   const NY = C.years, MAXN = C.maxNodes || 24000;
   const X = [], Y = [], Z = [], PAR = [], T0 = [], T1 = [], TD = [], ORD = [], AXI = [], SCAF = [];
   const DX = [], DY = [], DZ = [], kids = [], budsAt = [], leafOf = [];
@@ -1579,13 +1616,22 @@ function growSim(C, rng) {
   // peso por voxel: o "bloqueio" de cada nível (b^-q) é espalhado pela base da pirâmide ((2q+1)² voxels): s ≈ área foliar acima
   const pw = []; for (let q = 0; q <= sq; q++) pw.push(sa * Math.pow(sb, -q) / ((2 * q + 1) * (2 * q + 1)));
   const vox = (x, y, z) => [Math.floor((x - g0[0]) / vs), Math.floor((y - g0[1]) / vs), Math.floor((z - g0[2]) / vs)];
-  function shade(i, sign) {
+  const sunD = envSunDir(env);
+  const [sux, suy, suz] = sunD;
+  const shade = makeSunShade(null, sunD, vs, gn, grid, pw);
+  const shadeVoxel = (xi, yi, iz, sign) => shade(xi, yi, iz, sign);
+  function shadeNode(i, sign) {
     const [ix, iy, iz] = vox(X[i], Y[i], Z[i]);
-    for (let q = 1; q <= sq; q++) { // só abaixo do nó: a própria camada não se sombreia
-      const yy = iy - q; if (yy < 0) break; if (yy >= gn[1]) continue;
-      const w = sign * pw[q];
-      for (let a = -q; a <= q; a++) { const xx = ix + a; if (xx < 0 || xx >= gn[0]) continue;
-        for (let c = -q; c <= q; c++) { const zz = iz + c; if (zz < 0 || zz >= gn[2]) continue; grid[(xx * gn[1] + yy) * gn[2] + zz] += w; } }
+    shadeVoxel(ix, iy, iz, sign);
+    for (let q = 1; q <= sq; q++) { // fallback vertical + direção do sol
+      const yy = iy - q; if (yy >= 0 && yy < gn[1]) {
+        const w = sign * pw[q] * 0.35;
+        for (let a = -q; a <= q; a++) { const xx = ix + a; if (xx < 0 || xx >= gn[0]) continue;
+          for (let c = -q; c <= q; c++) { const zz = iz + c; if (zz < 0 || zz >= gn[2]) continue; grid[(xx * gn[1] + yy) * gn[2] + zz] += w; }
+        }
+      }
+      const sx = ix + Math.round(sux * q), sy = iy + Math.round(suy * q), sz = iz + Math.round(suz * q);
+      if (sx >= 0 && sy >= 0 && sz >= 0 && sx < gn[0] && sy < gn[1] && sz < gn[2]) grid[(sx * gn[1] + sy) * gn[2] + sz] += sign * pw[Math.min(q, pw.length - 1)];
     }
   }
   const light = (x, y, z) => { const [ix, iy, iz] = vox(x, y, z); let s = 0; if (ix >= 0 && iy >= 0 && iz >= 0 && ix < gn[0] && iy < gn[1] && iz < gn[2]) s = grid[(ix * gn[1] + iy) * gn[2] + iz]; return Math.exp(-Math.max(0, s) / sC); }; // Beer-Lambert simples
@@ -1605,9 +1651,9 @@ function growSim(C, rng) {
       list.push(leaves.length);
       leaves.push({ x: px, y: py, z: pz, ly, lz, s: LF.size * (0.8 + 0.4 * rng.f()) * (LF.sizeOrd ? LF.sizeOrd(ORD[i]) : 1), t0: t, t1: 1e9, node: i, kind: LF.kind });
     }
-    if (list.length) { leafOf[i] = list; shade(i, 1); }
+    if (list.length) { leafOf[i] = list; shadeNode(i, 1); }
   }
-  function dropLeaves(i, t) { const L = leafOf[i]; if (!L) return; for (const j of L) if (leaves[j].t1 > t) leaves[j].t1 = t; leafOf[i] = null; shade(i, -1); }
+  function dropLeaves(i, t) { const L = leafOf[i]; if (!L) return; for (const j of L) if (leaves[j].t1 > t) leaves[j].t1 = t; leafOf[i] = null; shadeNode(i, -1); }
   // ---------- gemas ----------
   const mkBud = (node, d, ord, ax, born, term) => { const b = { node, d, ord, ax, born, idle: 0, alive: true, Q: 0, cnt: 0, ex: 0, ey: 0, ez: 0, v: 0, term }; buds.push(b); budsAt[node].push(b); return b; };
   function lateralBuds(i, d, ax, ord, y, last) {
@@ -1654,6 +1700,8 @@ function growSim(C, rng) {
     let w0 = 0; for (const b of buds) if (b.alive) buds[w0++] = b; buds.length = w0;
     for (const b of buds) { b.cnt = 0; b.ex = b.ey = b.ez = 0; b.Q = 0; b.v = 0; live.push(b);
       const n0 = b.node; b.L = light(X[n0] + b.d[0] * 0.3, Y[n0] + b.d[1] * 0.3, Z[n0] + b.d[2] * 0.3);
+      const wd = envWindDir(env); const windDot = b.d[0] * wd[0] + b.d[1] * wd[1] + b.d[2] * wd[2];
+      b.L *= 1 - Math.max(0, windDot) * (env.windStr ?? 1) * (C._windAsym ?? 0.35) * 0.35;
       if (b.L < 0.04) continue; // gema no escuro não compete por espaço (não cresceria)
       const kk = key(Math.floor(X[n0] / cell), Math.floor(Y[n0] / cell), Math.floor(Z[n0] / cell)); let a = bgrid.get(kk); if (!a) bgrid.set(kk, a = []); a.push(comp.length); comp.push(b); }
     const nb = comp.length, BP = new Float64Array(nb * 6), BC = new Float64Array(nb * 4);
@@ -1687,7 +1735,7 @@ function growSim(C, rng) {
       if (!cand.length) continue;
       let mi = 0, md = -9; const di = i ? [DX[i], DY[i], DZ[i]] : UP;
       for (let c = 0; c < cand.length; c++) { const q = cand[c], al = q[2] * di[0] + q[3] * di[1] + q[4] * di[2]; if (al > md) { md = al; mi = c; } }
-      const lam = C.lambda(y, ORD[i]); let W = 0;
+      let lam = C.lambda(y, ORD[i]) * (C._lambdaMul ?? 1); let W = 0;
       for (let c = 0; c < cand.length; c++) W += (c === mi ? lam : 1 - lam) * cand[c][1];
       for (let c = 0; c < cand.length; c++) { const q = cand[c], v = V[i] * (c === mi ? lam : 1 - lam) * q[1] / W; if (q[5]) q[0].v = v; else V[q[0]] = v; }
     }
@@ -1705,6 +1753,12 @@ function growSim(C, rng) {
       let d = b.d.slice(), par = b.node; const prev = b.d.slice();
       for (let k = 0; k < n && X.length < MAXN; k++) {
         if (E) { d[0] += xi * E[0]; d[1] += xi * E[1]; d[2] += xi * E[2]; norm(d); }
+        const grad = lightGradientAt(grid, gn, g0, vs, X[par] + d[0], Y[par] + d[1], Z[par] + d[2], sunD);
+        phototropismBias(d, grad, (env.phototropism ?? 0.35) * 0.12);
+        const wd2 = envWindDir(env);
+        d[0] += wd2[0] * (env.windStr ?? 1) * (C._windAsym ?? 0.35) * 0.06;
+        d[2] += wd2[2] * (env.windStr ?? 1) * (C._windAsym ?? 0.35) * 0.06;
+        norm(d);
         if (tr) { d[1] += tr; norm(d); }
         if (C.bend) C.bend(d, b.ord, rng);
         if (k > 0 || !b.term) { const pd = prev, c = d[0] * pd[0] + d[1] * pd[1] + d[2] * pd[2], mt = C.maxTurn ?? 0.45; // curvatura máxima por entrenó
@@ -1783,7 +1837,9 @@ function buildSimSkeleton(id, seed, sp, P) {
   const S = SIMS[id](P, new Rand(`${seed}::${id}::sim`), sp, { seed, id });
   const sc = simScaffold(sp, P, seed, id, S.scaffold);
   S.cfg.scaffold = sc;
-  const R = growSim(S.cfg, new Rand(`${seed}::${id}::grow`));
+  S.cfg._lambdaMul = P._genome?.dominancia ?? 1;
+  S.cfg._windAsym = P._genome?.vento ?? ENV.windAsym ?? 0.35;
+  const R = growSim(S.cfg, new Rand(`${seed}::${id}::grow`), ENV);
   const sk = { N: R.N, X: R.X, Y: R.Y, Z: R.Z, PAR: R.PAR, T0: R.T0, T1: R.T1, TD: R.TD };
   if (sc.tipw) sk.tipw = sc.tipw; if (sc.jin) sk.jin = sc.jin;
   const bo = (sc.boost || []).concat(R.roots); if (bo.length) sk.boost = bo;
@@ -2166,7 +2222,7 @@ function buildTubes(sk, rFull, sp, P, rng, W, tags) {
   return { geo: g, chains, verts: vtx, tris: idx.length / 3 };
 }
 
-function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod) {
+function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod, lodScale = 1) {
   const geomKey = kind === 'leaf' ? sp.leafKind : (kind === 'orb' || kind === 'center') ? 'sphere' : kind;
   const geo = (sp.geom && sp.geom(kind, P)) || GEOMS[geomKey]();
   const count = items.length;
@@ -2184,11 +2240,14 @@ function makeInstanced(kind, items, sp, P, rng, U, night, tags, lod) {
   });
   geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(lives, 2));
   let count2 = count, mats2 = mats, cols2 = cols;
-  if (lod && (kind === 'leaf' || kind === 'needles') && count > 2500) { // v5: LOD do jardim: metade das folhas, 30% maiores (depois do RNG: mesma seed, mesma planta)
-    count2 = Math.ceil(count / 2); mats2 = new Float32Array(count2 * 16); cols2 = new Float32Array(count2 * 3); const l2 = new Float32Array(count2 * 2);
-    const sk = new THREE.Matrix4(), mm = new THREE.Matrix4();
-    for (let i = 0, j = 0; i < count; i += 2, j++) {
-      mm.fromArray(mats, i * 16); const e = mm.elements; for (const q of [0, 1, 2, 4, 5, 6, 8, 9, 10]) e[q] *= 1.3; mm.toArray(mats2, j * 16);
+  const thin = lod && (kind === 'leaf' || kind === 'needles') && count > 1200;
+  if (thin) { // v8: LOD — menos instâncias, cachos maiores; impostor simples ao longe
+    const keep = lodScale < 0.45 ? 4 : 2;
+    count2 = Math.ceil(count / keep); mats2 = new Float32Array(count2 * 16); cols2 = new Float32Array(count2 * 3); const l2 = new Float32Array(count2 * 2);
+    const mm = new THREE.Matrix4();
+    const scaleMul = lodScale < 0.45 ? 2.1 : 1.35;
+    for (let i = 0, j = 0; i < count; i += keep, j++) {
+      mm.fromArray(mats, i * 16); const e = mm.elements; for (const q of [0, 1, 2, 4, 5, 6, 8, 9, 10]) e[q] *= scaleMul; mm.toArray(mats2, j * 16);
       cols2.set(cols.subarray(i * 3, i * 3 + 3), j * 3); l2.set(lives.subarray(i * 2, i * 2 + 2), j * 2);
     }
     geo.setAttribute('aLife', new THREE.InstancedBufferAttribute(l2, 2));
@@ -2216,18 +2275,27 @@ function buildPlant(id, seed, opts = {}) {
   const t0 = performance.now();
   const sp = SPECIES[id];
   const P = sp.params(new Rand(`${seed}::${id}::params`));
+  const genome = mergeGenome(genomeFromSeed(seed, id, Rand), genomeOverlay);
+  activeGenome = genome;
+  applyGenomeToPlant(P, null, null, genome, sp);
   const def = sp.build(P);
-  const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P) : null; // v7: crescimento simulado (senão: L-System clássico, igual à v6)
+  const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P) : null;
   const { word, done, tEnd } = SIM || runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
   const tLs = performance.now();
   const rng = new Rand(`${seed}::${id}::turtle`);
-  const { sk, inst } = SIM || interpret(word, sp, P, rng);
+  let { sk, inst } = SIM || interpret(word, sp, P, rng);
   const tSk = performance.now();
+  if (!opts.lod) {
+    clusterFoliage(inst);
+    for (const k in inst) for (const it of inst[k]) if (it.p && !it.p.isVector3) it.p = new V3(it.p.x, it.p.y, it.p.z);
+  }
+  applyGravitySag(sk, (ENV.gravity ?? 1) * (genome.vigor ?? 1) * 0.85);
   // parâmetros da madeira (seed)
   const wr = new Rand(`${seed}::${id}::wood`);
   const lam = SIM && SIM.ring != null ? SIM.ring : sp.wood.ring ?? 0.5; // v7: no simulado o tronco engrossa mais por anéis anuais (idade) e menos pelos canos
   const W = { leo: sp.wood.leo[0] + wr.f() * (sp.wood.leo[1] - sp.wood.leo[0]), G: sp.wood.G * (0.8 + wr.f() * 0.4), tEnd, scale: 1, rMin: 0, ring: 0, share: sp.wood.share ?? 0.4 };
   if (opts.lod) W.lod = true;
+  applyGenomeToPlant(P, null, W, genome, sp);
   if (SIM) { W.TD = sk.TD; W.deadK = SIM.deadK ?? 0.45; }
   if (sk.tipw) { W.TW = new Float32Array(sk.N); for (const [i, w] of sk.tipw) W.TW[i] = w; }
   if (sk.boost) W.roots = sk.boost.map(b => ({ a: b.a, i: b.i, t: b.t, d: Math.max(tEnd - b.t, 0.5) * 0.9, f: b.f })); // v5: raízes aéreas
@@ -2264,6 +2332,7 @@ function buildPlant(id, seed, opts = {}) {
   const [, cYoung] = sp.bark(P);
   const night = sp.theme === 'night';
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
+  applyGenomeToPlant(P, BK, W, genome, sp);
   const so = new Rand(`${seed}::${id}::bark-off`);
   const U = { uH: { value: rawH }, uTend: { value: tEnd }, uRad: { value: radTex }, uRmax: { value: rMaxFull }, uYoung: { value: cYoung },
     uBk: { value: new THREE.Vector4(BK.type, BK.stretch, BK.crack, BK.depth) }, uBk2: { value: new THREE.Vector4(BK.fbm, BK.lent, BK.moss, 0) },
@@ -2281,8 +2350,25 @@ function buildPlant(id, seed, opts = {}) {
   bmesh.castShadow = bmesh.receiveShadow = true; bmesh.frustumCulled = false;
   bmesh.customDepthMaterial = depthMat('branch', U, sp.fx);
   group.add(bmesh);
+  if (!opts.lod && !W.lod && sk.N < 4000) {
+    const deadCfg = (id === 'cipreste' || id === 'junipero') && P.shari != null ? {
+      shari: P.shari, twist: P.shariTwist ?? P.twist ?? 1, phase: P.phase ?? 0, shariH: P.shariH ?? 0.4,
+      trunkH: sk.Y[0] != null ? Math.max(...sk.Y) : 3,
+    } : (id === 'junipero' ? { shari: P.dead, twist: P.twist, phase: 0, shariH: 0.85, trunkH: Math.max(...sk.Y) } : null);
+    const jm = buildJointMeshes(sk, rTube, deadCfg, { seg: sk.N > 2800 ? 7 : 9 });
+    if (jm && jm.pos.length >= 9) {
+      const jg = new THREE.BufferGeometry();
+      jg.setAttribute('position', new THREE.BufferAttribute(jm.pos, 3));
+      jg.setAttribute('normal', new THREE.BufferAttribute(jm.nor, 3));
+      const tri = jm.idx && jm.idx.length ? jm.idx : Array.from({ length: jm.pos.length / 3 }, (_, i) => i);
+      jg.setIndex(tri.length > 65535 ? new THREE.Uint32BufferAttribute(tri, 1) : new THREE.Uint16BufferAttribute(tri, 1));
+      jg.computeVertexNormals();
+      group.add(new THREE.Mesh(jg, bmat));
+    }
+  }
   let nInst = 0;
-  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags, W.lod)); nInst += inst[k].length; }
+  const lodS = opts.lod ? 0.4 : 1;
+  for (const k in inst) { if (!inst[k].length) continue; group.add(makeInstanced(k, inst[k], sp, P, rng, U, night, tags, W.lod, lodS)); nInst += inst[k].length; }
   const scale = sp.height / Math.max(rawH, rawW * 0.75);
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   const inner = new THREE.Group(); inner.add(group); group.position.set(-cx, oy, -cz);
@@ -2291,7 +2377,7 @@ function buildPlant(id, seed, opts = {}) {
   inner.updateMatrixWorld(true);
   const wbox = box.clone().translate(new V3(-cx, 0, -cz)); wbox.min.multiplyScalar(scale); wbox.max.multiplyScalar(scale);
   const pl = {
-    id, sp, P, def, word, done, W, BK, rFull, sim: SIM && SIM.sim, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
+    id, sp, P, def, word, done, W, BK, genome, rFull, sim: SIM && SIM.sim, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
     theme: typeof sp.theme === 'function' ? sp.theme(P) : sp.theme,
     update(age) {
       if (age === this.lastAge) return;
@@ -2422,8 +2508,8 @@ function frame(box, { dir = new V3(0.75, 0.32, 1), pad = 1.12, ty = 0.46 } = {})
   follow = { dist, ty: target.y, h: size.y, z: 1 };
   // sombra cobre a planta
   const rad = Math.max(size.x, size.y, size.z) * 0.85 + 2;
-  sun.position.copy(center).add(new V3(rad * 0.8, rad * 1.6, rad * 0.6)); sun.target.position.copy(center);
-  const sc = sun.shadow.camera; sc.left = -rad; sc.right = rad; sc.top = rad; sc.bottom = -rad; sc.near = 0.5; sc.far = rad * 5; sc.updateProjectionMatrix();
+  const sc = sun.shadow.camera; sc.left = -rad; sc.right = rad; sc.top = rad; sc.bottom = -rad; sc.near = 0.5; sc.far = rad * 5;
+  applySunFromEnv(center, rad);
   scene.fog.near = dist * 1.3; scene.fog.far = dist * 5;
 }
 
@@ -2452,12 +2538,26 @@ const randomSeed = () => `${WORDS[Math.floor(Math.random() * WORDS.length)]}-${W
 
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
+  genomeOverlay = parseGenomeHash(h.get('genoma'));
   return { esp: h.get('especie'), seed: h.get('seed'), cresc: h.get('cresc') === 'classico' ? 'ls' : 'sim' };
 }
 function writeHash() {
   const esp = mode === 'garden' ? 'jardim' : ui.species.value;
-  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + (growMode === 'ls' ? '&cresc=classico' : '');
+  const g = activeGenome ? `&genoma=${encodeURIComponent(genomeToHash(activeGenome))}` : '';
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + (growMode === 'ls' ? '&cresc=classico' : '') + g;
   if (location.hash !== s) history.replaceState(null, '', s);
+}
+function syncEnvUniforms() {
+  const wd = envWindDir(ENV); SHARED.uWindDir.value.set(wd[0], wd[1], wd[2]);
+  SHARED.uWindStr.value = ($('wind').checked ? 1 : 0) * (ENV.windStr ?? 1);
+  $('windV').textContent = ENV.windStr.toFixed(2); $('wazV').textContent = Math.round(ENV.windAz) + '°';
+  $('sunV').textContent = `${Math.round(ENV.sunAz)}° / ${Math.round(ENV.sunEl)}°`;
+}
+function applySunFromEnv(center, rad) {
+  const d = envSunDir(ENV);
+  sun.position.copy(center).add(new V3(d[0], d[1], d[2]).multiplyScalar(rad * 1.8));
+  sun.target.position.copy(center);
+  const sc = sun.shadow.camera; sc.updateProjectionMatrix();
 }
 
 function fmtVal(v, unit) { if (typeof v === 'boolean') return v ? 'sim' : 'não'; if (typeof v === 'number') return (Number.isInteger(v) ? v : v.toFixed(unit === '°' ? 1 : 3)) + (unit || ''); return v; }
@@ -2476,7 +2576,9 @@ function showInfo(pl) {
       `luz: grade de sombra · recurso: Borchert-Honda com dominância apical · ${st.years} anos · ${st.shed} galhos caíram por sombra` + (st.pruned ? ` · ${st.pruned} cortes de poda` : '') + (st.flowers ? ` · ${st.flowers} flores` : '');
     $('word').textContent = '(crescimento simulado: a planta não sai de uma palavra; mude para "L-System clássico" para ver a palavra gerada)';
   } else $('word').textContent = wordToString(pl.word, 700);
-  $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 32)}</b>`;
+  $('dna').innerHTML = `hash <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 32)}</b> · genoma legível`;
+  const g = pl.genome || activeGenome;
+  $('genome').innerHTML = genomeTableRows(g).map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('');
 }
 function showStats() {
   const s = plants.reduce((a, p) => ({ modules: a.modules + p.stats.modules, nodes: a.nodes + p.stats.nodes, verts: a.verts + p.stats.verts, inst: a.inst + p.stats.inst, ms: a.ms + p.stats.ms }), { modules: 0, nodes: 0, verts: 0, inst: 0, ms: 0 });
@@ -2560,7 +2662,41 @@ $('garden').onclick = () => { setMode(mode === 'garden' ? 'single' : 'garden'); 
 $('replay').onclick = () => startGrowth();
 ui.growth.oninput = () => { anim = null; SHARED.uGrowth.value = +ui.growth.value; syncSlider(); };
 $('rotate').onchange = (e) => controls.autoRotate = e.target.checked;
-$('wind').onchange = (e) => SHARED.uWind.value = e.target.checked ? 1 : 0;
+$('wind').onchange = (e) => { SHARED.uWind.value = e.target.checked ? 1 : 0; syncEnvUniforms(); };
+for (const [id, key] of [['windStr', 'windStr'], ['windAz', 'windAz'], ['sunAz', 'sunAz'], ['sunEl', 'sunEl'], ['gravStr', 'gravity'], ['photoStr', 'phototropism']]) {
+  $(id).oninput = () => { ENV[key] = +$(id).value; syncEnvUniforms(); if (mode === 'single') { const c = plants[0]?.box?.getCenter(new V3()); if (c) applySunFromEnv(c, 12); } };
+}
+syncEnvUniforms();
+$('crossBtn').onclick = () => {
+  const a = $('crossA').value.trim() || ui.seed.value, b = $('crossB').value.trim() || 'lindenmayer';
+  const id = ui.species.value;
+  const child = crossGenomes(genomeFromSeed(a, id, Rand), genomeFromSeed(b, id, Rand), `${a}×${b}`, Rand);
+  genomeOverlay = child;
+  ui.seed.value = `${a.slice(0, 12)}×${b.slice(0, 12)}`;
+  generate();
+};
+$('mutateBtn').onclick = () => {
+  const id = ui.species.value, g = mergeGenome(genomeFromSeed(ui.seed.value, id, Rand), genomeOverlay);
+  const r = new Rand(ui.seed.value + '-mut-' + Date.now());
+  for (const gene of GENE_CATALOG) if (r.chance(0.35)) g[gene.key] = Math.min(gene.max, Math.max(gene.min, g[gene.key] + r.jit((gene.max - gene.min) * 0.06)));
+  genomeOverlay = g; generate();
+};
+$('snap').onclick = () => {
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.download = `plant-${ui.species.value}-${ui.seed.value}.png`;
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+};
+$('gltf').onclick = () => {
+  if (!plants.length) return;
+  const ex = new GLTFExporter();
+  ex.parse(plants[0].object, (gltf) => {
+    const blob = new Blob([JSON.stringify(gltf)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `plant-${ui.species.value}-${ui.seed.value}.gltf`; a.click();
+  }, () => {}, { binary: false, embedImages: true });
+};
 $('share').onclick = async () => { writeHash(); try { await navigator.clipboard.writeText(location.href); $('share').textContent = '✔ Link copiado'; } catch { prompt('Copie o link:', location.href); } setTimeout(() => $('share').textContent = '🔗 Copiar link', 1500); };
 $('hide').onclick = () => { $('panel').classList.add('hidden'); applyViewOffset(); };
 $('toggle').onclick = () => { $('panel').classList.remove('hidden'); applyViewOffset(); };
@@ -2604,6 +2740,8 @@ function loop() {
   }
   controls.update();
   composer.render();
+  perfFrames++;
+  if (performance.now() - perfT > 1000) { perfFps = perfFrames; perfFrames = 0; perfT = performance.now(); }
   if (labels.length) { // v5: projeta e empurra para baixo as etiquetas que se sobrepõem (guloso, por y na tela)
     const vis = [];
     for (const l of labels) {
@@ -2620,7 +2758,9 @@ function loop() {
     for (const l of vis) { l.el.style.left = l.x + 'px'; l.el.style.top = l.y + 'px'; }
   }
 }
-window.camera = camera; window.controls = controls; window.THREE = THREE; window.__lsys = { buildPlant, computeRadii, SPECIES, SHARED, get plants() { return plants; }, generate, setMode };
+let perfFps = 0, perfFrames = 0, perfT = performance.now();
+window.camera = camera; window.controls = controls; window.THREE = THREE;
+window.__lsys = { buildPlant, computeRadii, SPECIES, SHARED, ENV, get plants() { return plants; }, generate, setMode, genomeFromSeed, hex, Rand };
 addEventListener('error', (e) => showErr(e.error || e.message));
 init(); loop();
 </script>

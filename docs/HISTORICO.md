@@ -2,6 +2,15 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v8: motor (junções, ambiente, genoma, folhagem) (12/11/2026)
+
+- **Junções**: malha de união nas forquilhas + escavação geométrica do shari nos bonsais (complementa o shader).
+- **Ambiente**: vento direcional (shader + simulação), sol direcional (sombras na grade), fototropismo, gravidade no esqueleto; controles no painel.
+- **Folhagem**: cachos por nó; LOD reforçado no jardim.
+- **Genoma legível**, cruzamento, mutação, export PNG/glTF, hash `&genoma=`.
+- **Arquivos**: `v8-engine.mjs`, `joint-worker.mjs`, `scripts/verify-v8.mjs`; screenshots em `screenshots/v8/`.
+- Compatibilidade: URLs v7 sem `genoma`; 14 espécies mantidas; modo clássico não exige byte-idêntico, mas regressão visual verificada por screenshots headless.
+
 ## v7: crescimento simulado e saída das exóticas (11/11/2026)
 
 Commit [`1033af9`](https://github.com/rafapignataro/lsystem-plants/commit/1033af96ed9f4b0107e7a2c0a9e4eefa8f7fa523), 21:20.

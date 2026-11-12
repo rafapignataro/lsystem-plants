@@ -266,3 +266,34 @@ Modo padrão (botão **Crescimento: Simulado / L-System clássico**; `#…&cresc
 
 **Por espécie**: ver o parágrafo "Crescimento simulado (v7)" de cada uma em [ESPECIES](ESPECIES.md). Limitações em [ROADMAP](ROADMAP.md#crescimento-simulado-v7).
 
+## 14. Motor v8 (engine)
+
+Módulo auxiliar `v8-engine.mjs` (importado em `index.html`):
+
+### 14.1 Junções contínuas
+
+- `buildJointMeshes` gera malha extra nas forquilhas (esfera de união + capuzes cilíndricos curtos), mesma materialização dos tubos.
+- Limitado às **100** junções mais grossas e desativado se `sk.N ≥ 4000` (carvalho clássico mantém só tubos + colar).
+- Nos bonsais **cipreste/junípero**, faces dentro da faixa **shari** são omitidas (escavação geométrica complementar ao shader `LS_DEAD`).
+- `joint-worker.mjs` permite malhar junções num Worker (opcional; a montagem principal ainda é síncrona).
+
+### 14.2 Ambiente
+
+- Estado `ENV`: azimute/elevação do **vento** e do **sol**, intensidade do vento, **gravidade** (sag no esqueleto) e **fototropismo**.
+- Uniforms `uWindDir` / `uWindStr` no shader de balanço (`lsSway`).
+- Sombra na simulação: propagação na direção do sol + componente vertical; gemas a barlavento recebem menos luz; crescimento enviesado para o vento e para o gradiente de luz.
+- `applyGravitySag`: flexão pós-tartaruga em galhos horizontais pesados.
+- Painel **Ambiente (v8)** expõe os controles; a luz direcional da cena segue `ENV`.
+
+### 14.3 Folhagem
+
+- `clusterFoliage`: folhas/agulhas do mesmo nó viram **cachos** (menos draw calls, escala √n).
+- LOD do jardim: redução ½ ou ¼ com cachos maiores (`lodScale`).
+
+### 14.4 Genoma
+
+- Nove genes legíveis derivados da seed (`::genome-v8`): vigor, ramificação, densidade, alongamento, casca, musgo, matiz, dominância apical, assimetria ao vento.
+- Hash opcional `&genoma=vigor:1.1,ramificacao:0.95,...` (formatos antigos sem `genoma` continuam válidos).
+- **Cruzamento** de duas seeds no painel; mutação leve; export **PNG** (`preserveDrawingBuffer`) e **glTF** (`GLTFExporter`).
+- Determinismo: genes + seed + espécie + `ENV` fixo ⇒ mesma planta.
+

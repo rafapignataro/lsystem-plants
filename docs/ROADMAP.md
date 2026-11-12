@@ -4,10 +4,10 @@
 
 Os itens 1 (colonização do espaço + luz) e 2 (simulação de crescimento ano a ano) foram feitos na v7 ([ARQUITETURA §13](ARQUITETURA.md#13-crescimento-simulado-v7)). Ficaram anotados para depois:
 
-3. **Superfície única nas junções.** Trocar "tubo + colar" por uma superfície implícita perto das forquilhas (SDF dos segmentos com união suave `smin`, malhada por *marching cubes* / *dual contouring* só numa caixa em volta de cada junção, e costurada nos tubos), para o galho "brotar" do pai sem emenda. Com isso dá para **escavar madeira morta de verdade** (shari/jin com a forma subtraída do tronco, não só cor e relevo no shader).
-4. **Física e ambiente.** Vento dominante que deixa a copa assimétrica (gemas a barlavento crescem menos, galhos tortos para sotavento); **gravidade dobrando galhos longos e pesados** (flexão pela massa acumulada da subárvore, o pinheiro e o carvalho velho "assentam"); **fototropismo** (a direção de crescimento puxa para o lado mais claro da grade de luz, que já existe); **raízes** que crescem por colonização no solo desviando de pedras e do vaso.
-5. **Folhagem melhor e mais leve.** Folhas em **cachos nos raminhos visíveis** (um cartão com várias folhas por ponta, em vez de folhas soltas presas ao eixo); **LOD por distância** (cachos → *impostors* → só volume) para o jardim ficar fluido.
-6. **Seed como genoma legível.** A seed vira um "DNA" com genes nomeados (vigor, ângulo, densidade, cor, dominância apical…), mostrados no painel; **cruzamento** de duas plantas com herança desses genes (e mutação); **exportar glTF** da planta na idade escolhida.
+3. ~~**Superfície única nas junções.**~~ **v8 (parcial)**: malha de união nas forquilhas (até 100 junções, espécies grandes só tubo+colar) + faixa shari escavada na geometria; jin ainda shader. Falta SDF/marching cubes de qualidade em todas as junções e costura perfeita de UV.
+4. ~~**Física e ambiente.**~~ **v8 (parcial)**: vento/sol no painel, sombra direcional na simulação, fototropismo e sag por gravidade; **raízes** desviando do vaso/pedras ainda não.
+5. ~~**Folhagem melhor e mais leve.**~~ **v8 (parcial)**: cachos por nó + LOD no jardim; faltam *impostors* por distância e Worker na montagem completa (só `joint-worker.mjs` preparado).
+6. ~~**Seed como genoma legível.**~~ **v8**: nove genes, painel, cruzamento, mutação, hash `&genoma=`, PNG e glTF.
 
 ## Geometria e madeira
 
