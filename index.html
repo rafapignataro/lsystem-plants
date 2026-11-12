@@ -200,6 +200,8 @@ const GEOMS = {
   palm: () => palmGeo(5),
   palm7: () => palmGeo(7),
   hinoki: () => sheet({ width: 0.42, fold: 0.03, curve: 0.04, profile: (u) => (0.45 + 0.55 * Math.abs(Math.sin(u * Math.PI * 4.5))) * Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.97 + 0.03)), 0.55), nu: 18, nv: 1 }),
+  azalea: () => sheet({ width: 0.34, fold: 0.1, curve: 0.08, profile: (u) => Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.92 + 0.04)), 0.7) * (1 - 0.08 * u), nu: 6, nv: 2 }),
+  azaleaPetal: () => sheet({ width: 0.36, fold: 0.015, curve: -0.04, cup: 0.52, profile: (u) => { const t = Math.min(1, u * 0.96 + 0.02); const throat = 0.16 + 0.84 * Math.pow(Math.min(1, t / 0.42), 0.75); const tip = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.9 + 0.05)), 0.4); return throat * (0.42 + 0.58 * tip); }, nu: 8, nv: 3 }),
 };
 // folha palmada do bordo: leque de lobos pontudos em volta do pecíolo, levemente côncava (origem = pecíolo, eixo +y)
 function palmGeo(lobes) {
@@ -755,7 +757,7 @@ function assemblePlant(pkg) {
     addPlain(joints.joints, asColor(barkCol), 0.88, true);
     addPlain(joints.jin, new THREE.Color(0.86, 0.83, 0.76), 0.72, true);
   }
-  if (pkg.stones) {
+  if (pkg.stones && sp.stones !== false) {
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6d675f, roughness: 1 });
     for (const s of pkg.stones) {
       const stone = new THREE.Mesh(new THREE.SphereGeometry(s.r, 12, 8), stoneMat);

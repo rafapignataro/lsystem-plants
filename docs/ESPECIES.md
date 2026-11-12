@@ -29,7 +29,7 @@ Desde a v7 o padrão é o **crescimento simulado** (24 anos de formação, poda 
 
 Árvores **em miniatura e formadas por anos de poda**, cada uma num vaso. A forma não sai só de uma regra "natural" de crescimento: o axioma já desenha o **estilo** (a curva do tronco, os andares, a hélice), como um bonsaísta faria com arame, e as regras ramificam os galhos até virarem **almofadas de folhagem**. Cada espécie tem fluxos de RNG próprios (`seed::<id>::…`). Os ganchos estão em [ARQUITETURA §12](ARQUITETURA.md#12-bonsais-v6).
 
-Comum aos quatro:
+Comum aos bonsais:
 
 - **Nebari** (raízes de superfície): `nebari(r, k, len, w)` gera `k` cordões `[ /(360°/k·i ± jit) &(90°) F(len) /(±40°) +(±25°) F(len) Q(w) ]` que saem quase na horizontal da base. `Q(w)` dá um peso extra à ponta da raiz na regra de Leonardo, então as raízes ficam grossas e a base do tronco alarga (o raio da base continua sendo `baseWidth`).
 - **Almofada** `Z(rx, ry, n, s)`: `n` folhas/tufos de agulha distribuídos num domo achatado de raio `rx` e altura `ry`, viradas para cima (`padUp`). Cada folha nasce com um atraso aleatório de até 0,7 da vida do módulo, então a almofada "enche" aos poucos. `pad(P, k)` escala raio por `k`, altura por `√k` e número de folhas por `k²`.
@@ -141,3 +141,28 @@ B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s
 Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.
 
 **Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A hélice, o shari e os jin vêm do andaime.
+
+## 🌸 Bonsai de Azaleia Satsuki (`azaleia`)
+
+**Ideia:** *Rhododendron indicum* em estilo **moyogi** (ereto informal). O tronco é curto e afinado, com uma curva em S, e a casca é marrom-avermelhada com escamas finas (lenticelas). Os galhos saem cedo, em espiral, e o comprimento segue o contorno de um domo: mais longo no meio da copa, mais curto embaixo e no ápice. A ramificação é dicotômica e sobe (`^`), e cada ponta vira uma almofada de folhas verde-escuras mais um domo de flores.
+
+As flores são funis de **cinco pétalas** (`E`). A seed escolhe a paleta — rosa, magenta, branca ou **mescla** (as três na mesma planta, traço conhecido da satsuki). Elas só abrem nos estágios finais (`bloomAt` no clássico; no simulado, a partir de cerca de dois terços dos anos de formação). No simulado as flores são instâncias colocadas na casca externa das folhas vivas, com um vão mínimo, então não flutuam. A planta não recebe pedras soltas: o vaso é o chão.
+
+```
+ω : nebari curto × roots   tronco { /(±) &(curve·cos) F [ /(yaw) &(ângulo→fecha no topo) ~(−0.04) B ] } × segs   ápice B
+B(s) → F(0.48s) [ +(split) ^ B(ratio·s) ] [ −(split) ^ B(ratio·s) ] ^(lift) B(cont·s)     (s < 0.16 → Z + E)
+final: B → Z + E(flR, flH, flN, flowerSize)
+juvenil: B → Z pequeno, sem flores
+```
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 18–45 |
+| `segs` / `segLen` | 4–5 · 0.15–0.19 |
+| `curve` | 18–28° |
+| `branchLen` / `bAngle` / `split` | 0.58–0.74 · 55–68° · 26–38° |
+| `flowerSize` / `open` | 0.078–0.098 · 46–54° |
+| `palette` | rosa, magenta, branco ou mescla |
+| `pot` | redondo ou retangular, barro sem esmalte, com musgo |
+
+**Crescimento simulado (v7):** mesma poda dos outros bonsais (a cada 3 anos), com um passo extra que veste a casca da copa de funis só depois do ano 16 de 24. Aos 40% da idade a estrutura e as folhas já existem e as flores ainda não.
