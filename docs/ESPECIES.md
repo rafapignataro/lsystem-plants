@@ -29,7 +29,7 @@ Desde a v7 o padrão é o **crescimento simulado** (24 anos de formação, poda 
 
 Árvores **em miniatura e formadas por anos de poda**, cada uma num vaso. A forma não sai só de uma regra "natural" de crescimento: o axioma já desenha o **estilo** (a curva do tronco, os andares, a hélice), como um bonsaísta faria com arame, e as regras ramificam os galhos até virarem **almofadas de folhagem**. Cada espécie tem fluxos de RNG próprios (`seed::<id>::…`). Os ganchos estão em [ARQUITETURA §12](ARQUITETURA.md#12-bonsais-v6).
 
-Comum aos quatro:
+Comum aos bonsais:
 
 - **Nebari** (raízes de superfície): `nebari(r, k, len, w)` gera `k` cordões `[ /(360°/k·i ± jit) &(90°) F(len) /(±40°) +(±25°) F(len) Q(w) ]` que saem quase na horizontal da base. `Q(w)` dá um peso extra à ponta da raiz na regra de Leonardo, então as raízes ficam grossas e a base do tronco alarga (o raio da base continua sendo `baseWidth`).
 - **Almofada** `Z(rx, ry, n, s)`: `n` folhas/tufos de agulha distribuídos num domo achatado de raio `rx` e altura `ry`, viradas para cima (`padUp`). Cada folha nasce com um atraso aleatório de até 0,7 da vida do módulo, então a almofada "enche" aos poucos. `pad(P, k)` escala raio por `k`, altura por `√k` e número de folhas por `k²`.
@@ -141,6 +141,88 @@ B(s) → F(0.7s) [ +(split) B(0.58s) ] [ −(split) B(0.58s) ] /(±40°) B(0.72s
 Vaso retangular marrom (superelipse `n = 7`) sobre uma mesinha escura. Cenário `zen`.
 
 **Crescimento simulado (v7):** Bonsai: ver o bordo (poda a cada 3 anos). A hélice, o shari e os jin vêm do andaime.
+
+## 🍃 Bonsai de Olmo Chinês (`olmo_chines`)
+
+**Ideia:** *Ulmus parvifolia* em **hokidachi** (vassoura). O tronco é reto — três `F` quase sem `&` nem `/` — e perto de um terço da altura se abre em três anéis curtos (externo, médio, interno) mais um líder. Cada galho sai em leque e, depois de um trecho reto, `~(-lift)` curva para o céu: o tropismo age a cada `F`, então vários segmentos curtos fecham um domo. A ramificação é dicotômica, com um terceiro ramo para cima de vez em quando, e termina em folhas serrilhadas pequenas e uma almofada miúda, arejada o bastante para o desenho dos ramos aparecer na borda.
+
+```
+ω : nebari × raízes   tronco reto F × 3
+     anel externo × 8 a &(outerA)   F(0.065)   anel médio × 7 a &(midA)   F(0.05)   anel interno × 5 a &(innerA)   líder
+     galho: ~(0) F F ~(-lift) [ ±split B ] F F ^(sobe) B
+B(s) → F F [ ±(split) B(side·s) ] [ ^(12°) B ] B(cont·s)     (s < tip → folhas + Z pequena)
+```
+
+**Casca:** lisa, que descasca em manchas macias de cinza, bege e laranja (shader `fx: 'olmo'`), sem placas nem madeira morta. Os ramos finos ficam na cor jovem.
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 20–55 |
+| `segLen` | 0.22–0.26 |
+| `spokesA` / `outerA` | 8 · 44–54° |
+| `arm` / `lift` | 1.22–1.42 · 0.20–0.28 |
+| `split` | 22–30° |
+| `padN` / `leafS` | 5–7 · 0.028–0.038 |
+
+Vaso oval raso, esmaltado, creme ou cinza-claro conforme a seed, com musgo. Cenário `estudio`.
+
+**Crescimento simulado (v7):** andaime é o hokidachi inteiro; raminhos curtos enchem a casca do domo e a tesoura corta o que sai dele a cada 3 anos.
+
+## 🪴 Bonsai de Ficus (`ficus`)
+
+**Ideia:** *Ficus retusa* (figueira-ginseng) em **moyogi** (ereto informal). O tronco é grosso e musculoso, de casca lisa cinza com lenticelas; a curva é a mesma do bordo, `&(curva · cos(2π·ciclos·k/n + φ))`. O nebari não usa o helper compartilhado: são 6–8 dedos de cinco segmentos, quase na horizontal, com peso `Q` para engrossar, saindo de um colo curto (`F(0.04)`, o nó 1, de onde a raiz aérea mede a fração do tronco). Dos galhos baixos descem raízes aéreas `W(seg, atraso, fração)` até o musgo. A copa é um conjunto de almofadas arredondadas de folhas ovais pequenas, verde-escuras e brilhantes.
+
+```
+ω : F(0.04)  nebari × raízes (5 F quase horizontais + Q)   tronco { &(curva·cos(…)) F } × n
+     a partir do 2º segmento, espiral áurea: [ /(137° ± 16°) &(abertura) B(L) ]
+     no primeiro andar, um segundo galho do lado oposto
+     raízes aéreas nos galhos baixos: F W(0.2, atraso, fração do tronco)
+     ápice: F B
+B(s) → F(0.42s) _(0.22) [ +(split) ^(6°) B(0.55s) ] [ −(split) ^(6°) B(0.55s) ] ^(16°) B(0.68s)
+       (s < 0.28 → almofada)
+```
+
+`tube.bump` deixa o tronco quase liso (um flare curto na base e um músculo suave) e engrossa o nebari no colo, afinando até a ponta. A folha é uma lâmina oval/obovada levemente côncava, com verniz (`leafCoat`). O vaso é oval raso, de esmalte azul-turquesa, com musgo e sem pedras (elas cairiam fora do vaso baixo).
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 12–40 |
+| `segs` / `segLen` | 6–7 · 0.48–0.56 |
+| `curve` / `cycles` | 14–24° · 0.85–1.15 |
+| `roots` / `rootLen` / `rootW` | 6–8 · 1.15–1.42 · 22–32 |
+| `aerials` | 4–5 |
+| `branchLen` / `bAngle` | 0.62–0.84 · 42–54° |
+| `padR` / `padH` / `padN` | 0.56–0.7 · 0.32–0.42 · 72–96 |
+| `flare` / `muscle` | 0.05–0.12 · 0.04–0.08 |
+
+Vaso oval raso de esmalte azul-turquesa sobre musgo. Cenário `estudio`.
+
+**Crescimento simulado (v7):** Bonsai, com poda a cada 2 anos e o andaime um pouco mais cedo, para a copa já estar enchendo no meio da formação. O estilo (nebari, tronco, raízes aéreas) vem da gramática; as almofadas enchem de raminhos com mais folhas ovais por gema.
+
+## 🌸 Bonsai de Azaleia Satsuki (`azaleia`)
+
+**Ideia:** *Rhododendron indicum* em estilo **moyogi** (ereto informal). O tronco é curto e afinado, com uma curva em S, e a casca é marrom-avermelhada com escamas finas (lenticelas). Os galhos saem cedo, em espiral, e o comprimento segue o contorno de um domo: mais longo no meio da copa, mais curto embaixo e no ápice. A ramificação é dicotômica e sobe (`^`), e cada ponta vira uma almofada de folhas verde-escuras mais um domo de flores.
+
+As flores são funis de **cinco pétalas** (`E`). A seed escolhe a paleta — rosa, magenta, branca ou **mescla** (as três na mesma planta, traço conhecido da satsuki). Elas só abrem nos estágios finais (`bloomAt` no clássico; no simulado, a partir de cerca de dois terços dos anos de formação). No simulado as flores são instâncias colocadas na casca externa das folhas vivas, com um vão mínimo, então não flutuam. A planta não recebe pedras soltas: o vaso é o chão.
+
+```
+ω : nebari curto × roots   tronco { /(±) &(curve·cos) F [ /(yaw) &(ângulo→fecha no topo) ~(−0.04) B ] } × segs   ápice B
+B(s) → F(0.48s) [ +(split) ^ B(ratio·s) ] [ −(split) ^ B(ratio·s) ] ^(lift) B(cont·s)     (s < 0.16 → Z + E)
+final: B → Z + E(flR, flH, flN, flowerSize)
+juvenil: B → Z pequeno, sem flores
+```
+
+| Parâmetro | Faixa |
+|---|---|
+| `years` | 18–45 |
+| `segs` / `segLen` | 4–5 · 0.15–0.19 |
+| `curve` | 18–28° |
+| `branchLen` / `bAngle` / `split` | 0.58–0.74 · 55–68° · 26–38° |
+| `flowerSize` / `open` | 0.078–0.098 · 46–54° |
+| `palette` | rosa, magenta, branco ou mescla |
+| `pot` | redondo ou retangular, barro sem esmalte, com musgo |
+
+**Crescimento simulado (v7):** mesma poda dos outros bonsais (a cada 3 anos), com um passo extra que veste a casca da copa de funis só depois do ano 16 de 24. Aos 40% da idade a estrutura e as folhas já existem e as flores ainda não.
 
 ## 🌲 Bonsai de Pinheiro-Negro em Cascata (`pinheiro_negro`)
 
