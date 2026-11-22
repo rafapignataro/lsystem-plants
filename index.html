@@ -118,7 +118,7 @@
     <button id="resetGenes">Voltar ao visual da seed</button>
   </details>
 
-  <div class="row"><button id="snap">📷 PNG</button><button id="gltf">📦 glTF</button></div>
+  <div class="row"><button id="snap">📷 PNG</button><button id="gltf" title="Modelo 3D assado na idade atual (GLB)">📦 GLB</button></div>
 
   <div id="dna"></div>
   <details open><summary>Parâmetros derivados da seed</summary><table id="params"></table></details>
@@ -422,6 +422,7 @@ function fruitGeo() {
    ===================================================================== */
 const ENV = { ...ENV_DEFAULT };
 let activeGenome = null, genomeOverlay = null, genomeApply = false;
+let crossParents = null; // [seedA, seedB]: o filho herda os parâmetros da espécie dos dois pais
 const SHARED = {
   uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 },
   uWindDir: { value: new THREE.Vector3(1, 0, 0) }, uWindStr: { value: 1 },
@@ -431,7 +432,7 @@ const SWAY = /* glsl */`
 uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH; uniform float uTend;
 uniform vec3 uWindDir; uniform float uWindStr;
 vec3 lsSway(vec3 p){
-  float h = clamp(p.y / uH, 0.0, 1.2); float k = h * h * uWind * uWindStr * uH * 0.016;
+  float h = clamp(max(p.y, -0.8 * p.y) / uH, 0.0, 1.2); // a cascata abaixo do vaso também balança float k = h * h * uWind * uWindStr * uH * 0.016;
   vec3 w = normalize(uWindDir + vec3(0.001));
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), w));
   float ph = dot(p, w) * 0.35 + dot(p, side) * 0.2;
@@ -883,7 +884,7 @@ function assemblePlant(pkg) {
   const id = pkg.id, seed = pkg.seed, opts = pkg.opts || {};
   const sp = SPECIES[id];
   const P = pkg.P, word = pkg.word, done = pkg.done, tEnd = pkg.tEnd;
-  const def = sp.build(P);
+  const def = { display: pkg.defDisplay || [] }; // a gramática já rodou no worker; aqui só o texto do painel
   const W = pkg.W, genome = pkg.genome, BK = pkg.BK;
   const sk = pkg.sk;
   const inst = deserializeInst(pkg.inst);
@@ -963,7 +964,8 @@ function assemblePlant(pkg) {
     addPlain(joints.joints, asColor(barkCol), 0.88, true);
     addPlain(joints.jin, new THREE.Color(0.86, 0.83, 0.76), 0.72, true);
   }
-  if (pkg.stones && group.userData.soil) seatStones(pkg.stones, group.userData.soil, null);
+  // as pedras já vêm sentadas do worker (seatStonesInSoil), antes do desvio das raízes
+  if (pkg.stones && group.userData.soil && !pkg.stones.every((st) => st.seated)) seatStones(pkg.stones, group.userData.soil, null);
   if (pkg.stones && sp.stones !== false) {
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6d675f, roughness: 1 });
     for (const s of pkg.stones) {
@@ -1006,6 +1008,7 @@ function assemblePlant(pkg) {
       computeRadii(sk, T, W, sbuf, radData);
       if (pkg.design) { radScratch.set(radData.subarray(0, sk.N)); enforceDesignRadii(sk, radData, radScratch, pkg.design); }
       if (sp.capRoots) sp.capRoots(radData, sk);
+      if (W.radMul && !LEGACY_RAD) { const M = W.radMul; for (let i = 0; i < sk.N; i++) radData[i] *= M[i]; } // ajustes do worker (rFull) também na GPU
       radTex.needsUpdate = true;
       let hy = 0; for (let i = 0; i < sk.N; i++) if (sk.T0[i] <= T && !(sk.TD && sk.TD[i] <= T) && sk.Y[i] + oy > hy) hy = sk.Y[i] + oy;
       this.curH = hy * inner.scale.x;
@@ -1065,7 +1068,7 @@ function genomeState() {
   const overlay = genomeApply ? { ...(genomeOverlay || {}) } : {};
   if (ui.style?.value) overlay.estilo = currentStyle();
   const apply = !!genomeApply;
-  return { apply, overlay: Object.keys(overlay).length ? overlay : null };
+  return { apply, overlay: Object.keys(overlay).length ? overlay : null, parents: crossParents };
 }
 function buildPlant(id, seed, opts = {}) {
   activeGenome = mergeGenome(genomeFromSeed(seed, id, Rand), genomeApply ? genomeOverlay : null);
@@ -1095,27 +1098,30 @@ function getWorkerPool() {
 
 function buildSkeletonInWorker(id, seed, opts, env, genomeState, worker, taskId) {
   return new Promise((resolve, reject) => {
+    const done = () => { worker.removeEventListener('message', onMsg); worker.removeEventListener('error', onErr); };
     const onMsg = (ev) => {
       if (ev.data.taskId !== taskId) return;
-      worker.removeEventListener('message', onMsg);
+      done();
       if (ev.data.ok) resolve(unpackWorkerPayload(ev.data.pkg));
       else reject(new Error(ev.data.error));
     };
+    // erro de carga do módulo do worker (ou exceção fora do onmessage): sem isto o "Gerando…" ficava para sempre
+    const onErr = (ev) => { done(); reject(new Error('worker: ' + (ev.message || 'falhou ao carregar'))); };
     worker.addEventListener('message', onMsg);
+    worker.addEventListener('error', onErr);
     worker.postMessage({ id, seed, opts, env, genomeState, taskId });
   });
 }
 
 async function buildGardenSkeletons(ids, seed, opts, env, genomeState) {
   const workers = getWorkerPool();
-  let nextTask = 0;
   const queue = ids.slice();
   const out = new Array(ids.length);
   const run = async (worker) => {
     while (queue.length) {
       const id = queue.shift();
       const idx = ids.indexOf(id);
-      const taskId = nextTask++;
+      const taskId = taskSeq++; // contador único: o modo de uma planta usa os mesmos workers
       out[idx] = await buildSkeletonInWorker(id, seed, opts, env, genomeState, worker, taskId);
     }
   };
@@ -1125,8 +1131,13 @@ async function buildGardenSkeletons(ids, seed, opts, env, genomeState) {
 
 
 function disposePlant(pl) {
-  pl.object.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); if (o.customDepthMaterial) o.customDepthMaterial.dispose(); });
-  pl.object.traverse(o => { if (o.material && o.material.uniforms) {} });
+  pl.object.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+    if (o.customDepthMaterial) o.customDepthMaterial.dispose();
+    if (o.isInstancedMesh) o.dispose(); // libera instanceMatrix/instanceColor na GPU
+  });
+  pl.U?.uRad?.value?.dispose(); // textura float dos raios (uma por planta)
   pl.object.removeFromParent();
 }
 /* =====================================================================
@@ -1197,6 +1208,8 @@ composer.addPass(new OutputPass());
 // ?shot=1: um quadro barato para o Playwright. Sem isso o swiftshader gasta
 // um minuto por árvore na sombra 2048 e no bloom antes de a foto sair.
 const SHOT = new URLSearchParams(location.search).has('shot');
+// ?raios=legado: desenha os raios como antes (sem os ajustes do worker), para comparar
+const LEGACY_RAD = new URLSearchParams(location.search).get('raios') === 'legado';
 const SHOT_HI = new URLSearchParams(location.search).has('hi');
 if (SHOT) {
   sun.castShadow = false;
@@ -1321,6 +1334,8 @@ function readRequest() {
   genomeOverlay = parseGenomeHash(h.get('genoma') || q.get('genoma'));
   const numeric = genomeOverlay && GENE_CATALOG.some((g) => Number.isFinite(genomeOverlay[g.key]));
   genomeApply = !!numeric;
+  const pa = pick('paiA'), pb = pick('paiB');
+  crossParents = pa && pb ? [pa, pb] : null;
   const style = pick('style', 'estilo') || (typeof genomeOverlay?.estilo === 'string' ? genomeOverlay.estilo : null);
   return {
     esp: pick('species', 'especie'),
@@ -1334,7 +1349,8 @@ function writeHash() {
   const esp = mode === 'garden' ? 'jardim' : ui.species.value;
   const st = mode === 'garden' ? '' : `&estilo=${encodeURIComponent(currentStyle())}`;
   const g = genomeApply && activeGenome ? `&genoma=${encodeURIComponent(genomeToHash({ ...activeGenome, estilo: currentStyle() }))}` : '';
-  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + g;
+  const par = crossParents ? `&paiA=${encodeURIComponent(crossParents[0])}&paiB=${encodeURIComponent(crossParents[1])}` : '';
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + par + g;
   const url = new URL(location.href);
   for (const k of ['species', 'especie', 'style', 'estilo', 'seed']) url.searchParams.delete(k);
   url.hash = s;
@@ -1410,14 +1426,21 @@ function showStats() {
 }
 function clearPlants() { plants.forEach(disposePlant); plants = []; labels.forEach(l => l.el.remove()); labels = []; }
 
+let genToken = 0;
 async function generate({ animate = true } = {}) {
+  // Cada chamada ganha um número; se outra começou enquanto esta esperava o worker, esta desiste.
+  // Antes, duas gerações seguidas (slider, troca de espécie, hashchange) punham duas árvores na cena.
+  const my = ++genToken;
+  const stale = () => my !== genToken;
   $('busy').style.display = 'block';
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  if (stale()) return;
   try {
     clearPlants();
     const seed = ui.seed.value.trim() || 'lindenmayer'; ui.seed.value = seed;
     if (mode === 'single') {
       const id = ui.species.value; const pl = await requestPlant(id, seed, { sim: growMode === 'sim' });
+      if (stale()) { disposePlant(pl); return; }
       plants.push(pl); scene.add(pl.object);
       setTheme(pl.theme);
       const size = pl.box.getSize(new V3());
@@ -1436,6 +1459,7 @@ async function generate({ animate = true } = {}) {
       const gopts = { lod: true, sim: growMode === 'sim', style: null };
       const tGarden = performance.now();
       const pkgs = await buildGardenSkeletons(ALL, seed, gopts, { ...ENV }, genomeState());
+      if (stale()) return;
       window.__gardenBuildMs = performance.now() - tGarden;
       const built = pkgs.map((pkg) => assemblePlant(pkg));
       const all = new THREE.Box3();
@@ -1471,8 +1495,8 @@ async function generate({ animate = true } = {}) {
     }
     showStats(); writeHash();
     if (animate) startGrowth(); else { SHARED.uGrowth.value = 1; syncSlider(); }
-  } catch (e) { showErr(e); }
-  $('busy').style.display = 'none';
+  } catch (e) { if (!stale()) showErr(e); }
+  if (!stale()) $('busy').style.display = 'none';
 }
 
 function startGrowth() {
@@ -1511,7 +1535,8 @@ function setMode(m) { mode = m; $('garden').classList.toggle('on', m === 'garden
 function showErr(e) { console.error(e); const el = $('err'); el.style.display = 'block'; el.textContent = String(e && e.stack || e); }
 
 $('gen').onclick = () => generate();
-$('rand').onclick = () => { ui.seed.value = randomSeed(); generate(); };
+$('rand').onclick = () => { crossParents = null; $('childLabel').textContent = ''; ui.seed.value = randomSeed(); generate(); };
+ui.seed.addEventListener('input', () => { if (crossParents) { crossParents = null; $('childLabel').textContent = ''; } }); // seed digitada: não é mais o filho
 ui.seed.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
 $('gm-sim').onclick = () => { if (growMode !== 'sim') { setGrowMode('sim'); generate(); } };
 $('gm-ls').onclick = () => { if (growMode !== 'ls') { setGrowMode('ls'); generate(); } };
@@ -1581,7 +1606,8 @@ $('crossBtn').onclick = () => {
   genomeOverlay = crossGenomes(ga, gb, `${a}×${b}::${id}`, Rand);
   if (genomeOverlay.estilo) fillStyles(id, genomeOverlay.estilo);
   ui.seed.value = childSeed(a, b);
-  $('childLabel').textContent = `Filho de “${a}” × “${b}” · seed ${ui.seed.value}`;
+  crossParents = [a, b];
+  $('childLabel').textContent = `Filho de “${a}” × “${b}” · herda os parâmetros dos dois · seed ${ui.seed.value}`;
   if (mode === 'garden') setMode('single');
   generate();
 };
@@ -1592,11 +1618,11 @@ $('mutateBtn').onclick = () => {
   const r = new Rand(`${ui.seed.value}::mut::${genomeToHash(base)}`);
   for (const gene of GENE_CATALOG) if (r.chance(0.6)) base[gene.key] = Math.min(gene.max, Math.max(gene.min, base[gene.key] + r.jit((gene.max - gene.min) * 0.2)));
   genomeOverlay = base;
-  ui.seed.value = childSeed(ui.seed.value, 'mut');
-  $('childLabel').textContent = `Mutação · seed ${ui.seed.value}`;
+  // a seed (e os pais, se houver) ficam: a mutação mexe nos genes, não sorteia outra árvore
+  $('childLabel').textContent = `Mutação dos genes · seed ${ui.seed.value}` + (crossParents ? ` (filho de “${crossParents[0]}” × “${crossParents[1]}”)` : '');
   generate();
 };
-$('resetGenes').onclick = () => { genomeApply = false; genomeOverlay = null; $('childLabel').textContent = ''; generate(); };
+$('resetGenes').onclick = () => { genomeApply = false; genomeOverlay = null; crossParents = null; $('childLabel').textContent = ''; generate(); };
 $('snap').onclick = () => {
   renderer.render(scene, camera);
   const a = document.createElement('a');
@@ -1604,14 +1630,98 @@ $('snap').onclick = () => {
   a.href = renderer.domElement.toDataURL('image/png');
   a.click();
 };
+/* Exportação: o shader é que dá raio aos tubos e escala às folhas. A geometria crua tem os anéis
+   colapsados no eixo (posição = centro do anel) e todas as folhas, inclusive as juvenis mortas.
+   Aqui tudo é "assado" na idade atual, sem vento, com materiais comuns. */
+function bakeForExport(pl) {
+  const T = Math.pow(SHARED.uGrowth.value, 0.8) * pl.U.uTend.value;
+  const rad = pl.U.uRad.value.image.data, collar = pl.U.uCollar.value;
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / Math.max(b - a, 1e-6))); return t * t * (3 - 2 * t); };
+  const out = new THREE.Group(); out.name = `${pl.id}`;
+  const holder = new THREE.Group(); holder.position.copy(pl.group.position); out.add(holder);
+  out.scale.copy(pl.object.scale);
+  for (const o of pl.group.children) {
+    if (o.isSprite || !o.visible && !pl.foliage.includes(o)) continue;
+    const g = o.geometry;
+    if (o.isInstancedMesh) {
+      const life = g.getAttribute('aLife'), n = o.count, m = new THREE.Matrix4(), sc = new THREE.Matrix4();
+      const keep = [];
+      for (let i = 0; i < n; i++) {
+        const k = life ? ss(life.getX(i), life.getX(i) + 0.6, T) * (1 - ss(life.getY(i), life.getY(i) + 0.6, T)) : 1;
+        if (k > 0.01) keep.push([i, k]);
+      }
+      if (!keep.length) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', g.getAttribute('position').clone());
+      if (g.getAttribute('normal')) geo.setAttribute('normal', g.getAttribute('normal').clone());
+      if (g.index) geo.setIndex(g.index.clone());
+      const avg = new THREE.Color(0, 0, 0), c = new THREE.Color();
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.6 }), keep.length);
+      keep.forEach(([i, k], j) => {
+        o.getMatrixAt(i, m); sc.makeScale(k, k, k); m.multiply(sc); mesh.setMatrixAt(j, m);
+        if (o.instanceColor) { o.getColorAt(i, c); mesh.setColorAt(j, c); avg.add(c); }
+      });
+      if (o.instanceColor) mesh.material.color.copy(avg.multiplyScalar(1 / keep.length)); // visualizador sem cor por instância
+      mesh.name = o.userData.kind || 'folhagem';
+      holder.add(mesh);
+      continue;
+    }
+    if (!o.isMesh || !g) continue;
+    const P = g.getAttribute('position');
+    if (g.getAttribute('aCp')) { // tubos dos galhos: mesmo cálculo do vertex shader (CHUNKS.branch.begin)
+      const N = g.getAttribute('normal'), Cp = g.getAttribute('aCp'), B = g.getAttribute('aB'), An = g.getAttribute('aN'), Col = g.getAttribute('aCol'), Bu = g.getAttribute('aBump');
+      const pos = new Float32Array(P.count * 3), lr = (i) => rad[Math.round(i)] || 0;
+      for (let v = 0; v < P.count; v++) {
+        let cx = P.getX(v), cy = P.getY(v), cz = P.getZ(v), r = 0;
+        if (T >= B.getX(v)) {
+          r = lr(An.getX(v)) * (1 - An.getZ(v)) + lr(An.getY(v)) * An.getZ(v);
+          if (Col.getX(v) > -1.5) {
+            const rp = Col.getX(v) < -0.5 ? r * 1.8 : lr(Col.getX(v));
+            const w = Math.exp(-Col.getY(v) / Math.max(1.5 * rp, 1e-5));
+            const rc = Math.min(Math.max(rp * collar, r), r * (1.15 + collar * 1.9));
+            r = r + (rc - r) * w;
+          }
+        } else {
+          const t = Math.min(1, Math.max(0, (T - B.getY(v)) / Math.max(B.getX(v) - B.getY(v), 1e-5)));
+          cx = Cp.getX(v) + (cx - Cp.getX(v)) * t; cy = Cp.getY(v) + (cy - Cp.getY(v)) * t; cz = Cp.getZ(v) + (cz - Cp.getZ(v)) * t;
+        }
+        const k = r * Bu.getX(v);
+        pos[v * 3] = cx + N.getX(v) * k; pos[v * 3 + 1] = cy + N.getY(v) * k; pos[v * 3 + 2] = cz + N.getZ(v) * k;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('color', g.getAttribute('color').clone());
+      geo.setIndex(g.index.clone()); geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })); mesh.name = 'galhos';
+      holder.add(mesh);
+      continue;
+    }
+    if (g.getAttribute('aNode')) { // junções: escala = raio atual / raio final
+      const Nd = g.getAttribute('aNode'), Ce = g.getAttribute('aCen'), Rf = g.getAttribute('aRef');
+      const pos = new Float32Array(P.count * 3);
+      for (let v = 0; v < P.count; v++) {
+        const ref = Rf.getX(v), k = ref > 1e-5 ? (rad[Math.round(Nd.getX(v))] || 0) / ref : 1;
+        for (let a = 0; a < 3; a++) { const c0 = Ce.getComponent(v, a); pos[v * 3 + a] = c0 + (P.getComponent(v, a) - c0) * k; }
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(g.index.clone()); geo.computeVertexNormals();
+      holder.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: o.material.color, roughness: 0.88 })));
+      continue;
+    }
+    const c = o.clone(); c.material = o.material.clone(); c.material.onBeforeCompile = () => {}; holder.add(c); // vaso, terra, pedras, mesa
+  }
+  return out;
+}
 $('gltf').onclick = () => {
   if (!plants.length) return;
   const ex = new GLTFExporter();
-  ex.parse(plants[0].object, (gltf) => {
-    const blob = new Blob([JSON.stringify(gltf)], { type: 'application/json' });
+  const scene0 = new THREE.Group();
+  for (const pl of plants) { const b = bakeForExport(pl); b.position.copy(pl.object.position); scene0.add(b); }
+  ex.parse(scene0, (glb) => {
+    const blob = new Blob([glb], { type: 'model/gltf-binary' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `plant-${ui.species.value}-${ui.seed.value}.gltf`; a.click();
-  }, () => {}, { binary: false, embedImages: true });
+    a.download = `plant-${mode === 'garden' ? 'jardim' : ui.species.value}-${ui.seed.value}.glb`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, (err) => showErr(err), { binary: true });
 };
 $('share').onclick = async () => { writeHash(); try { await navigator.clipboard.writeText(location.href); $('share').textContent = '✔ Link copiado'; } catch { prompt('Copie o link:', location.href); } setTimeout(() => $('share').textContent = '🔗 Copiar link', 1500); };
 $('hide').onclick = () => { $('panel').classList.add('hidden'); applyViewOffset(); };

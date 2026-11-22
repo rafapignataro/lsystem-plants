@@ -52,7 +52,11 @@ export function genomeToHash(g) {
 }
 
 export function mergeGenome(base, overlay) {
-  return overlay ? { ...base, ...overlay } : { ...base };
+  if (!overlay) return { ...base };
+  // O link guarda 3 casas (genomeToHash). Arredondar aqui faz a planta da tela ser a mesma do link.
+  const o = {};
+  for (const k in overlay) o[k] = typeof overlay[k] === 'number' ? +overlay[k].toFixed(3) : overlay[k];
+  return { ...base, ...o };
 }
 
 export function crossGenomes(a, b, mutation, Rand) {
@@ -91,20 +95,33 @@ export function applyGenomeToPlant(P, BK, W, genome, sp, apply = false) {
   }
   const vig = genome.vigor ?? 1;
   const ram = genome.ramificacao ?? 1;
-  if (P.angle != null) P.angle *= ram;
-  if (P.bAngle != null) P.bAngle *= ram;
-  if (P.twigAngle != null) P.twigAngle *= ram;
-  if (P.elong != null) P.elong = 1 + (P.elong - 1) * (genome.alongamento ?? 1);
-  if (P.leafH != null) P.leafH += genome.cor ?? 0;
-  if (P.needleH != null) P.needleH += (genome.cor ?? 0) * 0.6;
-  if (P.leafSize != null) P.leafSize *= 0.82 + 0.36 * vig;
-  if (P.leafS != null) P.leafS = Math.min(1, P.leafS * (0.85 + 0.3 * (genome.densidade ?? 1)));
-  if (P.gravity != null) P.gravity *= 0.75 + 0.5 * vig;
-  if (BK) {
+  const dens = genome.densidade ?? 1;
+  const along = genome.alongamento ?? 1;
+  // Cada alvo recebe o genoma uma vez só. Antes, buildSkeletonPackage chamava esta função
+  // três vezes e o matiz andava 3× o gene, o ângulo ram³ e o crescimento secundário vigor².
+  if (P && !P._genomeApplied) {
+    P._genomeApplied = true;
+    if (P.angle != null) P.angle *= ram;
+    if (P.bAngle != null) P.bAngle *= ram;
+    if (P.split != null) P.split *= ram;
+    if (P.twigAngle != null) P.twigAngle *= ram;
+    if (P.elong != null) P.elong = 1 + (P.elong - 1) * along;
+    if (P.segLen != null) P.segLen *= along;
+    if (P.branchLen != null) P.branchLen *= along;
+    if (P.leafH != null) P.leafH += genome.cor ?? 0;
+    if (P.needleH != null) P.needleH += (genome.cor ?? 0) * 0.6;
+    if (P.leafSize != null) P.leafSize *= 0.82 + 0.36 * vig;
+    if (P.padN != null) P.padN = Math.max(3, Math.round(P.padN * dens));
+    if (P.leafS != null) P.leafS = Math.min(1, P.leafS * (0.92 + 0.16 * dens));
+    if (P.gravity != null) P.gravity *= 0.75 + 0.5 * vig;
+  }
+  if (BK && !BK._genomeApplied) {
+    BK._genomeApplied = true;
     BK.depth *= genome.casca ?? 1;
     if (BK.moss != null) BK.moss = Math.max(0, BK.moss * (genome.musgo ?? 1));
   }
-  if (W) {
+  if (W && !W._genomeApplied) {
+    W._genomeApplied = true;
     W.G *= 0.85 + 0.3 * vig;
     W._lambdaMul = genome.dominancia ?? 1;
     W._windAsym = genome.vento ?? 0;
@@ -120,7 +137,7 @@ function fmtGene(v, unit) {
 }
 
 /* —— gravidade: só galhos grossos e horizontais; pontas finas não caem —— */
-export function applyGravitySag(sk, strength = 1) {
+export function applyGravitySag(sk, strength = 1, inst = null) {
   if (!strength || strength < 0.02 || sk.N < 2) return;
   const { N, X, Y, Z, PAR } = sk;
   const load = new Float64Array(N);
@@ -137,17 +154,28 @@ export function applyGravitySag(sk, strength = 1) {
     load[p] += load[i];
   }
   const maxL = load[0] || 1;
+  // Deslocamento acumulado: um nó que verga leva junto toda a subárvore e a folhagem dela.
+  // Antes só o próprio nó descia, o galho virava zigue-zague e as folhas ficavam no ar.
+  const DX = new Float64Array(N), DY = new Float64Array(N), DZ = new Float64Array(N);
   for (let i = 1; i < N; i++) {
-    if (horiz[i] < 0.55) continue;
-    if (kids[i] < 2 && load[i] < maxL * 0.08) continue;
-    const w = (load[i] / maxL) * strength * horiz[i];
-    if (w < 0.04) continue;
     const p = PAR[i];
-    const sag = Math.min(0.35, w * w * 0.12);
-    Y[i] -= sag;
-    const pull = sag * 0.04;
-    X[i] -= pull * (X[i] - X[p]);
-    Z[i] -= pull * (Z[i] - Z[p]);
+    if (p < 0) continue;
+    let ox = 0, oy = 0, oz = 0;
+    if (horiz[i] >= 0.55 && !(kids[i] < 2 && load[i] < maxL * 0.08)) {
+      const w = (load[i] / maxL) * strength * horiz[i];
+      if (w >= 0.04) {
+        const sag = Math.min(0.35, w * w * 0.12);
+        const pull = sag * 0.04;
+        oy = -sag; ox = -pull * (X[i] - X[p]); oz = -pull * (Z[i] - Z[p]);
+      }
+    }
+    DX[i] = DX[p] + ox; DY[i] = DY[p] + oy; DZ[i] = DZ[p] + oz;
+  }
+  for (let i = 1; i < N; i++) { X[i] += DX[i]; Y[i] += DY[i]; Z[i] += DZ[i]; }
+  if (inst) for (const k in inst) for (const it of inst[k]) {
+    const i = it.node | 0;
+    if (!it.p || !(i > 0 && i < N)) continue;
+    it.p.x += DX[i]; it.p.y += DY[i]; it.p.z += DZ[i];
   }
 }
 

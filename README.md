@@ -27,6 +27,8 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 | `cresc` | hash | `#especie=junipero&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico |
 | `seed` | hash ou query | `#especie=bordo&seed=rafael` | seed (qualquer texto) |
 | `genoma` | hash | `#especie=bordo&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |
+| `paiA`, `paiB` | hash | `#especie=bordo&seed=cruz-x&paiA=rafael&paiB=lindenmayer` | filho de um cruzamento: herda os parâmetros da espécie dos dois pais |
+| `raios` | query | `?raios=legado` | desenha os raios como antes da correção (sem os ajustes do worker), para comparar |
 | `age` | query | `?age=0.3` | abre sem animação, na idade dada (0–1). No fim da idade a azaleia abre a flor |
 | `bloom` | query | `?bloom=0.6` | abre a árvore crescida com a flor nessa abertura (0 botão, 1 aberta) |
 | `florescer` | query | `?florescer` | abre crescida e corre a animação do botão **Ver florescer** |
@@ -87,7 +89,7 @@ As regras clássicas de desenho entram no crescimento e no acabamento de toda co
   - 🪴 **Ficus**: casca lisa, nebari forte, raízes aéreas, folha oval brilhante. Tradicional: moyogi, em vaso oval esmaltado. Também aceita vassoura;
   - 🌸 **Azaleia Satsuki**: tronco curto, casca marrom-avermelhada e copa em domo coberta de flores em funil (rosa, magenta, branca ou as três). Tradicional: moyogi, em vaso esmaltado numa cor que conversa com a flor. Também aceita cascata;
   - 🌲 **Pinheiro-Negro**: agulha rígida verde-escuro, casca em placas alongadas, vigor alto. Tradicional: kengai, num vaso hexagonal fundo sem esmalte (marrom ou cinza) sobre um suporte alto. A queda passa por fora do vaso.
-- **Motor v8**: junções com malha de união; vento e sol ajustáveis; genoma de 9 genes + cruzamento; exportação PNG e glTF; cachos de folhagem e LOD no jardim.
+- **Motor v8**: junções com malha de união; vento e sol ajustáveis; genoma de 9 genes + cruzamento; exportação PNG e GLB (assado na idade atual); cachos de folhagem e LOD no jardim.
 - **Crescimento simulado** (v7, padrão; botão "Crescimento: Simulado / L-System clássico"): o andaime (tronco e estilo) vem da gramática e a copa cresce ano a ano por **colonização do espaço** (Runions et al. 2007: pontos de atração num envelope com a forma da espécie, raio de percepção, distância de morte) com **luz por sombra em voxels** e alocação de Borchert-Honda (Palubicki et al. 2009). Cada gema tem destino (cresce, dorme, vira flor ou morre); galhos sombreados **secam e caem** (autopoda); o tronco engrossa todo ano (modelo do cano / Leonardo, mais anéis anuais); há **poda de formação** periódica. O slider de idade mostra a estrutura daquele ano (com "ano X de Y"). Uma espécie sem entrada em `SIMS` continua só L-System.
 - Motor L-System com regras paramétricas, estocásticas e condicionais, passo final de "decomposição" (pontas → folhas/flores) e regras juvenis.
 - PRNG determinística (`cyrb128` → `sfc32`) com fluxos separados por finalidade: mesma seed + espécie + estilo = mesma planta. O estilo não entra no sorteio dos genes.
@@ -103,3 +105,4 @@ As regras clássicas de desenho entram no crescimento e no acabamento de toda co
 - [docs/ESPECIES.md](docs/ESPECIES.md): os bonsais, regras, parâmetros da seed, como cada um é simulado e como registrar o próximo.
 - [docs/HISTORICO.md](docs/HISTORICO.md): histórico de versões.
 - [docs/ROADMAP.md](docs/ROADMAP.md): limitações conhecidas e próximos passos.
+- [docs/ANALISE.md](docs/ANALISE.md): revisão geral do código, bugs corrigidos, riscos e alternativas.

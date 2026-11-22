@@ -29,6 +29,7 @@ function packBuffers(pkg) {
     out.W = { ...out.W };
     delete out.W.TD;
     if (out.W.TW) out.W.TW = tag(out.W.TW);
+    if (out.W.radMul) out.W.radMul = tag(out.W.radMul);
   }
   return { payload: out, transfer: xfers };
 }
