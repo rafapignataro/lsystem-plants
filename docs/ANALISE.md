@@ -40,19 +40,68 @@ Este foi o ponto conceitual mais fraco.
 
 ## Riscos que ficaram (não corrigidos, sem quebrar seeds)
 
-1. **O andaime e o envelope usam fluxos diferentes.** `classicCloud` roda a gramática com `::rules` e `simScaffold` com `::sim-rules`. Nas regras com `jit`, o tronco simulado não é exatamente a planta que gerou o envelope. Além disso, o L-System clássico roda duas vezes por planta simulada (na nuvem e no andaime). Usar o mesmo fluxo e reaproveitar o resultado economiza ~30–50% da montagem simulada, mas muda as seeds atuais. Fazer isso junto com uma versão de motor (`v9`) no hash.
-2. **Determinismo entre navegadores.** `Math.pow/sin/hypot/cbrt` não são exatos no último bit entre motores JS. Para NFT, gravar `versão do motor + hash do esqueleto` no metadado e conferir em Chrome, Firefox e Safari. O `n()` (3 casas) nas strings da gramática já ajuda.
-3. **`pickFlower`** tira `u`, `u2` e `u3` de janelas sobrepostas do mesmo hash FNV (bits 0–15, 8–23 e 16–31). O padrão e a cor ficam correlacionados. Um segundo hash resolve, mas muda as cores das azaleias atuais.
+Os três primeiros foram resolvidos no motor v9 (ver abaixo).
+
 4. **Grade de luz**: começa em `y = −vs`. A copa da cascata abaixo do vaso não recebe sombra.
 5. **`liftOutOfSolids`** move um nó sem mover a subárvore; pode esticar um segmento.
 6. **`ficus.noStones` e `azaleia.stones: false`** são duas flags para a mesma coisa.
 7. A documentação de `ARQUITETURA.md` §1–8 ainda descreve as espécies e o `index.html` monolítico da v2.
 
+## Motor v9 (quebra as seeds de propósito)
+
+1. **Andaime = planta clássica.** A simulação usa o mesmo fluxo `::rules` da planta que gera o envelope e reaproveita a palavra dela (o L-System não roda mais duas vezes). A captura ignora as folhas juvenis, e a raiz aérea `W` sorteia pela posição, então sai igual nos dois. Ganho medido: só 1–12% na montagem simulada (32 plantas), porque o tempo está no laço anual (`growSim`), não no L-System. A estimativa de 30–50% desta revisão estava errada.
+2. **Determinismo entre navegadores.**
+   - `Math.hypot` (que a especificação não fixa) foi trocado por `√(x² + y² + z²)`, que é arredondado igual em todo motor.
+   - Cada planta ganha uma **impressão digital** (`treeFingerprint`): esqueleto, raios e folhagem, quantizados. Ela aparece no painel e no JSON de metadados.
+   - O link leva `&motor=9`; um link de outra versão, ou sem versão (anterior ao v9), mostra um aviso até você gerar outra árvore.
+   - Gravidade, fototropismo e sol também mudam a árvore; quando saem do padrão, vão no link (`grav`, `foto`, `solAz`, `solEl`) e no JSON.
+   - Fica de fora: `Math.sin/cos/pow/exp/cbrt` também não são fixados. Para garantir, abra a mesma seed em Chrome, Firefox e Safari e compare a impressão digital.
+3. **Flor.** `pickFlower` usa um hash por decisão (padrão, corpo, garganta, fase, variante), com o finalizador do murmur3.
+
+Novo: botão **🧾 JSON** com os metadados (motor, impressão digital, espécie, estilo, seed, pais, genes, traços e medidas de desenho).
+
+Achado: na **azaleia**, a simulação não faz nenhum broto (`grown = 0`, também na `main`). O andaime já é a planta inteira, e só o `dress` acrescenta folhas e flores. A copa simulada da azaleia é a clássica com outro tempo.
+
 ## Alternativas e funcionalidades sugeridas
 
-- **Metadados NFT (JSON)**: espécie, estilo, paleta, anos, nº de almofadas, `measureDesign` e raridade por traço (frequência de cada valor em, por exemplo, 10 mil seeds). Tudo isso já é calculado; falta serializar.
+- **Raridade por traço**: o JSON de metadados já existe (v9). Falta a frequência de cada valor em, por exemplo, 10 mil seeds.
 - **Nota estética (`scoreTree`)**: hoje devolve `null`. Com `measureDesign` dá para dar nota por regra (afunilamento, primeiro galho, cruzamentos, espaço negativo) e usar a nota em "seleção": gerar N seeds e mostrar as melhores.
 - **Poda interativa**: clicar num galho → `TD = ano` no esqueleto simulado e voltar a simular dali. A simulação já suporta a morte de nós.
 - **Superfície única nas junções**: em vez das esferas, malhar a forquilha por convolução (*skeletal implicit surfaces*) ou com quad-mesh de bifurcação. É o defeito visual mais citado no ROADMAP.
 - **Folhas presas ao raio atual**: o shader de instância pode ler `uRad` do nó e empurrar a folha para a casca em qualquer idade. Hoje `seatOnBark` assenta só em 100%.
 - **Testes leves**: `node scripts/hash.mjs` (criado nesta revisão) (sem navegador, ~3 s) pega quebra de determinismo sem tirar print.
+
+## A verificar depois
+
+O que ficou sem conferência visual nas revisões do #16 e do #17 (os prints foram bloqueados pela permissão da sessão), mais as pendências abertas.
+
+**Visual (abrir no navegador)**
+- [ ] **Grossura dos galhos (`W.radMul`, #16):** comparar a página normal com `?raios=legado`, sobretudo:
+  - [ ] pinheiro-negro (kengai): até 4× nos raminhos;
+  - [ ] bordo em shakan e pinheiro-branco em chokkan: galhos laterais mais finos;
+  - [ ] olmo em moyogi: o ×1.12.
+
+  Se algum ficar pesado, calibrar `LOAD_MAX` (`applyLoad`) ou o teto de 4× do `radMul`.
+- [ ] **Juntas e folhagem:** com os raios novos, as esferas das forquilhas e as folhas não podem sair da casca nem entrar nela.
+- [ ] **Gravidade:** com o controle de gravidade ligado, o galho verga inteiro e as folhas acompanham.
+- [ ] **Sol fora do padrão:** a sombra da simulação cai para o lado oposto ao sol.
+- [ ] **Pedras:** as raízes passam em volta, não por dentro.
+- [ ] **Cascata:** a parte abaixo do vaso balança com o vento.
+- [ ] **Flores da azaleia (v9):** as cores e os padrões mudaram de lugar; ver se a mistura de padrões continua bonita.
+
+**Exportação e metadados**
+- [ ] Abrir o **GLB** num visualizador, por exemplo Blender ou gltf-viewer: madeira com volume, folhas mortas ausentes, folhagem por instância. Se o visualizador não ler cor por instância, a folhagem sai com a cor média.
+- [ ] Baixar o **🧾 JSON**, abrir o `link` dele e conferir que a impressão digital é a mesma.
+
+**Link e versão**
+- [ ] Abrir um link antigo (`#especie=bordo&seed=rafael`): deve aparecer "Link sem versão do motor". Gerar outra árvore: o aviso some.
+- [ ] Copiar o link com gravidade ou sol fora do padrão e reabrir: mesma árvore e mesma impressão digital.
+- [ ] Cruzar dois pais, copiar o link e reabrir: o mesmo filho, com `paiA`/`paiB`.
+
+**Determinismo entre navegadores**
+- [ ] Abrir a mesma seed no Chrome, Firefox e Safari, desktop e celular, e comparar a impressão digital do painel. `Math.sin/cos/pow/exp/cbrt` ainda podem variar no último bit. Se a impressão divergir, a saída é trocar essas funções por versões próprias, determinísticas, nos trechos que decidem a forma.
+
+**Pendências de motor**
+- [ ] **Azaleia:** a simulação não faz nenhum broto (`grown = 0`); a copa simulada é a clássica com outro tempo. Decidir se ela deve crescer de verdade (ponta da gramática mais cedo, gemas nos raminhos) ou se fica assim.
+- [ ] Os itens 4–7 de "Riscos que ficaram", acima: grade de luz abaixo do vaso, `liftOutOfSolids`, as duas flags de pedra e a ARQUITETURA desatualizada.
+- [ ] Rodar `node scripts/hash.mjs` antes e depois de cada mudança no motor. Se o hash mudar sem querer, subir `ENGINE_VERSION`.

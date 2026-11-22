@@ -1,5 +1,7 @@
 /** v8: genoma, junções SDF, folhagem em cachos, gravidade/sombra direcional */
 
+// Math.hypot varia entre motores JS no último bit; isto não (ver lsystem-core.mjs).
+const hyp = (x, y = 0, z = 0) => Math.sqrt(x * x + y * y + z * z);
 const DEG = Math.PI / 180;
 
 export const GENE_CATALOG = [
@@ -148,7 +150,7 @@ export function applyGravitySag(sk, strength = 1, inst = null) {
     if (p < 0) continue;
     kids[p]++;
     const dx = X[i] - X[p], dy = Y[i] - Y[p], dz = Z[i] - Z[p];
-    const L = Math.hypot(dx, dy, dz) || 1e-6;
+    const L = hyp(dx, dy, dz) || 1e-6;
     horiz[i] = Math.sqrt(dx * dx + dz * dz) / L;
     load[i] = L * (0.35 + horiz[i]);
     load[p] += load[i];
@@ -199,7 +201,7 @@ export function deflectRoots(sk, stones = [], pot = null) {
     if (!isRoot[i] || i === 0) continue;
     for (const s of stones) {
       const dx = X[i] - s.x, dz = Z[i] - s.z;
-      const d = Math.hypot(dx, dz) || 1e-4;
+      const d = hyp(dx, dz) || 1e-4;
       const lim = s.r + 0.03;
       if (d < lim) {
         X[i] = s.x + (dx / d) * lim;
@@ -320,7 +322,7 @@ export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
       const p = sk.PAR[i];
       if (p < 0) continue;
       const dx = sk.X[i] - sk.X[p], dy = sk.Y[i] - sk.Y[p], dz = sk.Z[i] - sk.Z[p];
-      const L = Math.hypot(dx, dy, dz) || 1;
+      const L = hyp(dx, dy, dz) || 1;
       const len = Math.min(L * 0.85, Math.max(rFull[i] || 0.02, 0.02) * 7);
       const ux = dx / L, uy = dy / L, uz = dz / L;
       const r0 = Math.max(rFull[p] || 0.02, 0.015) * 0.42;
@@ -342,7 +344,7 @@ export function buildJointMeshes(sk, rFull, deadCfg, opts = {}) {
 /** Sombra ao longo do sol (não só para baixo) */
 export function makeSunShade(shadeFn, sunDir, vs, gn, grid, pw) {
   const [sx, sy, sz] = sunDir;
-  const len = Math.hypot(sx, sy, sz) || 1;
+  const len = hyp(sx, sy, sz) || 1;
   const ux = sx / len, uy = sy / len, uz = sz / len;
   return (xi, yi, iz, sign) => {
     for (let q = 1; q < pw.length; q++) {
@@ -359,7 +361,7 @@ export function phototropismBias(d, grad, amount) {
   d[0] += grad[0] * amount;
   d[1] += grad[1] * amount * 0.6;
   d[2] += grad[2] * amount;
-  const L = Math.hypot(d[0], d[1], d[2]) || 1;
+  const L = hyp(d[0], d[1], d[2]) || 1;
   d[0] /= L; d[1] /= L; d[2] /= L;
 }
 

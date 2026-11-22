@@ -10,6 +10,8 @@
  */
 
 const TAU = Math.PI * 2;
+// Math.hypot varia entre motores JS no último bit; isto não (ver lsystem-core.mjs).
+const hyp = (x, y = 0, z = 0) => Math.sqrt(x * x + y * y + z * z);
 const DEG = Math.PI / 180;
 
 export const PATTERN_IDS = ['solid', 'stripe', 'flake', 'fukurin', 'blotch', 'speckle'];
@@ -69,13 +71,17 @@ function rngOf(str) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-function mixHash(seed, node, k) {
+function mixHash(seed, node, k, salt = 0) {
   let h = 2166136261;
-  const s = `${seed}:${node}:${k}`;
+  const s = `${seed}:${node}:${k}:${salt}`;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
+  // finalizador do murmur3: os bits baixos do FNV puro são fracos
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
   return h >>> 0;
 }
 function pickWeighted(rng, list) {
@@ -205,17 +211,22 @@ function patternId(name) {
 }
 
 export function pickFlower(book, node, k, pos, center) {
-  const h = mixHash(book.seed, node | 0, k | 0);
-  const u = (h & 65535) / 65535;
-  const u2 = ((h >>> 8) & 65535) / 65535;
-  const u3 = ((h >>> 16) & 65535) / 65535;
+  // Um hash por decisão. Antes u, u2 e u3 eram janelas sobrepostas (bits 0–15, 8–23, 16–31) do mesmo
+  // número, e o padrão, a cor do corpo e a da garganta saíam correlacionados.
+  const h = mixHash(book.seed, node | 0, k | 0, 0);
+  const u = h / 4294967296;
+  const u2 = mixHash(book.seed, node | 0, k | 0, 1) / 4294967296;
+  const u3 = mixHash(book.seed, node | 0, k | 0, 2) / 4294967296;
+  const hv = mixHash(book.seed, node | 0, k | 0, 3); // fase da abertura
+  const hp = mixHash(book.seed, node | 0, k | 0, 4); // listra ou flake, e o padrão sorteado
+  const hvar = mixHash(book.seed, node | 0, k | 0, 5); // variante da malha
   let name = book.primary;
-  if (book.tone.stripe && u < 0.55) name = (h & 1) ? 'stripe' : 'flake';
-  else if (u < book.mix) name = PATTERN_IDS[h % PATTERN_IDS.length];
+  if (book.tone.stripe && u < 0.55) name = (hp & 1) ? 'stripe' : 'flake';
+  else if (u < book.mix) name = PATTERN_IDS[(hp >>> 1) % PATTERN_IDS.length];
   const pattern = patternId(name);
   const body = bodyOf(book.tone, u2, pattern);
   const throat = throatOf(body, pattern, book.tone, u3);
-  let phase = ((h >>> 3) & 255) / 255 * 0.06 + (k % 3) * 0.012;
+  let phase = (hv & 255) / 255 * 0.06 + (k % 3) * 0.012;
   if (pos && center) {
     const ang = Math.atan2(pos.x - center.x, pos.z - center.z);
     const around = (ang / TAU + 1) % 1;
@@ -223,7 +234,7 @@ export function pickFlower(book, node, k, pos, center) {
     phase = (around * 0.62 + up * 0.38) * 0.32 + (k % 3) * 0.012;
   }
   return {
-    variant: (h >>> 4) % book.variants.length,
+    variant: hvar % book.variants.length,
     pattern,
     patSeed: u3,
     phase,
@@ -399,7 +410,7 @@ function createMeshBuilder() {
         const n = triNormal(pos, a, c, b);
         let ex = 0, ey = 0, ez = 0;
         for (const id of [a, b, c, d]) { ex += pos[id * 3]; ey += pos[id * 3 + 1]; ez += pos[id * 3 + 2]; }
-        const rl = Math.hypot(ex, ez) || 1;
+        const rl = hyp(ex, ez) || 1;
         const dot = n[0] * ex / rl + n[1] * 0.55 + n[2] * ez / rl;
         if (dot < 0) index.push(a, b, c, b, d, c);
         else index.push(a, c, b, b, c, d);
@@ -411,11 +422,11 @@ function createMeshBuilder() {
       const p = at(t);
       const q = at(Math.min(1, t + 1 / Math.max(segs, 1)));
       let tx = q[0] - p[0], ty = q[1] - p[1], tz = q[2] - p[2];
-      let L = Math.hypot(tx, ty, tz) || 1;
+      let L = hyp(tx, ty, tz) || 1;
       tx /= L; ty /= L; tz /= L;
       let hx = -ty, hy = tx, hz = 0;
       if (hx * hx + hy * hy < 1e-4) { hx = 0; hy = -tz; hz = ty; }
-      L = Math.hypot(hx, hy, hz) || 1;
+      L = hyp(hx, hy, hz) || 1;
       hx /= L; hy /= L; hz /= L;
       const bx = ty * hz - tz * hy, by = tz * hx - tx * hz, bz = tx * hy - ty * hx;
       return { p, hx, hy, hz, bx, by, bz };
@@ -473,7 +484,7 @@ function normalsOf(src, index) {
     n[c] += nx; n[c + 1] += ny; n[c + 2] += nz;
   }
   for (let i = 0; i < n.length; i += 3) {
-    const L = Math.hypot(n[i], n[i + 1], n[i + 2]);
+    const L = hyp(n[i], n[i + 1], n[i + 2]);
     if (L < 1e-8) { n[i] = 0; n[i + 1] = 1; n[i + 2] = 0; }
     else { n[i] /= L; n[i + 1] /= L; n[i + 2] /= L; }
   }
@@ -560,7 +571,7 @@ export function buildFlowerGeometry(genome, detail = 'hi') {
     const tipB = budAt(1);
     const prevO = openAt(0.82);
     let dx = tipO[0] - prevO[0], dy = tipO[1] - prevO[1], dz = tipO[2] - prevO[2];
-    const L = Math.hypot(dx, dy, dz) || 1;
+    const L = hyp(dx, dy, dz) || 1;
     dx /= L; dy /= L; dz /= L;
     for (let lobe = 0; lobe < R.anth; lobe++) {
       const side = lobe === 0 ? 1 : -1;
@@ -628,7 +639,7 @@ export function auditFlower(genome) {
     let anchor = -1;
     for (let i = 0; i < n; i++) {
       if (Math.abs(geo.meta[i * 2 + 1] - 6) > 0.1) continue;
-      const d = Math.hypot(geo.position[i * 3], geo.position[i * 3 + 1], geo.position[i * 3 + 2]);
+      const d = hyp(geo.position[i * 3], geo.position[i * 3 + 1], geo.position[i * 3 + 2]);
       if (d < 1e-4) anchor = i;
     }
     if (anchor < 0) {
@@ -647,13 +658,13 @@ export function auditFlower(genome) {
         const z = geo.bud[i * 3 + 2] + (geo.position[i * 3 + 2] - geo.bud[i * 3 + 2]) * k;
         if (!Number.isFinite(x + y + z)) bad = true;
         if (y < -0.004) low = true;
-        const r = Math.hypot(x, y, z);
+        const r = hyp(x, y, z);
         if (r > maxR) maxR = r;
       }
       const ax = geo.bud[anchor * 3] + (geo.position[anchor * 3] - geo.bud[anchor * 3]) * smoothOpen(geo.meta[anchor * 2], bloom);
       const ay = geo.bud[anchor * 3 + 1] + (geo.position[anchor * 3 + 1] - geo.bud[anchor * 3 + 1]) * smoothOpen(geo.meta[anchor * 2], bloom);
       const az = geo.bud[anchor * 3 + 2] + (geo.position[anchor * 3 + 2] - geo.bud[anchor * 3 + 2]) * smoothOpen(geo.meta[anchor * 2], bloom);
-      if (Math.hypot(ax, ay, az) > 0.008) issues.push(`${detail}: âncora solta em ${bloom}`);
+      if (hyp(ax, ay, az) > 0.008) issues.push(`${detail}: âncora solta em ${bloom}`);
       if (bad) issues.push(`${detail}: vértice inválido em ${bloom}`);
       if (low) issues.push(`${detail}: malha entra no galho em ${bloom}`);
       radii.push(maxR);
