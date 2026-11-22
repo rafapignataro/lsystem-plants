@@ -40,17 +40,30 @@ Este foi o ponto conceitual mais fraco.
 
 ## Riscos que ficaram (não corrigidos, sem quebrar seeds)
 
-1. **O andaime e o envelope usam fluxos diferentes.** `classicCloud` roda a gramática com `::rules` e `simScaffold` com `::sim-rules`. Nas regras com `jit`, o tronco simulado não é exatamente a planta que gerou o envelope. Além disso, o L-System clássico roda duas vezes por planta simulada (na nuvem e no andaime). Usar o mesmo fluxo e reaproveitar o resultado economiza ~30–50% da montagem simulada, mas muda as seeds atuais. Fazer isso junto com uma versão de motor (`v9`) no hash.
-2. **Determinismo entre navegadores.** `Math.pow/sin/hypot/cbrt` não são exatos no último bit entre motores JS. Para NFT, gravar `versão do motor + hash do esqueleto` no metadado e conferir em Chrome, Firefox e Safari. O `n()` (3 casas) nas strings da gramática já ajuda.
-3. **`pickFlower`** tira `u`, `u2` e `u3` de janelas sobrepostas do mesmo hash FNV (bits 0–15, 8–23 e 16–31). O padrão e a cor ficam correlacionados. Um segundo hash resolve, mas muda as cores das azaleias atuais.
+Os três primeiros foram resolvidos no motor v9 (ver abaixo).
+
 4. **Grade de luz**: começa em `y = −vs`. A copa da cascata abaixo do vaso não recebe sombra.
 5. **`liftOutOfSolids`** move um nó sem mover a subárvore; pode esticar um segmento.
 6. **`ficus.noStones` e `azaleia.stones: false`** são duas flags para a mesma coisa.
 7. A documentação de `ARQUITETURA.md` §1–8 ainda descreve as espécies e o `index.html` monolítico da v2.
 
+## Motor v9 (quebra as seeds de propósito)
+
+1. **Andaime = planta clássica.** A simulação usa o mesmo fluxo `::rules` da planta que gera o envelope e reaproveita a palavra dela (o L-System não roda mais duas vezes). A captura ignora as folhas juvenis, e a raiz aérea `W` sorteia pela posição, então sai igual nos dois. Ganho medido: só 1–12% na montagem simulada (32 plantas), porque o tempo está no laço anual (`growSim`), não no L-System. A estimativa de 30–50% desta revisão estava errada.
+2. **Determinismo entre navegadores.**
+   - `Math.hypot` (que a especificação não fixa) foi trocado por `√(x² + y² + z²)`, que é arredondado igual em todo motor.
+   - Cada planta ganha uma **impressão digital** (`treeFingerprint`): esqueleto, raios e folhagem, quantizados. Ela aparece no painel e no JSON de metadados.
+   - O link leva `&motor=9`, e um link de outra versão mostra um aviso.
+   - Fica de fora: `Math.sin/cos/pow/exp/cbrt` também não são fixados. Para garantir, abra a mesma seed em Chrome, Firefox e Safari e compare a impressão digital.
+3. **Flor.** `pickFlower` usa um hash por decisão (padrão, corpo, garganta, variante), com o finalizador do murmur3.
+
+Novo: botão **🧾 JSON** com os metadados (motor, impressão digital, espécie, estilo, seed, pais, genes, traços e medidas de desenho).
+
+Achado: na **azaleia**, a simulação não faz nenhum broto (`grown = 0`, também na `main`). O andaime já é a planta inteira, e só o `dress` acrescenta folhas e flores. A copa simulada da azaleia é a clássica com outro tempo.
+
 ## Alternativas e funcionalidades sugeridas
 
-- **Metadados NFT (JSON)**: espécie, estilo, paleta, anos, nº de almofadas, `measureDesign` e raridade por traço (frequência de cada valor em, por exemplo, 10 mil seeds). Tudo isso já é calculado; falta serializar.
+- **Raridade por traço**: o JSON de metadados já existe (v9). Falta a frequência de cada valor em, por exemplo, 10 mil seeds.
 - **Nota estética (`scoreTree`)**: hoje devolve `null`. Com `measureDesign` dá para dar nota por regra (afunilamento, primeiro galho, cruzamentos, espaço negativo) e usar a nota em "seleção": gerar N seeds e mostrar as melhores.
 - **Poda interativa**: clicar num galho → `TD = ano` no esqueleto simulado e voltar a simular dali. A simulação já suporta a morte de nós.
 - **Superfície única nas junções**: em vez das esferas, malhar a forquilha por convolução (*skeletal implicit surfaces*) ou com quad-mesh de bifurcação. É o defeito visual mais citado no ROADMAP.

@@ -10,6 +10,11 @@ import {
 } from './style-engine.mjs';
 
 export const DEG = Math.PI / 180;
+/** Versão do motor. Muda quando a mesma seed passa a gerar outra árvore; vai no link e nos metadados. */
+export const ENGINE_VERSION = 9;
+/* Math.hypot não tem resultado fixado pela especificação (V8, SpiderMonkey e JSC diferem no último bit).
+   √ (x² + y² + z²) com + × e Math.sqrt é arredondado corretamente em todo motor. */
+export const hyp = (x, y = 0, z = 0) => Math.sqrt(x * x + y * y + z * z);
 /** Jardim só de bonsais.
  *  Espécie nova: acrescente o id em BONSAI e o objeto em SPECIES (bloco 6d),
  *  a casca em BARK e, se a simulação não for a de bonsai padrão, uma entrada em SIMS.
@@ -33,7 +38,7 @@ export class Vec3 {
   toArray(array = [], offset = 0) { array[offset] = this.x; array[offset + 1] = this.y; array[offset + 2] = this.z; return array; }
   dot(v) { return this.x * v.x + this.y * v.y + this.z * v.z; }
   lengthSq() { return this.x * this.x + this.y * this.y + this.z * this.z; }
-  length() { return Math.hypot(this.x, this.y, this.z); }
+  length() { return hyp(this.x, this.y, this.z); }
   normalize() { const L = this.length() || 1; this.x /= L; this.y /= L; this.z /= L; return this; }
   negate() { this.x = -this.x; this.y = -this.y; this.z = -this.z; return this; }
   crossVectors(a, b) { const x = a.y * b.z - a.z * b.y, y = a.z * b.x - a.x * b.z, z = a.x * b.y - a.y * b.x; this.x = x; this.y = y; this.z = z; return this; }
@@ -175,8 +180,9 @@ export function runLSystem(def, iterations, rng, jrng) {
     if (next.length > MAX_MODULES) break;
     word = next;
   }
+  const pre = word; // antes do finalize: é o andaime da simulação (as pontas ainda são gemas)
   if (def.finalize) word = rewrite(word, def.finalize, rng, done + 1, null, null); // pontas -> folhas/flores
-  return { word, done, tEnd: done + 3.0 };
+  return { word, pre, done, tEnd: done + 3.0 };
 }
 const wordToString = (w, max = 600) => {
   let s = ''; for (const m of w) { s += m.c + (m.p ? '(' + m.p.map(v => +v.toFixed(2)).join(',') + ')' : ''); if (s.length > max) return s.slice(0, max) + ' …'; }
@@ -254,6 +260,7 @@ export function interpret(word, sp, P, rng, cap) {
   const roll = (sp.leafRoll ?? 35) * DEG;
   const life = (m) => [Math.max(m.t1 ?? 0, T1[st.node]), m.die ?? 1e9];
   for (const m of word) {
+    if (cap && m.die != null) continue; // andaime: folhas juvenis não viram gemas
     const p = m.p, a = p ? p[0] * DEG : defA;
     switch (m.c) {
       case 'F': case 'f': {
@@ -316,11 +323,14 @@ export function interpret(word, sp, P, rng, cap) {
         if (st.pos.y < 0.8 || X.length + 40 >= MAX_NODES) break;
         const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
         const tb = Math.max(m.t1 ?? 0, T1[st.node]) + (p && p[1] != null ? p[1] : 0.2);
+        // sorteio próprio, pela posição: o andaime da simulação e a planta clássica gastam o RNG da tartaruga
+        // em ritmos diferentes, e a raiz tem de sair igual nos dois
+        const rw = new Rand(`${P._seed ?? ''}::W::${n(st.pos.x)},${n(st.pos.y)},${n(st.pos.z)}`);
         let par = st.node, x = st.pos.x, z = st.pos.z; const y0 = st.pos.y, a0 = X.length;
-        const olen = Math.hypot(x, z) || 1, ux = x / olen, uz = z / olen;
+        const olen = hyp(x, z) || 1, ux = x / olen, uz = z / olen;
         const yLand = Math.min(0.62, y0 * 0.42);
         for (let j = 1; j <= k; j++) {
-          x += rng.jit(0.04); z += rng.jit(0.04);
+          x += rw.jit(0.04); z += rw.jit(0.04);
           const yLin = y0 * (1 - j / k);
           let y = yLin;
           if (yLin < yLand) {
@@ -333,7 +343,7 @@ export function interpret(word, sp, P, rng, cap) {
           par = X.length - 1;
         }
         // p[2] opcional: fração do tronco. Sem ele, o sorteio (e o RNG) continua o de antes.
-        const f = p && p[2] != null ? p[2] : (rng.f() < 0.45 ? rng.range(0.25, 0.42) : rng.range(0.06, 0.16));
+        const f = p && p[2] != null ? p[2] : (rw.f() < 0.45 ? rw.range(0.25, 0.42) : rw.range(0.06, 0.16));
         BOOST.push({ a: a0, i: par, t: tb + drop, f });
         break;
       }
@@ -1157,7 +1167,7 @@ export function growSim(C, rng, env = ENV_DEFAULT) {
   const DX = [], DY = [], DZ = [], kids = [], budsAt = [], leafOf = [];
   const leaves = [], flowers = [], buds = [], axes = [], roots = [];
   const UP = [0, 1, 0];
-  const norm = (v) => { const L = Math.hypot(v[0], v[1], v[2]) || 1; v[0] /= L; v[1] /= L; v[2] /= L; return v; };
+  const norm = (v) => { const L = hyp(v[0], v[1], v[2]) || 1; v[0] /= L; v[1] /= L; v[2] /= L; return v; };
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const rot = (v, k, ang) => { const c = Math.cos(ang), s = Math.sin(ang), d = dot(k, v), cr = cross(k, v); return [v[0] * c + cr[0] * s + k[0] * d * (1 - c), v[1] * c + cr[1] * s + k[1] * d * (1 - c), v[2] * c + cr[2] * s + k[2] * d * (1 - c)]; };
@@ -1227,7 +1237,7 @@ export function growSim(C, rng, env = ENV_DEFAULT) {
       const sd = rot(perp(d), d, rng.f() * 6.2832);
       let ly = LF.needle ? d.slice() : norm(rot(d, norm(cross(d, sd)), (LF.pitch + rng.jit(LF.pitchJ ?? 15)) * Math.PI / 180));
       if (LF.droop) { ly = norm([ly[0], ly[1] - LF.droop, ly[2]]); }
-      let lz = norm(cross(ly, cross(UP, ly))); if (!isFinite(lz[0]) || Math.hypot(...lz) < 0.5) lz = perp(ly);
+      let lz = norm(cross(ly, cross(UP, ly))); if (!isFinite(lz[0]) || hyp(...lz) < 0.5) lz = perp(ly);
       lz = norm(rot(lz, ly, rng.jit(LF.roll ?? 0.6)));
       list.push(leaves.length);
       leaves.push({ x: px, y: py, z: pz, ly, lz, s: LF.size * (0.8 + 0.4 * rng.f()) * (LF.sizeOrd ? LF.sizeOrd(ORD[i]) : 1), t0: t, t1: 1e9, node: i, kind: LF.kind });
@@ -1346,7 +1356,7 @@ export function growSim(C, rng, env = ENV_DEFAULT) {
         if (tr) { d[1] += tr; norm(d); }
         if (C.bend) C.bend(d, b.ord, rng);
         if (k > 0 || !b.term) { const pd = prev, c = d[0] * pd[0] + d[1] * pd[1] + d[2] * pd[2], mt = C.maxTurn ?? 0.45; // curvatura máxima por entrenó
-          if (c < Math.cos(mt)) { const ax = cross(pd, d), al = Math.hypot(...ax); if (al > 1e-6) { const nd = rot(pd, [ax[0] / al, ax[1] / al, ax[2] / al], mt); d[0] = nd[0]; d[1] = nd[1]; d[2] = nd[2]; } } }
+          if (c < Math.cos(mt)) { const ax = cross(pd, d), al = hyp(...ax); if (al > 1e-6) { const nd = rot(pd, [ax[0] / al, ax[1] / al, ax[2] / al], mt); d[0] = nd[0]; d[1] = nd[1]; d[2] = nd[2]; } } }
         prev[0] = d[0]; prev[1] = d[1]; prev[2] = d[2];
         const L = C.len(b.ord, y) * (0.85 + 0.3 * rng.f());
         const t0 = y + 0.1 + 0.8 * k / n, t1 = y + 0.1 + 0.8 * (k + 1) / n;
@@ -1388,18 +1398,20 @@ export function growSim(C, rng, env = ENV_DEFAULT) {
   return { N: X.length, X: Float32Array.from(X), Y: Float32Array.from(Y), Z: Float32Array.from(Z), PAR: Int32Array.from(PAR), T0: Float32Array.from(T0), T1: Float32Array.from(T1), TD: Float32Array.from(TD), ORD: Int16Array.from(ORD), SCAF: Uint8Array.from(SCAF), leaves, flowers, roots, stats, tEnd: NY + 1.5 };
 }
 // ---------- andaime: a gramática da espécie (axioma + regras de tronco) desenha o tronco/estilo e onde ficam as gemas ----------
-const norm3 = (d) => { const L = Math.hypot(d[0], d[1], d[2]) || 1; d[0] /= L; d[1] /= L; d[2] /= L; return d; };
+const norm3 = (d) => { const L = hyp(d[0], d[1], d[2]) || 1; d[0] /= L; d[1] /= L; d[2] /= L; return d; };
 const smooth01 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 export function simScaffold(sp, P, seed, id, G) {
   const iters = G.iters ?? 0;
-  const { word } = runLSystem({ axiom: G.axiom, rules: G.rules || {} }, iters, new Rand(`${seed}::${id}::sim-rules`), null);
+  // Mesmo fluxo (::rules) da planta clássica. Antes era ::sim-rules: com regras que sorteiam (jit),
+  // o tronco simulado não era a planta que gerou o envelope da copa.
+  const word = G.word || runLSystem({ axiom: G.axiom, rules: G.rules || {} }, iters, new Rand(`${seed}::${id}::rules`), null).pre;
   const cap = { syms: G.syms || {}, out: [] };
   const { sk } = interpret(word, sp, P, new Rand(`${seed}::${id}::sim-turtle`), cap);
   const tY = G.time || ((t) => t * G.years / (iters + 1));
   const X = [sk.X[0]], Y = [sk.Y[0]], Z = [sk.Z[0]], PAR = [-1], T0 = [0], T1 = [0];
   const map = new Int32Array(sk.N), first = new Int32Array(sk.N), seg = G.seg || 0.5;
   for (let i = 1; i < sk.N; i++) { // entrenós longos viram vários (uma gema axilar a cada `seg`)
-    const q = sk.PAR[i], p = map[q], L = Math.hypot(sk.X[i] - sk.X[q], sk.Y[i] - sk.Y[q], sk.Z[i] - sk.Z[q]), k = Math.max(1, Math.ceil(L / seg - 0.2));
+    const q = sk.PAR[i], p = map[q], L = hyp(sk.X[i] - sk.X[q], sk.Y[i] - sk.Y[q], sk.Z[i] - sk.Z[q]), k = Math.max(1, Math.ceil(L / seg - 0.2));
     let par = p; first[i] = X.length;
     for (let j = 1; j <= k; j++) {
       const f = j / k; X.push(sk.X[q] + (sk.X[i] - sk.X[q]) * f); Y.push(sk.Y[q] + (sk.Y[i] - sk.Y[q]) * f); Z.push(sk.Z[q] + (sk.Z[i] - sk.Z[q]) * f);
@@ -1417,8 +1429,8 @@ export function simScaffold(sp, P, seed, id, G) {
   return out;
 }
 // ---------- simulação -> esqueleto + instâncias (o resto da montagem é o mesmo das versões anteriores) ----------
-export function buildSimSkeleton(id, seed, sp, P, env = ENV_DEFAULT) {
-  const S = SIMS[id](P, new Rand(`${seed}::${id}::sim`), sp, { seed, id });
+export function buildSimSkeleton(id, seed, sp, P, env = ENV_DEFAULT, def = null) {
+  const S = SIMS[id](P, new Rand(`${seed}::${id}::sim`), sp, { seed, id, def });
   const sc = simScaffold(sp, P, seed, id, S.scaffold);
   S.cfg.scaffold = sc;
   S.cfg._lambdaMul = env.growPhysics ? (P._genome?.dominancia ?? 1) : 1;
@@ -1454,9 +1466,9 @@ export const SIMS = {};
 // (nuvem de folhas/agulhas do L-System clássico, com a idade em que cada uma nasce): os pontos de atração
 // ficam em volta dessa nuvem e só "acendem" no ano em que a planta clássica chegaria ali. Assim a forma
 // característica da gramática clássica continua; a simulação decide como os galhos a ocupam.
-function classicCloud(sp, P, seed, id, kinds) {
-  const def = sp.build(P);
-  const { word } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
+function classicCloud(sp, P, seed, id, kinds, def0) {
+  const def = def0 || sp.build(P);
+  const { word, pre } = runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
   const { sk, inst } = interpret(word, sp, P, new Rand(`${seed}::${id}::turtle`));
   const pts = [], sz = [];
   for (const k of kinds) for (const it of inst[k] || []) if (it.life[1] > 1e8) { // idade do ponto = nascimento de um ancestral do nó (a copa chega ali antes da folha final)
@@ -1464,18 +1476,20 @@ function classicCloud(sp, P, seed, id, kinds) {
     pts.push([it.p.x, it.p.y, it.p.z, sk.T0[a]]); sz.push(it.s); }
   sz.sort((a, b) => a - b);
   let H = 0; for (let i = 0; i < sk.N; i++) H = Math.max(H, sk.Y[i]);
-  return { def, pts, size: sz.length ? sz[sz.length >> 1] : 0.3, H };
+  return { def, pre, iters: P.iterations, pts, size: sz.length ? sz[sz.length >> 1] : 0.3, H };
 }
 function crownSim(o) {
   return (P, r, sp, ctx) => {
     const NY = o.years, yr = (t) => t * NY / (P.iterations + 1); // tempo do L-System (iterações) -> anos
-    const kind = sp.padKind || 'leaf', cl = classicCloud(sp, P, ctx.seed, ctx.id, o.kinds || [kind]), pts = cl.pts, dil = o.dil ?? 0.6; cl.kind = kind;
+    const kind = sp.padKind || 'leaf', cl = classicCloud(sp, P, ctx.seed, ctx.id, o.kinds || [kind], ctx.def), pts = cl.pts, dil = o.dil ?? 0.6; cl.kind = kind;
     const occ = new Set(), oc = o.pruneCell ?? 0.5, ok = (x, y, z) => `${Math.floor(x / oc)},${Math.floor(y / oc)},${Math.floor(z / oc)}`;
     if (o.prune) for (const p of pts) occ.add(ok(p[0], p[1], p[2]));
     const near = (x, y, z) => { const ix = Math.floor(x / oc), iy = Math.floor(y / oc), iz = Math.floor(z / oc);
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) if (occ.has(`${ix + a},${iy + b},${iz + c}`)) return true; return false; };
     const G = o.scaffold(P, cl.def, r);
     G.time = G.time || yr; G.iters = G.iters ?? 0;
+    // a gramática do andaime é a da planta clássica: reaproveita a palavra (antes rodava o L-System duas vezes)
+    if (G.axiom === cl.def.axiom && G.rules === cl.def.rules && G.iters === cl.iters) G.word = cl.pre;
     const cfg = Object.assign({
       years: NY, maxNodes: 20000, markers: o.markers ?? 5000, rp: 1.6, dk: 0.45, cone: 1.0, maxTurn: 0.4,
       sample: (rr) => { if (!pts.length) return null; const q = pts[Math.floor(rr.f() * pts.length)];
@@ -1484,7 +1498,7 @@ function crownSim(o) {
         const lowOk = P._style === 'kengai' || P._style === 'han_kengai';
         if (!lowOk && y < 0.15) return null;
         // só o miolo do vaso; a cascata fora da borda continua
-        if (lowOk && y < 0.18 && y > -0.12 && Math.hypot(x, z) < 0.4) return null;
+        if (lowOk && y < 0.18 && y > -0.12 && hyp(x, z) < 0.4) return null;
         return [x, y, z, yr(q[3]) * (o.ahead ?? 1)]; },
       markerYear: (p) => p[3],
       shadow: { vox: 0.55, q: 8, b: 1.1, a: 1, C: 1.5 },
@@ -1532,7 +1546,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     const flowerCenter = { x: cx, y: cy, z: cz, low: yLo, span: Math.max(0.2, yHi - yLo) };
     let maxD = 1e-4;
     const dist = tips.map((i) => {
-      const d = Math.hypot(R.X[i] - cx, (R.Y[i] - cy) * 0.8, R.Z[i] - cz);
+      const d = hyp(R.X[i] - cx, (R.Y[i] - cy) * 0.8, R.Z[i] - cz);
       if (d > maxD) maxD = d;
       return d;
     });
@@ -1542,7 +1556,7 @@ SIMS.azaleia = (P, r, sp, ctx) => {
     tips.forEach((i, idx) => {
       const p = R.PAR[i];
       const dx = R.X[i] - R.X[p], dy = R.Y[i] - R.Y[p], dz = R.Z[i] - R.Z[p];
-      const L = Math.hypot(dx, dy, dz) || 1;
+      const L = hyp(dx, dy, dz) || 1;
       const ux = dx / L, uy = dy / L, uz = dz / L;
       const shell = dist[idx] / maxD;
       const want = shell > 0.55 ? 4 : shell > 0.28 ? 3 : 2;
@@ -1597,7 +1611,7 @@ SIMS.pinheiro_negro = crownSim({
       const u = rr.f() * 6.2832, v = Math.acos(2 * rr.f() - 1);
       const d = (q[1] < -0.4 ? 0.18 : 0.11) * Math.cbrt(rr.f());
       const x = q[0] + d * Math.sin(v) * Math.cos(u), y = q[1] + d * Math.cos(v) * 0.55, z = q[2] + d * Math.sin(v) * Math.sin(u);
-      if (y < 0.16 && y > -0.2 && Math.hypot(x, z) < 0.55) return null;
+      if (y < 0.16 && y > -0.2 && hyp(x, z) < 0.55) return null;
       return [x, y, z, yr(q[3]) * 0.85];
     },
     leaf: { kind: 'needles', per: () => 14, pitch: 38, pitchJ: 26, keep: () => 10, needle: true },
@@ -1843,7 +1857,7 @@ function liftOutOfSolids(sk, pot) {
       if (slab) {
         const dx = sk.X[i] - (pot.ox || 0);
         const dz = sk.Z[i] - (pot.oz || 0);
-        const L = Math.hypot(dx, dz) || 1;
+        const L = hyp(dx, dz) || 1;
         sk.X[i] += (dx / L) * 0.06;
         sk.Z[i] += (dz / L) * 0.06;
       }
@@ -1904,7 +1918,7 @@ function seatOnBark(sk, radii, inst) {
       if (!(p >= 0 && p < N)) continue;
       if (!(radii[i] > 0) || !(radii[p] > 0)) continue;
       const ax = X[i] - X[p], ay = Y[i] - Y[p], az = Z[i] - Z[p];
-      const L = Math.hypot(ax, ay, az);
+      const L = hyp(ax, ay, az);
       if (!(L > 1e-6)) continue;
       const ux = ax / L, uy = ay / L, uz = az / L;
       const vx = it.p.x - X[p], vy = it.p.y - Y[p], vz = it.p.z - Z[p];
@@ -1918,17 +1932,17 @@ function seatOnBark(sk, radii, inst) {
       let rx = it.p.x - cx, ry = it.p.y - cy, rz = it.p.z - cz;
       const axial = rx * ux + ry * uy + rz * uz;
       rx -= ux * axial; ry -= uy * axial; rz -= uz * axial;
-      let rl = Math.hypot(rx, ry, rz);
+      let rl = hyp(rx, ry, rz);
       if (rl < 1e-5) {
         let px = -uy, py = ux, pz = 0;
         if (px * px + py * py + pz * pz < 0.04) { px = -uz; py = 0; pz = ux; }
-        const pl = Math.hypot(px, py, pz) || 1;
+        const pl = hyp(px, py, pz) || 1;
         px /= pl; py /= pl; pz /= pl;
         const qx = uy * pz - uz * py, qy = uz * px - ux * pz, qz = ux * py - uy * px;
         const ang = it.spin != null ? it.spin : n * 2.399963;
         const cs = Math.cos(ang), sn = Math.sin(ang);
         rx = px * cs + qx * sn; ry = py * cs + qy * sn; rz = pz * cs + qz * sn;
-        rl = Math.hypot(rx, ry, rz) || 1;
+        rl = hyp(rx, ry, rz) || 1;
       }
       const rad = Math.max(0, radii[p] * (1 - t) + radii[i] * t);
       it.p.x = cx + (rx / rl) * rad;
@@ -1996,13 +2010,13 @@ function seatStonesInSoil(stones, pot) {
   const rot = soil.rot, c = Math.cos(rot), sn = Math.sin(rot);
   const reach = (dx, dz, margin) => {
     const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
-    const d = Math.hypot(lx, lz) || 1, ux = lx / d, uz = lz / d;
+    const d = hyp(lx, lz) || 1, ux = lx / d, uz = lz / d;
     let soilR;
     if (soil.sides >= 5) {
       let best = 0, bestAlign = -1;
       for (let i = 0; i < 360; i++) {
         const [ox, oz] = potOutlineXZ(soil.a * 0.94, soil.b * 0.94, soil.n, soil.sides, i * Math.PI / 180);
-        const rad = Math.hypot(ox, oz) || 1, align = (ox / rad) * ux + (oz / rad) * uz;
+        const rad = hyp(ox, oz) || 1, align = (ox / rad) * ux + (oz / rad) * uz;
         if (align > bestAlign) { bestAlign = align; best = rad; }
       }
       soilR = best * Math.max(bestAlign, 0);
@@ -2014,7 +2028,7 @@ function seatStonesInSoil(stones, pot) {
   };
   const placed = [];
   for (const s of stones) {
-    s.rad0 = Math.hypot(s.x, s.z) || 1;
+    s.rad0 = hyp(s.x, s.z) || 1;
     let ang = Math.atan2(s.z, s.x);
     const t = Math.min(1, Math.max(0, (s.rad0 - 0.85) / 0.85)), frac = 0.6 + 0.28 * t;
     let x = 0, z = 0, r = s.r;
@@ -2024,7 +2038,7 @@ function seatStonesInSoil(stones, pot) {
       if (R < r * 0.55) { r = Math.max(0.035, R * 0.5); R = reach(dx, dz, r * 1.15); }
       const dist = Math.max(Math.min(R * frac, R * 0.92), Math.min(R * 0.92, r * 1.15));
       x = dx * dist; z = dz * dist;
-      if (!placed.some(p => Math.hypot(p.x - x, p.z - z) < (p.r + r) * 0.8)) break;
+      if (!placed.some(p => hyp(p.x - x, p.z - z) < (p.r + r) * 0.8)) break;
       ang += 0.85;
     }
     s.r = r; s.x = x + soil.ox; s.z = z + soil.oz; s.seated = true;
@@ -2081,7 +2095,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   applyGenomeToPlant(P, null, null, genome, sp, applyGenes);
   if (sp.flowerPreset) P._flowerBook = flowerBook(sp.flowerPreset, seed, P);
   const def = sp.build(P);
-  const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P, ENV) : null;
+  const SIM = opts.sim && SIMS[id] ? buildSimSkeleton(id, seed, sp, P, ENV, def) : null;
   const { word, done, tEnd } = SIM || runLSystem(def, P.iterations, new Rand(`${seed}::${id}::rules`), new Rand(`${seed}::${id}::juvenile`));
   const tLs = performance.now();
   const rng = new Rand(`${seed}::${id}::turtle`);
@@ -2170,6 +2184,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
   applyGenomeToPlant(null, BK, null, genome, sp, applyGenes);
   const instPlain = serializeInst(inst);
+  const fingerprint = treeFingerprint(sk, rFull, inst);
   const display = def.display || [];
   return {
     id,
@@ -2200,10 +2215,26 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     pot,
     BK,
     night: sp.theme === 'night',
+    engine: ENGINE_VERSION,
+    fingerprint,
     timing: { ms: performance.now() - t0, lsMs: tLs - t0, skMs: tSk - tLs },
   };
 }
 
+/** Impressão digital da árvore: posições dos nós, raios e folhagem, quantizados.
+ *  Mesma seed + mesmo motor = mesma impressão em qualquer navegador; se mudar, a árvore mudou. */
+export function treeFingerprint(sk, r, inst) {
+  let a = 2166136261, b = 0x9e3779b9;
+  const mix = (v) => {
+    const q = Math.round(v * 1e4) | 0;
+    a = Math.imul(a ^ q, 16777619);
+    b = Math.imul(b ^ (q >>> 0), 0x85ebca6b) ^ (b >>> 13);
+  };
+  mix(sk.N);
+  for (let i = 0; i < sk.N; i++) { mix(sk.X[i]); mix(sk.Y[i]); mix(sk.Z[i]); mix(r[i] * 10); }
+  for (const k of Object.keys(inst).sort()) { mix(inst[k].length); for (const it of inst[k]) { mix(it.p.x); mix(it.p.y); mix(it.p.z); mix(it.s); } }
+  return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+}
 /** Galho lateral no máximo `ratio` do raio do tronco no ponto em que sai. O eixo e o nebari não entram. */
 function sideBranchScale(sk, r, ratio) {
   const { N, PAR, Y } = sk;

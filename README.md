@@ -26,6 +26,7 @@ Arquivos principais: `index.html`, `v8-engine.mjs`, `joint-worker.mjs`. Sem buil
 | `estilo` ou `style` | hash ou query | `#especie=olmo_chines&estilo=moyogi` · `?species=junipero&style=kengai&seed=x` | estilo, se a espécie o aceita. Sem o parâmetro, vale o estilo tradicional da espécie. No jardim o parâmetro é ignorado |
 | `cresc` | hash | `#especie=junipero&cresc=classico` | modo de crescimento: sem o parâmetro = **Simulado** (padrão, v7); `classico` = L-System clássico |
 | `seed` | hash ou query | `#especie=bordo&seed=rafael` | seed (qualquer texto) |
+| `motor` | hash | `&motor=9` | versão do motor que gerou o link (o botão de link põe sozinho); outra versão mostra um aviso |
 | `genoma` | hash | `#especie=bordo&seed=rafael&genoma=vigor:1.1,ramificacao:0.95` | genes v8 (opcional; omitir = só da seed) |
 | `paiA`, `paiB` | hash | `#especie=bordo&seed=cruz-x&paiA=rafael&paiB=lindenmayer` | filho de um cruzamento: herda os parâmetros da espécie dos dois pais |
 | `raios` | query | `?raios=legado` | desenha os raios como antes da correção (sem os ajustes do worker), para comparar |

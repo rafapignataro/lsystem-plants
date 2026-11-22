@@ -118,7 +118,7 @@
     <button id="resetGenes">Voltar ao visual da seed</button>
   </details>
 
-  <div class="row"><button id="snap">📷 PNG</button><button id="gltf" title="Modelo 3D assado na idade atual (GLB)">📦 GLB</button></div>
+  <div class="row"><button id="snap">📷 PNG</button><button id="gltf" title="Modelo 3D assado na idade atual (GLB)">📦 GLB</button><button id="meta" title="Metadados: seed, versão do motor, impressão digital e traços">🧾 JSON</button></div>
 
   <div id="dna"></div>
   <details open><summary>Parâmetros derivados da seed</summary><table id="params"></table></details>
@@ -147,7 +147,7 @@ import {
 } from './v8-engine.mjs';
 import {
   Rand, SPECIES, BARK, SIMS, ALL, BONSAI, hex, n, computeRadii, wordToString,
-  buildSkeletonPackage, deserializeInst, serializeInst, unpackWorkerPayload,
+  buildSkeletonPackage, deserializeInst, serializeInst, unpackWorkerPayload, ENGINE_VERSION,
 } from './lsystem-core.mjs';
 import { STYLES, FRONT_VIEW, resolveStyle, enforceDesignRadii, measureDesign, designOf } from './style-engine.mjs';
 import { addFlowerMeshes, flowerBook, representFlower } from './flower-engine.mjs';
@@ -422,6 +422,7 @@ function fruitGeo() {
    ===================================================================== */
 const ENV = { ...ENV_DEFAULT };
 let activeGenome = null, genomeOverlay = null, genomeApply = false;
+let linkEngine = null; // versão do motor que gerou o link aberto (null = link sem versão)
 let crossParents = null; // [seedA, seedB]: o filho herda os parâmetros da espécie dos dois pais
 const SHARED = {
   uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 },
@@ -999,7 +1000,7 @@ function assemblePlant(pkg) {
   const radScratch = new Float32Array(sk.N);
   const pl = {
     id, sp, P, def, word, done, W, BK, genome, rFull, sim: pkg.sim, object: inner, box: wbox, sk, lastAge: -1, radUpdateMs: 0, oy, group, tick: ex && ex.tick, U,
-    rules: pkg.rules || null, design: pkg.design || null, style: pkg.style,
+    rules: pkg.rules || null, design: pkg.design || null, style: pkg.style, engine: pkg.engine, fingerprint: pkg.fingerprint,
     theme: typeof sp.theme === 'function' ? sp.theme(P) : sp.theme,
     update(age) {
       if (age === this.lastAge) return;
@@ -1334,6 +1335,7 @@ function readRequest() {
   genomeOverlay = parseGenomeHash(h.get('genoma') || q.get('genoma'));
   const numeric = genomeOverlay && GENE_CATALOG.some((g) => Number.isFinite(genomeOverlay[g.key]));
   genomeApply = !!numeric;
+  linkEngine = pick('motor') ? +pick('motor') : null;
   const pa = pick('paiA'), pb = pick('paiB');
   crossParents = pa && pb ? [pa, pb] : null;
   const style = pick('style', 'estilo') || (typeof genomeOverlay?.estilo === 'string' ? genomeOverlay.estilo : null);
@@ -1350,7 +1352,7 @@ function writeHash() {
   const st = mode === 'garden' ? '' : `&estilo=${encodeURIComponent(currentStyle())}`;
   const g = genomeApply && activeGenome ? `&genoma=${encodeURIComponent(genomeToHash({ ...activeGenome, estilo: currentStyle() }))}` : '';
   const par = crossParents ? `&paiA=${encodeURIComponent(crossParents[0])}&paiB=${encodeURIComponent(crossParents[1])}` : '';
-  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + par + g;
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + par + g + `&motor=${ENGINE_VERSION}`;
   const url = new URL(location.href);
   for (const k of ['species', 'especie', 'style', 'estilo', 'seed']) url.searchParams.delete(k);
   url.hash = s;
@@ -1413,7 +1415,10 @@ function showInfo(pl) {
     $('word').textContent = '(crescimento simulado: a planta não sai de uma palavra; mude para "L-System clássico" para ver a palavra gerada)';
   } else $('word').textContent = wordToString(pl.word, 700);
   const st = STYLES[pl.P?._style] || STYLES[pl.style];
-  $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 24)}</b>` + (st ? ` · estilo <b>${st.name}</b>` : '');
+  const old = linkEngine != null && linkEngine !== ENGINE_VERSION
+    ? `<br><span style="color:#f0b37b">Link do motor v${linkEngine}: este é o v${ENGINE_VERSION}, a árvore pode ter mudado.</span>` : '';
+  $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 24)}</b>` + (st ? ` · estilo <b>${st.name}</b>` : '')
+    + `<br>motor v${pl.engine ?? ENGINE_VERSION} · árvore <b title="impressão digital: esqueleto, raios e folhagem">${pl.fingerprint || '—'}</b>` + old;
   const g = pl.genome || genomeFromSeed(ui.seed.value, pl.id, Rand);
   renderGenes(g);
   $('geneMode').textContent = genomeApply ? 'Genes aplicados: a planta muda com os controles.' : 'Leitura do DNA. O visual continua o da seed até você cruzar, mutar ou mover um gene.';
@@ -1722,6 +1727,31 @@ $('gltf').onclick = () => {
     a.download = `plant-${mode === 'garden' ? 'jardim' : ui.species.value}-${ui.seed.value}.glb`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }, (err) => showErr(err), { binary: true });
+};
+/* Metadados da planta (base para NFT): reproduzir = seed + espécie + estilo + pais + genes + versão do motor;
+   conferir = impressão digital (mesma em qualquer navegador para o mesmo motor). */
+function plantMeta(pl) {
+  const sp = SPECIES[pl.id], P = pl.P;
+  const traits = (sp.show || []).map(([k, label, unit]) => ({ trait: label, value: typeof P[k] === 'number' ? +P[k].toFixed(3) : P[k], ...(unit ? { unit } : {}) }));
+  return {
+    engine: pl.engine ?? ENGINE_VERSION,
+    fingerprint: pl.fingerprint,
+    species: pl.id, name: sp.name, style: pl.style,
+    seed: ui.seed.value, parents: crossParents, growth: growMode === 'sim' ? 'simulado' : 'classico',
+    genome: genomeApply ? activeGenome : null,
+    traits,
+    design: pl.rules,
+    link: location.href,
+  };
+}
+$('meta').onclick = () => {
+  if (!plants.length) return;
+  writeHash();
+  const data = mode === 'garden' ? plants.map(plantMeta) : plantMeta(plants[0]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = `plant-${mode === 'garden' ? 'jardim' : ui.species.value}-${ui.seed.value}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 };
 $('share').onclick = async () => { writeHash(); try { await navigator.clipboard.writeText(location.href); $('share').textContent = '✔ Link copiado'; } catch { prompt('Copie o link:', location.href); } setTimeout(() => $('share').textContent = '🔗 Copiar link', 1500); };
 $('hide').onclick = () => { $('panel').classList.add('hidden'); applyViewOffset(); };

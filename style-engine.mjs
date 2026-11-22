@@ -10,6 +10,8 @@
  * (rules) e a espécie (design) podem afinar. A mesma (seed, espécie, estilo)
  * continua determinística. Estágio 3 lê measureDesign e preenche scoreTree.
  */
+// Math.hypot varia entre motores JS no último bit; isto não (ver lsystem-core.mjs).
+const hyp = (x, y = 0, z = 0) => Math.sqrt(x * x + y * y + z * z);
 const DEG = Math.PI / 180;
 const n = (x) => +(+x).toFixed(3);
 
@@ -530,7 +532,7 @@ function measureSk(sk) {
     onSoil[i] = p >= 0 && onSoil[p] && Y[p] < soilCut && Y[i] < soilCut ? 1 : 0;
   }
   for (let i = 0; i < N; i++) {
-    const d = Math.hypot(X[i], Z[i]);
+    const d = hyp(X[i], Z[i]);
     if (onSoil[i]) neb = Math.max(neb, d);
     if (Y[i] > crownY) radii.push(d);
     if (Y[i] < -0.06) arch = Math.max(arch, d);
@@ -713,7 +715,7 @@ function trunkChain(sk, ch, drops) {
     }
     if (best < 0) break;
     const dy = sk.Y[best] - sk.Y[i];
-    const horiz = Math.hypot(sk.X[best] - sk.X[i], sk.Z[best] - sk.Z[i]);
+    const horiz = hyp(sk.X[best] - sk.X[i], sk.Z[best] - sk.Z[i]);
     if (!drops && ch[i].length >= 3 && horiz > Math.abs(dy) * 1.35 && trunk.length > 2) break;
     trunk.push(best);
     set.add(best);
@@ -817,7 +819,7 @@ function redirectLowerBranches(sk, inst, trunkInfo, ch) {
       if (sk.Y[c] < 0.14 && sk.Y[i] < 0.18) continue;
       const dx = sk.X[c] - sk.X[i];
       const dz = sk.Z[c] - sk.Z[i];
-      const horiz = Math.hypot(dx, dz);
+      const horiz = hyp(dx, dz);
       if (horiz < 0.03) continue;
       const ang = Math.atan2(dz, dx);
       let diff = ang - Math.PI / 2;
@@ -856,7 +858,7 @@ function faceNebari(sk, inst, ch) {
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
     if (Math.abs(d) < 1.15) front++;
-    const dist = Math.hypot(sk.X[c], sk.Z[c]);
+    const dist = hyp(sk.X[c], sk.Z[c]);
     if (dist > bd) { bd = dist; best = c; }
   }
   if (front >= 1) return;
@@ -944,7 +946,7 @@ export function keepTrunkOutOfPot(sk, inst, pot) {
     const pz = it.p.z - oz;
     const e = (px / topA) ** 2 + (pz / topB) ** 2;
     if (e >= 1 || e < 1e-5) continue;
-    const dist = Math.hypot(px, pz);
+    const dist = hyp(px, pz);
     const edge = dist / Math.sqrt(e);
     const s = (edge + margin) / dist;
     it.p.x = ox + px * s;
@@ -1035,11 +1037,11 @@ export function shapeDesign(sk, inst, design) {
       const cross = vx1 * vz2 - vz1 * vx2;
       if (Math.abs(cross) < 1e-4) continue;
       const inx = -vz1 * Math.sign(cross), inz = vx1 * Math.sign(cross);
-      const inL = Math.hypot(inx, inz) || 1;
+      const inL = hyp(inx, inz) || 1;
       for (const c of ch[here]) {
         if (info.set.has(c)) continue;
         const dx = sk.X[c] - sk.X[here], dz = sk.Z[c] - sk.Z[here];
-        const h = Math.hypot(dx, dz);
+        const h = hyp(dx, dz);
         if (h < 0.04) continue;
         if ((dx * inx + dz * inz) / (h * inL) < 0.55) continue;
         let count = 0;
@@ -1081,7 +1083,7 @@ function chainLength(sk, trunk) {
   let L = 0;
   for (let k = 1; k < trunk.length; k++) {
     const a = trunk[k - 1], b = trunk[k];
-    L += Math.hypot(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
+    L += hyp(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
   }
   return L;
 }
@@ -1150,7 +1152,7 @@ export function enforceDesignRadii(sk, rFull, rTube, design) {
     let v = 0;
     for (let t = 1; t < trunk.length; t++) {
       const a = trunk[t - 1], b = trunk[t];
-      const len = Math.hypot(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
+      const len = hyp(sk.X[b] - sk.X[a], sk.Y[b] - sk.Y[a], sk.Z[b] - sk.Z[a]);
       const r = (arr[a] + arr[b]) * 0.5;
       v += r * r * len;
     }
@@ -1283,7 +1285,7 @@ export function measureDesign(sk, radii, inst, design) {
       if (!kids || !kids.length) break;
       let best = kids[0], bd = -1;
       for (const k of kids) {
-        const d = Math.hypot(sk.X[k] - sk.X[prevI], sk.Z[k] - sk.Z[prevI]);
+        const d = hyp(sk.X[k] - sk.X[prevI], sk.Z[k] - sk.Z[prevI]);
         if (d > bd) { bd = d; best = k; }
       }
       prevI = i;
@@ -1297,7 +1299,7 @@ export function measureDesign(sk, radii, inst, design) {
     let hit = false;
     for (let i = 1; i < samples[a].length && !hit; i++) for (let j = 1; j < samples[b].length && !hit; j++) {
       const A = samples[a][i], B = samples[b][j];
-      if (Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) < lim) hit = true;
+      if (hyp(A[0] - B[0], A[1] - B[1], A[2] - B[2]) < lim) hit = true;
     }
     if (hit) crossings++;
   }
@@ -1307,7 +1309,7 @@ export function measureDesign(sk, radii, inst, design) {
     if (!it.p || (it.p.y < H * 0.12 && !drops)) continue;
     if (it.p.y > fH) fH = it.p.y;
     if (it.p.y < fMin) fMin = it.p.y;
-    fR = Math.max(fR, Math.hypot(it.p.x, it.p.z));
+    fR = Math.max(fR, hyp(it.p.x, it.p.z));
     pts.push(it.p);
   }
   const span = drops ? Math.max(0.2, fH - (Number.isFinite(fMin) ? fMin : 0)) : (fH > 0.05 ? fH : H);

@@ -2,6 +2,15 @@
 
 Datas no horário de Brasília (UTC−3).
 
+## v9: motor determinístico (22/11/2026)
+
+- **As seeds mudam** em relação à v8. O link leva `&motor=9`, e um link sem versão ou de outra versão mostra um aviso no painel.
+- A simulação usa como andaime a mesma planta clássica que gera o envelope da copa: mesmo fluxo `::rules`, palavra reaproveitada.
+- A raiz aérea (`W`) sorteia pela posição.
+- `Math.hypot` foi trocado por `√(x² + y² + z²)` nos módulos do motor.
+- Cada planta ganha uma impressão digital (`treeFingerprint`), mostrada no painel e no JSON de metadados (botão 🧾 JSON).
+- Flores: um hash independente por decisão (padrão, cor do corpo, garganta, variante).
+
 ## Foco em bonsais
 
 - O app passa a se chamar **Bonsai Garden** (título, painel e modo jardim). O repositório no GitHub continua `lsystem-plants`.
