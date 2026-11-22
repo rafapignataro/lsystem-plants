@@ -680,17 +680,26 @@ function childrenOf(sk) {
 }
 
 function trunkChain(sk, ch, drops) {
-  const memo = new Float64Array(sk.N);
-  const walk = (i) => {
-    let v = sk.Y[i];
-    for (const c of ch[i]) {
-      const e = walk(c);
-      v = drops ? Math.min(v, e) : Math.max(v, e);
+  // Extremo (máx. ou mín.) de y em cada subárvore. Iterativo: o pai sempre tem índice menor que o filho,
+  // e a recursão antiga podia estourar a pilha em cadeias longas (cascata, simulação).
+  const memo = Float64Array.from(sk.Y.subarray ? sk.Y.subarray(0, sk.N) : sk.Y.slice(0, sk.N));
+  let ordered = true;
+  for (let i = 1; i < sk.N; i++) if (!(sk.PAR[i] < i)) { ordered = false; break; }
+  if (ordered) {
+    for (let i = sk.N - 1; i >= 1; i--) {
+      const p = sk.PAR[i];
+      if (p < 0) continue;
+      memo[p] = drops ? Math.min(memo[p], memo[i]) : Math.max(memo[p], memo[i]);
     }
-    memo[i] = v;
-    return v;
-  };
-  walk(0);
+  } else {
+    const walk = (i) => {
+      let v = sk.Y[i];
+      for (const c of ch[i]) { const e = walk(c); v = drops ? Math.min(v, e) : Math.max(v, e); }
+      memo[i] = v;
+      return v;
+    };
+    walk(0);
+  }
   const trunk = [0];
   const set = new Set([0]);
   let i = 0;
@@ -1118,13 +1127,25 @@ function blendBroom(sk, rFull, rTube, design, ch, info) {
  * nunca ficam abaixo do que Leonardo já tinha dado: o que sai de cima volta
  * para a base. Galhos não são afinados.
  */
+// A topologia não muda depois da montagem; a cada quadro do crescimento só os raios mudam.
+// Sem o cache, childrenOf + trunkChain alocavam N arrays por planta por quadro.
+const TOPO = new WeakMap();
+function topoOf(sk, cascade) {
+  let t = TOPO.get(sk);
+  if (!t || t.N !== sk.N || t.cascade !== cascade || t.y0 !== sk.Y[sk.N - 1]) {
+    const ch = childrenOf(sk);
+    t = { N: sk.N, cascade, y0: sk.Y[sk.N - 1], ch, info: trunkChain(sk, ch, cascade), H: treeExtent(sk).H };
+    TOPO.set(sk, t);
+  }
+  return t;
+}
+/** Esquece a topologia em cache (use depois de mover nós). */
+export function resetDesignCache(sk) { if (sk) TOPO.delete(sk); }
 export function enforceDesignRadii(sk, rFull, rTube, design) {
   if (!sk || sk.N < 3 || !rFull || !rTube || !design) return;
-  const ch = childrenOf(sk);
-  const info = trunkChain(sk, ch, !!design.cascade);
+  const { ch, info, H } = topoOf(sk, !!design.cascade);
   const trunk = info.trunk;
   if (trunk.length < 2) return;
-  const { H } = treeExtent(sk);
   const vol = (arr) => {
     let v = 0;
     for (let t = 1; t < trunk.length; t++) {

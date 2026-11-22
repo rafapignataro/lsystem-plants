@@ -1,12 +1,12 @@
 /** L-System core — worker-safe (no THREE.js) */
 import {
   ENV_DEFAULT, genomeFromSeed, mergeGenome, applyGenomeToPlant, applyGravitySag, clusterFoliage, deflectRoots,
-  envSunDir, envWindDir, makeSunShade, phototropismBias, lightGradientAt,
+  envSunDir, envWindDir, phototropismBias, lightGradientAt,
 } from './v8-engine.mjs';
 import { flowerBook, pickFlower } from './flower-engine.mjs';
 import {
   STYLES, resolveStyle, composeStyled, potSpec, applyFront, keepTrunkOutOfPot, scoreTree,
-  designOf, shapeDesign, enforceDesignRadii, measureDesign,
+  designOf, shapeDesign, enforceDesignRadii, measureDesign, resetDesignCache,
 } from './style-engine.mjs';
 
 export const DEG = Math.PI / 180;
@@ -1203,23 +1203,16 @@ export function growSim(C, rng, env = ENV_DEFAULT) {
   const vox = (x, y, z) => [Math.floor((x - g0[0]) / vs), Math.floor((y - g0[1]) / vs), Math.floor((z - g0[2]) / vs)];
   const sunD = envSunDir(env);
   const [sux, suy, suz] = sunD;
-  const shade = makeSunShade(null, sunD, vs, gn, grid, pw);
-  const shadeVoxel = (xi, yi, iz, sign) => shade(xi, yi, iz, sign);
+  // Com física, a pirâmide de sombra é inclinada para longe do sol (deslocamento por nível = −sol_xz / sol_y).
+  // Antes havia uma linha de um voxel só, com o peso já dividido por (2q+1)², e outra linha apontando PARA o sol.
+  const sk_ = Math.max(suy, 0.2), offX = env.growPhysics ? -sux / sk_ : 0, offZ = env.growPhysics ? -suz / sk_ : 0;
   function shadeNode(i, sign) {
     const [ix, iy, iz] = vox(X[i], Y[i], Z[i]);
-    if (!env.growPhysics) {
-      for (let q = 1; q <= sq; q++) {
-        const yy = iy - q; if (yy < 0) break; if (yy >= gn[1]) continue;
-        const w = sign * pw[q];
-        for (let a = -q; a <= q; a++) { const xx = ix + a; if (xx < 0 || xx >= gn[0]) continue;
-          for (let c = -q; c <= q; c++) { const zz = iz + c; if (zz < 0 || zz >= gn[2]) continue; grid[(xx * gn[1] + yy) * gn[2] + zz] += w; } }
-      }
-      return;
-    }
-    shadeVoxel(ix, iy, iz, sign);
     for (let q = 1; q <= sq; q++) {
-      const sx = ix + Math.round(sux * q), sy = iy + Math.round(suy * q), sz = iz + Math.round(suz * q);
-      if (sx >= 0 && sy >= 0 && sz >= 0 && sx < gn[0] && sy < gn[1] && sz < gn[2]) grid[(sx * gn[1] + sy) * gn[2] + sz] += sign * pw[Math.min(q, pw.length - 1)];
+      const yy = iy - q; if (yy < 0) break; if (yy >= gn[1]) continue;
+      const w = sign * pw[q], cx = ix + Math.round(offX * q), cz = iz + Math.round(offZ * q);
+      for (let a = -q; a <= q; a++) { const xx = cx + a; if (xx < 0 || xx >= gn[0]) continue;
+        for (let c = -q; c <= q; c++) { const zz = cz + c; if (zz < 0 || zz >= gn[2]) continue; grid[(xx * gn[1] + yy) * gn[2] + zz] += w; } }
     }
   }
   const light = (x, y, z) => { const [ix, iy, iz] = vox(x, y, z); let s = 0; if (ix >= 0 && iy >= 0 && iz >= 0 && ix < gn[0] && iy < gn[1] && iz < gn[2]) s = grid[(ix * gn[1] + iy) * gn[2] + iz]; return Math.exp(-Math.max(0, s) / sC); }; // Beer-Lambert simples
@@ -1735,6 +1728,7 @@ export function unpackWorkerPayload(payload) {
   payload.rTube = reviveTyped(payload.rTube);
   if (payload.tags) payload.tags = reviveTyped(payload.tags);
   if (payload.W?.TW) payload.W.TW = reviveTyped(payload.W.TW);
+  if (payload.W?.radMul) payload.W.radMul = reviveTyped(payload.W.radMul);
   if (payload.W && payload.sk.TD) payload.W.TD = payload.sk.TD;
   return payload;
 }
@@ -1988,13 +1982,95 @@ function enforcePhysical(sk, rFull, rTube, inst, pot) {
   dropBuriedFoliage(sk, inst, pot);
 }
 
+/* Contorno do vaso (igual a potOutline do index.html: superelipse ou polígono regular). */
+function potOutlineXZ(a, b, n, sides, th) {
+  if (!(sides >= 5)) { const c = Math.cos(th), s = Math.sin(th); return [a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)]; }
+  const seg = 6.283185307179586 / sides;
+  const phi = ((th % seg) + seg) % seg - seg / 2;
+  const rad = Math.cos(Math.PI / sides) / Math.max(0.25, Math.cos(phi));
+  return [a * rad * Math.cos(th), b * rad * Math.sin(th)];
+}
+/** Senta as pedras no solo do vaso (antes isto rodava na thread principal, depois do desvio das raízes). */
+function seatStonesInSoil(stones, pot) {
+  const soil = { a: pot.a, b: pot.b, n: pot.n ?? 2, sides: pot.sides || 0, rot: pot.rot || 0, ox: pot.ox || 0, oz: pot.oz || 0 };
+  const rot = soil.rot, c = Math.cos(rot), sn = Math.sin(rot);
+  const reach = (dx, dz, margin) => {
+    const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+    const d = Math.hypot(lx, lz) || 1, ux = lx / d, uz = lz / d;
+    let soilR;
+    if (soil.sides >= 5) {
+      let best = 0, bestAlign = -1;
+      for (let i = 0; i < 360; i++) {
+        const [ox, oz] = potOutlineXZ(soil.a * 0.94, soil.b * 0.94, soil.n, soil.sides, i * Math.PI / 180);
+        const rad = Math.hypot(ox, oz) || 1, align = (ox / rad) * ux + (oz / rad) * uz;
+        if (align > bestAlign) { bestAlign = align; best = rad; }
+      }
+      soilR = best * Math.max(bestAlign, 0);
+    } else {
+      const a = soil.a * 0.94, b = soil.b * 0.94, p = soil.n / 2;
+      soilR = Math.pow(Math.pow(Math.abs(ux) / a, p) + Math.pow(Math.abs(uz) / b, p), -1 / p);
+    }
+    return Math.max(0.05, soilR - margin);
+  };
+  const placed = [];
+  for (const s of stones) {
+    s.rad0 = Math.hypot(s.x, s.z) || 1;
+    let ang = Math.atan2(s.z, s.x);
+    const t = Math.min(1, Math.max(0, (s.rad0 - 0.85) / 0.85)), frac = 0.6 + 0.28 * t;
+    let x = 0, z = 0, r = s.r;
+    for (let attempt = 0; attempt < 7; attempt++) {
+      const dx = Math.cos(ang), dz = Math.sin(ang);
+      let R = reach(dx, dz, r * 1.15);
+      if (R < r * 0.55) { r = Math.max(0.035, R * 0.5); R = reach(dx, dz, r * 1.15); }
+      const dist = Math.max(Math.min(R * frac, R * 0.92), Math.min(R * 0.92, r * 1.15));
+      x = dx * dist; z = dz * dist;
+      if (!placed.some(p => Math.hypot(p.x - x, p.z - z) < (p.r + r) * 0.8)) break;
+      ang += 0.85;
+    }
+    s.r = r; s.x = x + soil.ox; s.z = z + soil.oz; s.seated = true;
+    placed.push({ x, z, r });
+  }
+}
+
+/* Cruzamento de verdade: o filho herda os parâmetros da espécie (os que a seed sorteia) dos dois pais.
+   Antes, o filho ganhava uma seed nova e todos os parâmetros eram sorteados de novo: ele não lembrava
+   nenhum dos pais, só os 9 genes cosméticos vinham deles.
+   Regras: inteiros, textos, booleanos e listas vêm inteiros de um dos pais; números contínuos vêm de um pai
+   com 25% do outro; grupos ligados (paleta da flor; direção da cascata e o alvo dela) vêm juntos do mesmo pai,
+   porque misturar ângulos (10° com 350°) ou a cor de uma paleta com a de outra quebra a planta. */
+const LINKED = [
+  ['palette', 'petalH', 'petalS', 'petalL', 'sportH', 'sport', 'stripe'],
+  ['sideA', 'az', 'reach', 'drop', 'attractor'],
+];
+export function crossParams(A, B, rng) {
+  const out = {}, from = {};
+  for (const g of LINKED) { const pick = rng.chance(0.5) ? A : B; for (const k of g) from[k] = pick; }
+  const keys = new Set([...Object.keys(A), ...Object.keys(B)]);
+  for (const k of keys) {
+    const va = A[k], vb = B[k];
+    if (from[k]) { const v = from[k][k]; out[k] = Array.isArray(v) ? v.slice() : v; continue; }
+    const dom = rng.chance(0.5);
+    if (typeof va === 'number' && typeof vb === 'number' && !(Number.isInteger(va) && Number.isInteger(vb))) {
+      out[k] = dom ? va * 0.75 + vb * 0.25 : vb * 0.75 + va * 0.25;
+    } else {
+      const v = va === undefined ? vb : vb === undefined ? va : dom ? va : vb;
+      out[k] = Array.isArray(v) ? v.slice() : v;
+    }
+  }
+  out._parents = true;
+  return out;
+}
+
 /** Skeleton + params for assemblePlant (main thread adds THREE meshes). */
 export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, genomeState = null) {
   const ENV = { ...ENV_DEFAULT, ...env };
   const genomeOverlay = genomeState?.overlay ?? null;
   const t0 = performance.now();
   const sp = SPECIES[id];
-  const P = sp.params(new Rand(`${seed}::${id}::params`));
+  const parents = genomeState?.parents;
+  const P = parents && parents.length === 2
+    ? crossParams(sp.params(new Rand(`${parents[0]}::${id}::params`)), sp.params(new Rand(`${parents[1]}::${id}::params`)), new Rand(`${seed}::${id}::cross`))
+    : sp.params(new Rand(`${seed}::${id}::params`));
   const requested = opts && Object.prototype.hasOwnProperty.call(opts, 'style') ? opts.style : genomeOverlay?.estilo;
   const styleId = resolveStyle(sp, requested);
   P._style = styleId;
@@ -2012,7 +2088,7 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
   let { sk, inst } = SIM || interpret(word, sp, P, rng);
   const tSk = performance.now();
   if (opts.lod && opts.cluster) clusterFoliage(inst);
-  applyGravitySag(sk, ENV.gravity || 0);
+  applyGravitySag(sk, ENV.gravity || 0, inst);
   const style = STYLES[styleId] || STYLES.moyogi;
   const design = designOf(styleId, id, sp.design);
   applyFront(sk, inst, style);
@@ -2029,12 +2105,13 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
       stones.push({ x: (pot?.ox || 0) + Math.cos(ang) * rad, z: (pot?.oz || 0) + Math.sin(ang) * rad, r: rs.range(0.08, 0.2) });
     }
   }
+  if (pot && stones.length) seatStonesInSoil(stones, pot); // senta antes de desviar as raízes: elas desviam da posição final
   deflectRoots(sk, stones, pot);
   const wr = new Rand(`${seed}::${id}::wood`);
   const lam = SIM && SIM.ring != null ? SIM.ring : sp.wood.ring ?? 0.5;
   const W = { leo: sp.wood.leo[0] + wr.f() * (sp.wood.leo[1] - sp.wood.leo[0]), G: sp.wood.G * (0.8 + wr.f() * 0.4), tEnd, scale: 1, rMin: 0, ring: 0, share: sp.wood.share ?? 0.4 };
   if (opts.lod) W.lod = true;
-  applyGenomeToPlant(P, null, W, genome, sp, applyGenes);
+  applyGenomeToPlant(null, null, W, genome, sp, applyGenes);
   if (SIM) { W.TD = sk.TD; W.deadK = SIM.deadK ?? 0.45; }
   if (sk.tipw) { W.TW = new Float32Array(sk.N); for (const [i, w] of sk.tipw) W.TW[i] = w; }
   if (sk.boost) W.roots = sk.boost.map((b) => ({ a: b.a, i: b.i, t: b.t, d: Math.max(tEnd - b.t, 0.5) * 0.9, f: b.f }));
@@ -2068,11 +2145,30 @@ export function buildSkeletonPackage(id, seed, opts = {}, env = ENV_DEFAULT, gen
     const k = 1.12;
     for (let i = 0; i < sk.N; i++) { rFull[i] *= k; if (rTube[i]) rTube[i] *= k; }
   }
+  if (sp.capRoots) sp.capRoots(rFull, sk);
   enforcePhysical(sk, rFull, rTube, inst, pot);
+  // O shader recalcula os raios a cada idade (computeRadii + enforceDesignRadii + capRoots). O que veio
+  // depois disso (galho lateral ≤ 60% no estilo, carga da folhagem, ×1.12 do olmo) só existia em rFull:
+  // a tela mostrava outra árvore. radMul leva esse ajuste para a GPU: em 100% o raio desenhado é rFull.
+  {
+    const live = new Float32Array(sk.N), sb = new Float32Array(sk.N);
+    computeRadii(sk, tEnd, W, sb, live);
+    resetDesignCache(sk); // enforcePhysical moveu nós
+    enforceDesignRadii(sk, live, Float32Array.from(live), design);
+    if (sp.capRoots) sp.capRoots(live, sk);
+    const mul = new Float32Array(sk.N);
+    let diff = false;
+    for (let i = 0; i < sk.N; i++) {
+      const m = live[i] > 1e-7 ? rFull[i] / live[i] : 1;
+      mul[i] = Math.min(4, Math.max(0, m));
+      if (Math.abs(mul[i] - 1) > 1e-4) diff = true;
+    }
+    if (diff) W.radMul = mul;
+  }
   const rules = measureDesign(sk, rFull, inst, design);
   const tags = sp.tags ? sp.tags(sk) : null;
   const BK = BARK[id](P, new Rand(`${seed}::${id}::bark`));
-  applyGenomeToPlant(P, BK, W, genome, sp, applyGenes);
+  applyGenomeToPlant(null, BK, null, genome, sp, applyGenes);
   const instPlain = serializeInst(inst);
   const display = def.display || [];
   return {
