@@ -53,9 +53,10 @@ Os três primeiros foram resolvidos no motor v9 (ver abaixo).
 2. **Determinismo entre navegadores.**
    - `Math.hypot` (que a especificação não fixa) foi trocado por `√(x² + y² + z²)`, que é arredondado igual em todo motor.
    - Cada planta ganha uma **impressão digital** (`treeFingerprint`): esqueleto, raios e folhagem, quantizados. Ela aparece no painel e no JSON de metadados.
-   - O link leva `&motor=9`, e um link de outra versão mostra um aviso.
+   - O link leva `&motor=9`; um link de outra versão, ou sem versão (anterior ao v9), mostra um aviso até você gerar outra árvore.
+   - Gravidade, fototropismo e sol também mudam a árvore; quando saem do padrão, vão no link (`grav`, `foto`, `solAz`, `solEl`) e no JSON.
    - Fica de fora: `Math.sin/cos/pow/exp/cbrt` também não são fixados. Para garantir, abra a mesma seed em Chrome, Firefox e Safari e compare a impressão digital.
-3. **Flor.** `pickFlower` usa um hash por decisão (padrão, corpo, garganta, variante), com o finalizador do murmur3.
+3. **Flor.** `pickFlower` usa um hash por decisão (padrão, corpo, garganta, fase, variante), com o finalizador do murmur3.
 
 Novo: botão **🧾 JSON** com os metadados (motor, impressão digital, espécie, estilo, seed, pais, genes, traços e medidas de desenho).
 

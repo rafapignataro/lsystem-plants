@@ -324,7 +324,8 @@ export function interpret(word, sp, P, rng, cap) {
         const seg = p ? p[0] : 0.5, k = Math.max(2, Math.ceil(st.pos.y / seg)), drop = sp.rootDrop ?? 1.5;
         const tb = Math.max(m.t1 ?? 0, T1[st.node]) + (p && p[1] != null ? p[1] : 0.2);
         // sorteio próprio, pela posição: o andaime da simulação e a planta clássica gastam o RNG da tartaruga
-        // em ritmos diferentes, e a raiz tem de sair igual nos dois
+        // em ritmos diferentes, e a raiz tem de sair igual nos dois. A posição da tartaruga não depende desse
+        // RNG (só F, giros e colchetes a movem), então é a mesma nos dois passes.
         const rw = new Rand(`${P._seed ?? ''}::W::${n(st.pos.x)},${n(st.pos.y)},${n(st.pos.z)}`);
         let par = st.node, x = st.pos.x, z = st.pos.z; const y0 = st.pos.y, a0 = X.length;
         const olen = hyp(x, z) || 1, ux = x / olen, uz = z / olen;
@@ -342,7 +343,7 @@ export function interpret(word, sp, P, rng, cap) {
           X.push(x); Y.push(y); Z.push(z); PAR.push(par); T0.push(tb + drop * (j - 1) / k); T1.push(tb + drop * j / k);
           par = X.length - 1;
         }
-        // p[2] opcional: fração do tronco. Sem ele, o sorteio (e o RNG) continua o de antes.
+        // p[2] opcional: fração do tronco. Sem ele, a fração sai de `rw` (o sorteio pela posição).
         const f = p && p[2] != null ? p[2] : (rw.f() < 0.45 ? rw.range(0.25, 0.42) : rw.range(0.06, 0.16));
         BOOST.push({ a: a0, i: par, t: tb + drop, f });
         break;

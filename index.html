@@ -422,7 +422,14 @@ function fruitGeo() {
    ===================================================================== */
 const ENV = { ...ENV_DEFAULT };
 let activeGenome = null, genomeOverlay = null, genomeApply = false;
-let linkEngine = null; // versão do motor que gerou o link aberto (null = link sem versão)
+let linkEngine = null; // versão do motor que gerou o link aberto ('antigo' = link sem versão, null = árvore feita aqui)
+// parâmetro do link, chave em ENV, controle do painel
+const LINK_ENV = [['grav', 'gravity', 'gravStr'], ['foto', 'phototropism', 'photoStr'], ['solAz', 'sunAz', 'sunAz'], ['solEl', 'sunEl', 'sunEl']];
+function envLinkParams() {
+  let o = '';
+  for (const [k, key] of LINK_ENV) if (Math.abs((ENV[key] ?? 0) - (ENV_DEFAULT[key] ?? 0)) > 1e-6) o += `&${k}=${+(+ENV[key]).toFixed(3)}`;
+  return o;
+}
 let crossParents = null; // [seedA, seedB]: o filho herda os parâmetros da espécie dos dois pais
 const SHARED = {
   uGrowth: { value: 1 }, uTime: { value: 0 }, uWind: { value: 1 },
@@ -1335,7 +1342,15 @@ function readRequest() {
   genomeOverlay = parseGenomeHash(h.get('genoma') || q.get('genoma'));
   const numeric = genomeOverlay && GENE_CATALOG.some((g) => Number.isFinite(genomeOverlay[g.key]));
   genomeApply = !!numeric;
-  linkEngine = pick('motor') ? +pick('motor') : null;
+  // link sem `motor` mas com seed = feito antes do v9; valor inválido também conta como sem versão
+  const mv = pick('motor');
+  linkEngine = mv == null ? (pick('seed') ? 'antigo' : null) : (Number.isFinite(Number(mv)) ? Number(mv) : 'antigo');
+  // ambiente que muda a árvore (gravidade, fototropismo, sol): vai no link para a impressão digital bater
+  for (const [k, key, el] of LINK_ENV) {
+    const v = pick(k);
+    if (v != null && Number.isFinite(+v)) { ENV[key] = +v; const inp = $(el); if (inp) inp.value = +v; }
+  }
+  refreshPhysics(); syncEnvUniforms();
   const pa = pick('paiA'), pb = pick('paiB');
   crossParents = pa && pb ? [pa, pb] : null;
   const style = pick('style', 'estilo') || (typeof genomeOverlay?.estilo === 'string' ? genomeOverlay.estilo : null);
@@ -1352,9 +1367,10 @@ function writeHash() {
   const st = mode === 'garden' ? '' : `&estilo=${encodeURIComponent(currentStyle())}`;
   const g = genomeApply && activeGenome ? `&genoma=${encodeURIComponent(genomeToHash({ ...activeGenome, estilo: currentStyle() }))}` : '';
   const par = crossParents ? `&paiA=${encodeURIComponent(crossParents[0])}&paiB=${encodeURIComponent(crossParents[1])}` : '';
-  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + par + g + `&motor=${ENGINE_VERSION}`;
+  const s = `#especie=${encodeURIComponent(esp)}&seed=${encodeURIComponent(ui.seed.value)}` + st + (growMode === 'ls' ? '&cresc=classico' : '') + par + g + envLinkParams() + `&motor=${ENGINE_VERSION}`;
   const url = new URL(location.href);
-  for (const k of ['species', 'especie', 'style', 'estilo', 'seed']) url.searchParams.delete(k);
+  // tudo que o hash carrega sai da query, senão a query (lida primeiro) venceria o hash no próximo load
+  for (const k of ['species', 'especie', 'style', 'estilo', 'seed', 'cresc', 'genoma', 'paiA', 'paiB', 'motor', ...LINK_ENV.map((e) => e[0])]) url.searchParams.delete(k);
   url.hash = s;
   const next = url.pathname + url.search + url.hash;
   if (location.pathname + location.search + location.hash !== next) history.replaceState(null, '', next);
@@ -1415,8 +1431,9 @@ function showInfo(pl) {
     $('word').textContent = '(crescimento simulado: a planta não sai de uma palavra; mude para "L-System clássico" para ver a palavra gerada)';
   } else $('word').textContent = wordToString(pl.word, 700);
   const st = STYLES[pl.P?._style] || STYLES[pl.style];
-  const old = linkEngine != null && linkEngine !== ENGINE_VERSION
-    ? `<br><span style="color:#f0b37b">Link do motor v${linkEngine}: este é o v${ENGINE_VERSION}, a árvore pode ter mudado.</span>` : '';
+  const warn = linkEngine === 'antigo' ? `Link sem versão do motor (anterior ao v${ENGINE_VERSION}): a árvore pode ter mudado.`
+    : linkEngine != null && linkEngine !== ENGINE_VERSION ? `Link do motor v${linkEngine}: este é o v${ENGINE_VERSION}, a árvore pode ter mudado.` : '';
+  const old = warn ? `<br><span style="color:#f0b37b">${warn}</span>` : '';
   $('dna').innerHTML = `DNA <b>${hex(ui.seed.value + '::' + pl.id).slice(0, 24)}</b>` + (st ? ` · estilo <b>${st.name}</b>` : '')
     + `<br>motor v${pl.engine ?? ENGINE_VERSION} · árvore <b title="impressão digital: esqueleto, raios e folhagem">${pl.fingerprint || '—'}</b>` + old;
   const g = pl.genome || genomeFromSeed(ui.seed.value, pl.id, Rand);
@@ -1432,7 +1449,8 @@ function showStats() {
 function clearPlants() { plants.forEach(disposePlant); plants = []; labels.forEach(l => l.el.remove()); labels = []; }
 
 let genToken = 0;
-async function generate({ animate = true } = {}) {
+async function generate({ animate = true, fromLink = false } = {}) {
+  if (!fromLink) linkEngine = null; // árvore feita aqui, não a do link aberto: o aviso de versão não vale mais
   // Cada chamada ganha um número; se outra começou enquanto esta esperava o worker, esta desiste.
   // Antes, duas gerações seguidas (slider, troca de espécie, hashchange) punham duas árvores na cena.
   const my = ++genToken;
@@ -1738,6 +1756,7 @@ function plantMeta(pl) {
     fingerprint: pl.fingerprint,
     species: pl.id, name: sp.name, style: pl.style,
     seed: ui.seed.value, parents: crossParents, growth: growMode === 'sim' ? 'simulado' : 'classico',
+    env: Object.fromEntries(LINK_ENV.map(([, key]) => [key, ENV[key]])), // a gravidade e o sol mudam a árvore
     genome: genomeApply ? activeGenome : null,
     traits,
     design: pl.rules,
@@ -1776,10 +1795,10 @@ function init() {
   const q = new URLSearchParams(location.search);
   const bloomArg = q.has('bloom') ? THREE.MathUtils.clamp(+q.get('bloom'), 0, 1.4) : null;
   const playBloom = q.has('florescer');
-  if (q.has('age')) { generate({ animate: false }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
-  else if (bloomArg != null) { generate({ animate: false }).then(() => setBloom(bloomArg)); }
-  else if (playBloom) { generate({ animate: false }).then(() => startBloom()); }
-  else if (q.has('nogrow')) { generate({ animate: false }); } else generate();
+  if (q.has('age')) { generate({ animate: false, fromLink: true }).then(() => { SHARED.uGrowth.value = THREE.MathUtils.clamp(+q.get('age'), 0, 1); syncSlider(); }); }
+  else if (bloomArg != null) { generate({ animate: false, fromLink: true }).then(() => setBloom(bloomArg)); }
+  else if (playBloom) { generate({ animate: false, fromLink: true }).then(() => startBloom()); }
+  else if (q.has('nogrow')) { generate({ animate: false, fromLink: true }); } else generate({ fromLink: true });
   if (q.has('norotate')) { controls.autoRotate = false; $('rotate').checked = false; }
 }
 

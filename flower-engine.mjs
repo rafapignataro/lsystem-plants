@@ -217,10 +217,12 @@ export function pickFlower(book, node, k, pos, center) {
   const u = h / 4294967296;
   const u2 = mixHash(book.seed, node | 0, k | 0, 1) / 4294967296;
   const u3 = mixHash(book.seed, node | 0, k | 0, 2) / 4294967296;
-  const hv = mixHash(book.seed, node | 0, k | 0, 3);
+  const hv = mixHash(book.seed, node | 0, k | 0, 3); // fase da abertura
+  const hp = mixHash(book.seed, node | 0, k | 0, 4); // listra ou flake, e o padrão sorteado
+  const hvar = mixHash(book.seed, node | 0, k | 0, 5); // variante da malha
   let name = book.primary;
-  if (book.tone.stripe && u < 0.55) name = (hv >>> 20 & 1) ? 'stripe' : 'flake';
-  else if (u < book.mix) name = PATTERN_IDS[(hv >>> 21) % PATTERN_IDS.length];
+  if (book.tone.stripe && u < 0.55) name = (hp & 1) ? 'stripe' : 'flake';
+  else if (u < book.mix) name = PATTERN_IDS[(hp >>> 1) % PATTERN_IDS.length];
   const pattern = patternId(name);
   const body = bodyOf(book.tone, u2, pattern);
   const throat = throatOf(body, pattern, book.tone, u3);
@@ -232,7 +234,7 @@ export function pickFlower(book, node, k, pos, center) {
     phase = (around * 0.62 + up * 0.38) * 0.32 + (k % 3) * 0.012;
   }
   return {
-    variant: (hv >>> 8) % book.variants.length,
+    variant: hvar % book.variants.length,
     pattern,
     patSeed: u3,
     phase,
