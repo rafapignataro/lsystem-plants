@@ -440,7 +440,9 @@ const SWAY = /* glsl */`
 uniform float uGrowth; uniform float uTime; uniform float uWind; uniform float uH; uniform float uTend;
 uniform vec3 uWindDir; uniform float uWindStr;
 vec3 lsSway(vec3 p){
-  float h = clamp(max(p.y, -0.8 * p.y) / uH, 0.0, 1.2); // a cascata abaixo do vaso também balança float k = h * h * uWind * uWindStr * uH * 0.016;
+  // a cascata abaixo do vaso também balança
+  float h = clamp(max(p.y, -0.8 * p.y) / uH, 0.0, 1.2);
+  float k = h * h * uWind * uWindStr * uH * 0.016;
   vec3 w = normalize(uWindDir + vec3(0.001));
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), w));
   float ph = dot(p, w) * 0.35 + dot(p, side) * 0.2;
