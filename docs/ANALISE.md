@@ -70,3 +70,38 @@ Achado: na **azaleia**, a simulação não faz nenhum broto (`grown = 0`, també
 - **Superfície única nas junções**: em vez das esferas, malhar a forquilha por convolução (*skeletal implicit surfaces*) ou com quad-mesh de bifurcação. É o defeito visual mais citado no ROADMAP.
 - **Folhas presas ao raio atual**: o shader de instância pode ler `uRad` do nó e empurrar a folha para a casca em qualquer idade. Hoje `seatOnBark` assenta só em 100%.
 - **Testes leves**: `node scripts/hash.mjs` (criado nesta revisão) (sem navegador, ~3 s) pega quebra de determinismo sem tirar print.
+
+## A verificar depois
+
+O que ficou sem conferência visual nas revisões do #16 e do #17 (os prints foram bloqueados pela permissão da sessão), mais as pendências abertas.
+
+**Visual (abrir no navegador)**
+- [ ] **Grossura dos galhos (`W.radMul`, #16):** comparar a página normal com `?raios=legado`, sobretudo:
+  - [ ] pinheiro-negro (kengai): até 4× nos raminhos;
+  - [ ] bordo em shakan e pinheiro-branco em chokkan: galhos laterais mais finos;
+  - [ ] olmo em moyogi: o ×1.12.
+
+  Se algum ficar pesado, calibrar `LOAD_MAX` (`applyLoad`) ou o teto de 4× do `radMul`.
+- [ ] **Juntas e folhagem:** com os raios novos, as esferas das forquilhas e as folhas não podem sair da casca nem entrar nela.
+- [ ] **Gravidade:** com o controle de gravidade ligado, o galho verga inteiro e as folhas acompanham.
+- [ ] **Sol fora do padrão:** a sombra da simulação cai para o lado oposto ao sol.
+- [ ] **Pedras:** as raízes passam em volta, não por dentro.
+- [ ] **Cascata:** a parte abaixo do vaso balança com o vento.
+- [ ] **Flores da azaleia (v9):** as cores e os padrões mudaram de lugar; ver se a mistura de padrões continua bonita.
+
+**Exportação e metadados**
+- [ ] Abrir o **GLB** num visualizador, por exemplo Blender ou gltf-viewer: madeira com volume, folhas mortas ausentes, folhagem por instância. Se o visualizador não ler cor por instância, a folhagem sai com a cor média.
+- [ ] Baixar o **🧾 JSON**, abrir o `link` dele e conferir que a impressão digital é a mesma.
+
+**Link e versão**
+- [ ] Abrir um link antigo (`#especie=bordo&seed=rafael`): deve aparecer "Link sem versão do motor". Gerar outra árvore: o aviso some.
+- [ ] Copiar o link com gravidade ou sol fora do padrão e reabrir: mesma árvore e mesma impressão digital.
+- [ ] Cruzar dois pais, copiar o link e reabrir: o mesmo filho, com `paiA`/`paiB`.
+
+**Determinismo entre navegadores**
+- [ ] Abrir a mesma seed no Chrome, Firefox e Safari, desktop e celular, e comparar a impressão digital do painel. `Math.sin/cos/pow/exp/cbrt` ainda podem variar no último bit. Se a impressão divergir, a saída é trocar essas funções por versões próprias, determinísticas, nos trechos que decidem a forma.
+
+**Pendências de motor**
+- [ ] **Azaleia:** a simulação não faz nenhum broto (`grown = 0`); a copa simulada é a clássica com outro tempo. Decidir se ela deve crescer de verdade (ponta da gramática mais cedo, gemas nos raminhos) ou se fica assim.
+- [ ] Os itens 4–7 de "Riscos que ficaram", acima: grade de luz abaixo do vaso, `liftOutOfSolids`, as duas flags de pedra e a ARQUITETURA desatualizada.
+- [ ] Rodar `node scripts/hash.mjs` antes e depois de cada mudança no motor. Se o hash mudar sem querer, subir `ENGINE_VERSION`.
